@@ -1,0 +1,4 @@
+8/3/2026 - Started this repository
+Documenting board and wifi chip.
+Proceeding to determing firmware currently flashed onto printer to be able to determinr suitable configuration file to be either found and restored or configured anew.
+Committed initial README of hardware, maintaining clear HEAD of development tracking.
