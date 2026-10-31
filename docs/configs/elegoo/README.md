@@ -1,0 +1,1 @@
+Found here: [https://github.com/NARUTOfzr/ZNP-Robin-Nano-V1.2-V1.3/blob/master/Configuration%20files-V1.0.4/Neptune%202/elegoo.txt](https://github.com/NARUTOfzr/ZNP-Robin-Nano-V1.2-V1.3/blob/master/Configuration%20files-V1.0.4/Neptune%202/elegoo.txt)
