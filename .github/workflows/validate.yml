@@ -1,0 +1,48 @@
+name: Validate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: integrations/mks-wifi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: integrations/mks-wifi/uv.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --extra web --no-editable
+      - name: Run Python tests
+        run: uv run --no-sync pytest -q
+      - name: Lint and formatting
+        run: |
+          uv run --no-sync ruff check src tests
+          uv run --no-sync ruff format --check src tests
+      - name: Run frontend logic tests
+        run: node --test tests/*.mjs
+      - name: Validate Compose configuration
+        env:
+          MKS_WIFI_HOST: printer.example.invalid
+          NEPTUNE_OBSERVATORY_TOKEN: validation-only-not-a-secret
+        run: docker compose config --quiet

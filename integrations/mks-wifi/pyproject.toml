@@ -1,0 +1,42 @@
+[project]
+name = "neptune-mks-wifi"
+version = "0.1.0"
+description = "Read-only telemetry probe for the Neptune 2 MKS WiFi module"
+requires-python = ">=3.12"
+dependencies = ["mkswifi==0.1.0"]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=8,<10",
+    "ruff>=0.11,<1",
+]
+web = [
+    "fastapi>=0.115,<0.142",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.scripts]
+mks-wifi-probe = "mks_wifi_bridge.client:main"
+neptune-observatory = "mks_wifi_bridge.observatory:main"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mks_wifi_bridge"]

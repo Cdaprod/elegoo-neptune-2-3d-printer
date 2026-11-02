@@ -1,0 +1,53 @@
+services:
+  neptune-observatory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neptune-observatory:local
+    container_name: neptune-observatory
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "8000:8000"
+    volumes:
+      - commissioning-data:/data
+    environment:
+      MKS_WIFI_HOST: ${MKS_WIFI_HOST:?Set MKS_WIFI_HOST in .env}
+      MKS_WIFI_PORT: ${MKS_WIFI_PORT:-8080}
+      MKS_WIFI_TIMEOUT: ${MKS_WIFI_TIMEOUT:-2.5}
+      NEPTUNE_POLL_INTERVAL_SECONDS: ${NEPTUNE_POLL_INTERVAL_SECONDS:-2}
+      NEPTUNE_MOTION_POLLING_ENABLED: ${NEPTUNE_MOTION_POLLING_ENABLED:-false}
+      NEPTUNE_MOTION_QUERY_ENABLED: ${NEPTUNE_MOTION_QUERY_ENABLED:-false}
+      NEPTUNE_MOTION_POLL_INTERVAL_SECONDS: ${NEPTUNE_MOTION_POLL_INTERVAL_SECONDS:-10}
+      NEPTUNE_OBSERVATORY_BIND_HOST: 0.0.0.0
+      NEPTUNE_OBSERVATORY_PORT: 8000
+      NEPTUNE_OBSERVATORY_TOKEN: ${NEPTUNE_OBSERVATORY_TOKEN:?Set NEPTUNE_OBSERVATORY_TOKEN in .env}
+      NEPTUNE_CONTROL_EXECUTION_ENABLED: ${NEPTUNE_CONTROL_EXECUTION_ENABLED:-true}
+      NEPTUNE_VERIFIED_COMMANDS: ${NEPTUNE_VERIFIED_COMMANDS:-}
+      NEPTUNE_VERIFIED_MACROS: ${NEPTUNE_VERIFIED_MACROS:-}
+      NEPTUNE_ALLOWED_COMMANDS: ${NEPTUNE_ALLOWED_COMMANDS:-}
+      NEPTUNE_ALLOWED_MACROS: ${NEPTUNE_ALLOWED_MACROS:-}
+      NEPTUNE_SD_UPLOAD_ENABLED: ${NEPTUNE_SD_UPLOAD_ENABLED:-false}
+      NEPTUNE_COMMAND_TIMEOUT_SECONDS: ${NEPTUNE_COMMAND_TIMEOUT_SECONDS:-15}
+      NEPTUNE_COMMAND_HISTORY_PATH: /data/command-history.json
+      NEPTUNE_CAPABILITY_REGISTRY_PATH: /data/capability-registry.json
+      NEPTUNE_EXTRUSION_MIN_TEMP_C: ${NEPTUNE_EXTRUSION_MIN_TEMP_C:-180}
+      NEPTUNE_COOLDOWN_COMMISSIONING_ENABLED: ${NEPTUNE_COOLDOWN_COMMISSIONING_ENABLED:-false}
+      NEPTUNE_COOLDOWN_COMMISSIONING_STATE_PATH: /data/cooldown-commissioning.json
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/health', headers={'Authorization': 'Bearer ' + os.environ['NEPTUNE_OBSERVATORY_TOKEN']}); urllib.request.urlopen(r, timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  commissioning-data:

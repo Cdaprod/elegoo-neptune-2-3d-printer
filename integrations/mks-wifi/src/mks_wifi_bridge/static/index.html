@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08111e">
+  <title>Neptune Observatory</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111e;
+      --panel: #101d2d;
+      --panel-hi: #15253a;
+      --line: #263a51;
+      --muted: #91a2b8;
+      --text: #edf4ff;
+      --blue: #43a9ff;
+      --cyan: #5ed7e9;
+      --green: #46e58e;
+      --red: #ff727c;
+      --amber: #ffc56b;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 70% -20%, #1a3451 0, transparent 42%), var(--bg); color: var(--text); }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 224px minmax(0, 1fr); }
+    .sidebar { background: #0a1422d9; border-right: 1px solid #1e3045; padding: 24px 15px 18px; display: flex; flex-direction: column; gap: 28px; }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 2px 8px; font-weight: 720; line-height: 1.12; letter-spacing: -.02em; }
+    .brandmark { width: 35px; height: 38px; color: var(--blue); flex: 0 0 auto; }
+    .brand small { display: block; margin-top: 4px; color: #9bacbf; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+    .nav { display: grid; gap: 6px; }
+    .nav button { border: 0; background: transparent; text-align: left; display: flex; gap: 12px; align-items: center; width: 100%; min-height: 44px; padding: 0 12px; color: #bbc9d9; border-radius: 10px; cursor: pointer; transition: .18s ease; }
+    .nav button:hover { background: #15263b; color: white; }
+    .nav button.active { color: #f6fbff; background: linear-gradient(100deg, #1c426c, #183150); box-shadow: inset 0 0 0 1px #31577e; }
+    .nav svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .sidebar-foot { margin-top: auto; border-top: 1px solid #1e3045; padding: 17px 8px 4px; }
+    .connection-line { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 13px; }
+    .connection-line small { display: block; color: var(--muted); font-size: 11px; font-weight: 450; margin: 4px 0 0 19px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--muted); box-shadow: 0 0 0 4px #9aaabd14; flex: 0 0 auto; }
+    .dot.live { background: var(--green); box-shadow: 0 0 12px #46e58e66; }
+    .dot.warn { background: var(--amber); }
+    .dot.offline { background: var(--red); box-shadow: 0 0 12px #ff727c4d; }
+    main { min-width: 0; padding: 28px clamp(16px, 3vw, 42px) 42px; max-width: 1600px; width: 100%; margin: 0 auto; }
+    .topbar { display: flex; justify-content: space-between; gap: 18px; align-items: center; margin-bottom: 24px; }
+    .mobile-brand { display: none; }
+    h1 { font-size: clamp(23px, 3vw, 32px); letter-spacing: -.035em; margin: 0 0 5px; }
+    .subtitle { color: var(--muted); font-size: 13px; }
+    .top-meta { display: flex; gap: 18px; align-items: center; }
+    .last-update { color: var(--muted); text-align: right; font-size: 11px; }
+    .last-update strong { display: block; margin-top: 4px; color: var(--text); font-size: 13px; font-weight: 550; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #254c3c; background: #103022; color: #b5ffd2; padding: 7px 12px; border-radius: 99px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+    .pill.offline { border-color: #59333b; background: #321c25; color: #ffd2d6; }
+    .view { display: none; animation: enter .22s ease both; }
+    .view.active { display: block; }
+    @keyframes enter { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .grid { display: grid; gap: 14px; }
+    .stats { grid-template-columns: minmax(190px, 1.35fr) repeat(3, minmax(135px, 1fr)); }
+    .card { min-width: 0; background: linear-gradient(150deg, #15263a, #101b2b 76%); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 10px 26px #02071140, inset 0 1px #ffffff08; }
+    .stat { min-height: 112px; padding: 18px; display: flex; align-items: center; gap: 13px; }
+    .temperature-stat { position: relative; overflow: hidden; padding-left: 20px; }
+    .temperature-stat::before { content: ""; position: absolute; inset: 16px auto 16px 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--blue); }
+    .temperature-stat.bed-stat::before { background: var(--green); }
+    .temperature-stat .stat-label { font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+    .stat-main { min-width: 0; }
+    .state-icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #143e32; color: var(--green); flex: 0 0 auto; }
+    .state-icon svg { width: 23px; height: 23px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+    .state-icon.unknown { background: #30313b; color: var(--amber); }
+    .stat-label { color: #b4c2d4; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .stat-label svg { width: 19px; height: 19px; color: var(--blue); stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .stat-value { font-size: clamp(22px, 2.4vw, 30px); font-weight: 700; line-height: 1.15; letter-spacing: -.035em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .stat-sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .state-word { font-size: 22px; font-weight: 700; text-transform: capitalize; }
+    .section-grid { grid-template-columns: minmax(0, 1.6fr) minmax(270px, .9fr); margin-top: 15px; }
+    .chart-card { padding: 17px 18px 12px; }
+    .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .card-title { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+    .chart-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 13px; color: #bdcadd; font-size: 10px; }
+    .legend { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 13px; height: 2px; border-radius: 2px; background: var(--blue); }
+    .legend.bed i { background: var(--green); }
+    .legend.average i { height: 0; border-top: 2px dashed #e8f1ff; background: transparent; }
+    .chart-wrap { position: relative; height: 245px; min-width: 0; }
+    .feedrate-controls { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:8px 0; }
+    .feedrate-controls .btn { min-height:30px; padding:5px 9px; font-size:10px; }
+    .feedrate-controls .btn.active { border-color:#438bc4; background:#173351; color:#fff; }
+    .control-spacer { flex:1; }
+    .feedrate-chart-wrap { position:relative; height:250px; min-width:0; overflow:hidden; border-radius:8px; }
+    .feedrate-scrubber { display:flex; align-items:center; gap:9px; color:var(--muted); font-size:10px; margin-top:7px; }
+    .feedrate-scrubber input { flex:1; min-width:0; accent-color:var(--blue); }
+    .feedrate-demo-row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:7px; margin-top:7px; font-size:10px; color:var(--muted); }
+    .feedrate-demo-row label { display:flex; align-items:center; gap:7px; }
+    .feedrate-demo-row input { accent-color:var(--blue); }
+    .feedrate-event-strip { display:flex; flex-wrap:wrap; gap:5px; min-height:24px; max-height:48px; overflow:hidden; margin-top:8px; }
+    .feedrate-event-marker { border:1px solid #455c75; border-radius:6px; padding:3px 6px; color:#c2d4e6; background:#122235; font-size:9px; white-space:nowrap; }
+    .sd-control-actions { flex-wrap:wrap; }
+    .sd-upload { border-top:1px solid var(--line); margin-top:14px; padding-top:12px; }
+    .sd-upload h3 { margin:0 0 5px; font-size:13px; }
+    .sd-upload input[type=file] { max-width:100%; color:var(--muted); font-size:11px; }
+    .sd-upload progress { display:block; width:100%; margin-top:8px; accent-color:var(--blue); }
+    #sd-upload-dialog form { display:grid; gap:10px; min-width:min(420px,80vw); }
+    canvas { width: 100%; height: 100%; display: block; }
+    .chart-empty { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; pointer-events: none; }
+    .chart-empty.visible { display: flex; }
+    .status-card { padding: 18px; }
+    .status-list { display: grid; gap: 15px; margin-top: 18px; }
+    .status-row { display: flex; align-items: center; gap: 11px; }
+    .status-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #1b2c41; color: #8eb9e6; }
+    .status-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .status-row strong { display: block; font-size: 12px; font-weight: 620; }
+    .status-row small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+    .home-tools-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .home-panel { padding: 16px; min-width: 0; }
+    .home-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .home-panel-head h2 { margin: 0; font-size: 14px; }
+    .home-panel-link { border: 0; background: transparent; color: #9dcfff; cursor: pointer; font-size: 11px; }
+    .home-motion-values { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .home-motion-values span { color: var(--muted); font-size: 10px; }
+    .home-motion-values strong { color: var(--text); font-size: 11px; }
+    .home-motion-chart { height: 110px; position: relative; }
+    .home-feedrate-chart { height: 105px; position: relative; margin-top: 8px; border-top: 1px solid #23364c; }
+    .reference-events { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .reference-event { border: 1px solid #456640; background: #14271f; color: #c7f1d6; border-radius: 8px; padding: 6px 8px; font-size: 10px; }
+    .reference-event small { display: block; color: #9fb8a7; margin-top: 3px; }
+    .home-twin-canvas { height: 220px; position: relative; overflow: hidden; border-radius: 10px; background: radial-gradient(ellipse at 50% 45%, #233a54, #091522 72%); }
+    .twin-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    .twin-status-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .twin-status-chip { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: #0b1724; color: var(--muted); font-size: 10px; }
+    .twin-workspace { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(240px, .8fr); gap: 14px; }
+    .twin-stage { min-height: 480px; height: min(62vh, 700px); position: relative; overflow: hidden; border-radius: 12px; background: radial-gradient(ellipse at 50% 35%, #203750, #08121f 70%); }
+    .twin-controls { display: grid; gap: 12px; }
+    .twin-control-card { padding: 15px; }
+    .twin-control-card h2 { font-size: 14px; margin: 0 0 10px; }
+    .twin-control-card p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .twin-control-card input[type=file] { width: 100%; color: var(--muted); font-size: 11px; }
+    .twin-control-card input[type=range] { width: 100%; accent-color: var(--blue); }
+    .twin-mode-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
+    .twin-mode-tabs button { border: 1px solid var(--line); background: #0d1927; color: var(--muted); border-radius: 9px; padding: 9px 12px; cursor: pointer; font-size: 11px; }
+    .twin-mode-tabs button.active { color: white; border-color: #3b80b5; background: #173351; }
+    .twin-control-card select { max-width: 100%; border: 1px solid #334b64; border-radius: 8px; padding: 8px 10px; background: #0a1523; color: var(--text); }
+    .twin-toggle { display: inline-flex; align-items: center; gap: 8px; color: #c5d4e5; font-size: 11px; }
+    .twin-toggle input { accent-color: var(--blue); }
+    .twin-color-key { display: flex; flex-wrap: wrap; gap: 7px 12px; color: var(--muted); font-size: 10px; margin-top: 10px; }
+    .twin-color-key span { display: inline-flex; align-items: center; gap: 5px; }
+    .twin-color-key i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .twin-color-key .outer { background: #ffa856; }
+    .twin-color-key .infill { background: #51c8ae; }
+    .twin-color-key .support { background: #8a78d1; }
+    .twin-color-key .travel { background: #79c3f4; opacity: .55; }
+    .console-panel { overflow: hidden; border: 1px solid #29415a; border-radius: 12px; background: #080f18; }
+    .console-head { display: flex; justify-content: space-between; padding: 10px 13px; border-bottom: 1px solid #1c3044; color: #9eb2c9; font-size: 10px; }
+    .console-output { min-height: 100px; max-height: 230px; overflow: auto; padding: 12px; color: #b8d1e9; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .console-form { display: flex; gap: 7px; border-top: 1px solid #1c3044; padding: 9px; }
+    .console-form input { flex: 1; min-width: 0; border: 1px solid #2c435a; border-radius: 8px; background: #0b1623; color: var(--text); padding: 9px; font: 11px ui-monospace, monospace; }
+    .console-form .btn { min-height: 36px; padding: 7px 10px; }
+    .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; }
+    .overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #view-overview.view.active { display: flex; flex-direction: column; gap: 14px; }
+    #view-overview .section-grid { order: 1; margin-top: 0; }
+    #view-overview .overview-metrics { order: 2; margin-top: 0; }
+    #view-overview .home-tools-grid { order: 3; }
+    #view-overview > article.home-panel { order: 4; }
+    .metric { padding: 15px 16px; display: flex; gap: 12px; align-items: center; min-height: 74px; }
+    .metric svg { width: 23px; height: 23px; color: #b6c4d5; stroke: currentColor; fill: none; stroke-width: 1.8; flex: 0 0 auto; }
+    .metric span { color: var(--muted); display: block; font-size: 10px; }
+    .metric strong { display: block; margin-top: 4px; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .view-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 8px 0 18px; }
+    .view-heading p { color: var(--muted); margin: 5px 0 0; font-size: 13px; }
+    .btn { border: 1px solid #35506c; background: #172a40; color: #e3efff; border-radius: 9px; padding: 10px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 620; min-height: 40px; transition: .18s ease; }
+    .btn:hover { border-color: var(--blue); background: #1b3754; }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .range { display: flex; gap: 4px; padding: 3px; background: #0a1522; border: 1px solid #243850; border-radius: 9px; }
+    .range button { border: 0; background: transparent; color: #aab9cb; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; }
+    .range button.active { color: white; background: #1472c6; }
+    .temp-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 14px; }
+    .temp-card { padding: 20px; }
+    .temp-card .stat-value { font-size: 38px; }
+    .temp-card .stat-label { font-size: 13px; }
+    .temp-card .stat-sub { font-size: 13px; }
+    .sd-card { overflow: hidden; }
+    .sd-top { padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { color: #aebdd0; background: #101b2a; text-align: left; font-weight: 600; padding: 11px 16px; }
+    td { padding: 11px 16px; border-top: 1px solid #23364c; color: #e4edf8; }
+    tbody tr:hover { background: #16273a; }
+    .file-name { display: flex; gap: 9px; align-items: center; min-width: 180px; }
+    .file-name svg { width: 17px; height: 17px; color: var(--blue); stroke: currentColor; fill: none; stroke-width: 1.8; flex: 0 0 auto; }
+    .muted { color: var(--muted); }
+    .empty-row { text-align: center; color: var(--muted); padding: 30px 16px; }
+    .note { color: var(--muted); font-size: 11px; line-height: 1.55; padding: 12px 17px; border-top: 1px solid #23364c; }
+    .diag-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .diag-card { padding: 18px; }
+    .diag-card h2 { margin: 0 0 14px; font-size: 14px; }
+    .diag-list { display: grid; gap: 0; }
+    .diag-item { display: flex; justify-content: space-between; gap: 15px; padding: 12px 0; border-top: 1px solid #24384e; font-size: 12px; }
+    .diag-item span { color: var(--muted); }
+    .diag-item strong { text-align: right; font-weight: 600; }
+    .motion-axis-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .motion-axis { padding: 15px 16px; border-left: 3px solid var(--blue); }
+    .motion-axis:nth-child(2) { border-color: var(--green); }
+    .motion-axis:nth-child(3) { border-color: #bb8aff; }
+    .motion-axis:nth-child(4) { border-color: var(--amber); }
+    .motion-axis small { color: var(--muted); font-size: 11px; }
+    .motion-axis strong { display: block; margin-top: 7px; font-size: 25px; font-variant-numeric: tabular-nums; }
+    .motion-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, .8fr); gap: 14px; margin-top: 14px; }
+    .motion-chart-wrap { position: relative; height: 300px; }
+    .motion-status { padding: 12px 15px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .motion-activity { display: grid; gap: 0; padding: 8px 14px; max-height: 250px; overflow:auto; }
+    .activity-row { display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #22354a; font-size: 11px; min-width:0; }
+    .activity-axis { color: var(--blue); font-weight: 750; }
+    .activity-detail { min-width:0; overflow-wrap:anywhere; color:var(--text); line-height:1.35; }
+    .activity-detail small { display:block; color:var(--muted); margin-top:3px; }
+    .activity-evidence { color:var(--muted); font-size:10px; white-space:nowrap; }
+    .axis-feedrate-legend { display:flex; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:10px; margin:5px 0 8px; }
+    .axis-feedrate-legend span { display:inline-flex; align-items:center; gap:5px; }
+    .axis-feedrate-legend i { width:12px; height:2px; border-radius:2px; background:var(--blue); }
+    .axis-feedrate-legend .fy i { background:var(--green); }
+    .axis-feedrate-legend .fz i { background:#bb8aff; }
+    .axis-feedrate-legend .fe i { background:var(--amber); }
+    .api-list { display: grid; gap: 8px; }
+    .api-item { display: grid; grid-template-columns: 54px minmax(160px, 1fr) 2fr; align-items: center; gap: 12px; padding: 12px; border: 1px solid #263b52; border-radius: 9px; background: #101d2d; }
+    .method { padding: 4px 7px; border-radius: 6px; text-align: center; background: #13562f; color: #aaffca; font-size: 10px; font-weight: 750; }
+    .method.ws { background: #114766; color: #a8e3ff; }
+    code { color: #e4f1ff; font-size: 12px; }
+    .api-item span:last-child { color: var(--muted); font-size: 11px; }
+    .machine-tabs { display: flex; gap: 7px; margin: 12px 0 18px; padding: 4px; width: fit-content; border: 1px solid var(--line); border-radius: 12px; background: #0c1725; }
+    .machine-tabs button { border: 0; background: transparent; color: #aebdd0; border-radius: 8px; padding: 9px 13px; font-size: 12px; font-weight: 620; cursor: pointer; }
+    .machine-tabs button.active { background: #1b4268; color: white; box-shadow: inset 0 0 0 1px #31577e; }
+    .machine-panel { display: none; }
+    .machine-panel.active { display: block; }
+    .machine-notice { display: flex; gap: 12px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid #625134; border-radius: 12px; background: #302718; color: #ffe1a8; font-size: 12px; line-height: 1.5; }
+    .machine-notice strong { display: block; margin-bottom: 2px; color: #fff1d0; }
+    .machine-state-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 12px 0; }
+    .machine-state-cell { padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: #101d2d; }
+    .machine-state-cell span { display: block; color: var(--muted); font-size: 10px; }
+    .machine-state-cell strong { display: block; margin-top: 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .operation-steps { padding: 12px; border: 1px solid #263b52; border-radius: 10px; background: #0c1725; }
+    .operation-steps summary { color: #dce9f7; cursor: pointer; font-size: 12px; font-weight: 650; }
+    .operation-steps ol { margin-bottom: 0; }
+    .operation-state { display: grid; gap: 8px; }
+    .operation-state .diag-item { padding: 8px 0; }
+    .operation-state pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .guided-session { margin-top: 12px; padding: 15px; border: 1px solid #34506e; border-radius: 11px; background: #101d2d; }
+    .guided-session h3 { margin: 0 0 8px; font-size: 14px; }
+    .guided-session .current-step { margin: 10px 0; color: #e6f1ff; font-size: 13px; line-height: 1.55; }
+    .guided-session .workflow-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .commissioning-card { margin: 0 0 14px; padding: 14px; }
+    .commissioning-card h2 { margin: 0 0 6px; font-size: 14px; }
+    .commissioning-intro { padding: 16px; margin-bottom: 12px; }
+    .commissioning-intro h2 { margin: 0 0 7px; font-size: 16px; }
+    .commissioning-intro > p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .commissioning-guide { display: grid; gap: 12px; }
+    .commissioning-guide h3 { margin: 0 0 5px; font-size: 15px; }
+    .commissioning-guide .guide-block { padding: 14px; border: 1px solid #263b52; border-radius: 10px; background: #0c1725; }
+    .commissioning-guide .guide-block h4 { margin: 0 0 8px; font-size: 12px; }
+    .commissioning-guide .guide-block p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .commissioning-guide ol { margin: 0; padding-left: 20px; color: #d0dbea; font-size: 12px; line-height: 1.7; }
+    .commissioning-guide .guide-ack { display: flex; gap: 9px; align-items: flex-start; margin: 10px 0; color: #d5e1ef; font-size: 12px; }
+    .commissioning-guide .guide-ack input { margin-top: 2px; }
+    .catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .operation-card { min-width: 0; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .operation-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .operation-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: #1b2e46; color: #83caff; font-size: 19px; }
+    .operation-card h3 { margin: 0; font-size: 14px; letter-spacing: -.01em; }
+    .operation-card p { min-height: 32px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .operation-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { display: inline-flex; border: 1px solid #32475d; border-radius: 99px; padding: 4px 7px; color: #bdcadd; font-size: 9px; line-height: 1.2; }
+    .tag.preview { border-color: #735a2d; color: #ffe0a1; background: #382b16; }
+    .operation-card .btn { justify-content: center; width: 100%; margin-top: auto; }
+    .operation-card .btn:disabled { cursor: not-allowed; opacity: .45; }
+    .operation-card .btn.preview-btn:disabled { opacity: .75; }
+    .operation-inline-status { border: 1px solid #34536a; border-radius: 10px; padding: 10px; background: #0a1725; color: #d8e8f5; font-size: 11px; line-height: 1.45; }
+    .operation-inline-status[hidden] { display: none; }
+    .operation-inline-status pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b8e6ff; margin: 6px 0; }
+    .operation-inline-status .inline-observation { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+    .operation-inline-status .inline-observation .btn { width: auto; min-height: 34px; margin: 0; }
+    .execute-command-box { margin: 12px 0; padding: 11px; border: 1px solid #314961; border-radius: 10px; background: #0a1523; }
+    .execute-command-box strong { display: block; margin-bottom: 6px; font-size: 12px; }
+    .execute-command-box pre { margin: 0; color: #b8e6ff; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+    .preview-panel { display: grid; gap: 13px; }
+    .preview-summary { padding: 15px; }
+    .preview-summary h3 { margin: 0 0 5px; font-size: 16px; }
+    .preview-summary p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .preview-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .preview-form label { color: #c3d1e0; font-size: 11px; }
+    .preview-form input, .preview-form select { display: block; width: 100%; margin-top: 6px; border: 1px solid #334b64; border-radius: 8px; padding: 10px; background: #0a1523; color: var(--text); }
+    .preview-output { min-height: 90px; padding: 15px; }
+    .preview-output h3 { margin: 0 0 9px; font-size: 13px; }
+    .preview-output pre { margin: 0; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b8e6ff; font-size: 12px; line-height: 1.65; }
+    .preview-output .muted { font-size: 12px; line-height: 1.5; }
+    .workflow-list { color: #d0dbea; font-size: 12px; line-height: 1.6; padding-left: 20px; }
+    .preview-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+    .capability-list { display: grid; gap: 8px; }
+    .capability-row { display: grid; grid-template-columns: minmax(100px, .75fr) minmax(120px, 1fr) minmax(160px, 2fr); gap: 10px; align-items: center; padding: 11px 12px; border: 1px solid #263b52; border-radius: 9px; background: #101d2d; font-size: 11px; }
+    .capability-row strong { color: #e6f1ff; }
+    .capability-row span { color: var(--muted); line-height: 1.4; }
+    .disabled-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    footer { text-align: center; padding: 30px 0 10px; color: #708299; font-size: 10px; }
+    .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 15px); opacity: 0; pointer-events: none; background: #301e25; border: 1px solid #613740; color: #ffdae0; padding: 11px 16px; border-radius: 9px; font-size: 12px; z-index: 5; transition: .2s ease; max-width: calc(100vw - 28px); }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    dialog { width: min(400px, calc(100vw - 28px)); border: 1px solid #36516d; color: var(--text); border-radius: 15px; background: #101d2d; box-shadow: 0 24px 80px #000a; padding: 22px; }
+    dialog::backdrop { background: #030913bb; backdrop-filter: blur(4px); }
+    dialog h2 { margin: 0 0 8px; font-size: 19px; }
+    dialog p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    dialog label { display: block; margin: 17px 0 7px; color: #c1d0e0; font-size: 12px; }
+    dialog input { width: 100%; background: #081421; border: 1px solid #304962; color: white; border-radius: 8px; padding: 11px 12px; outline: none; }
+    dialog input:focus { border-color: var(--blue); }
+    .dialog-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    @media (max-width: 1000px) {
+      .shell { grid-template-columns: 190px minmax(0, 1fr); }
+      main { padding: 22px 20px 34px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats .stat:first-child { grid-column: span 2; }
+      .section-grid { grid-template-columns: minmax(0, 1fr); }
+      .home-tools-grid { grid-template-columns: minmax(0, 1fr); }
+      .twin-workspace { grid-template-columns: minmax(0, 1fr); }
+      .twin-stage { min-height: 330px; height: 50vh; }
+      .motion-layout { grid-template-columns: minmax(0, 1fr); }
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      body { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
+      .shell { display: block; }
+      .sidebar { position: static; z-index: 3; padding: 0; border: 0; background: transparent; gap: 0; }
+      .brand { display: none; }
+      .mobile-brand { display: none; }
+      .nav { position: fixed; z-index: 10; inset: auto 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 6px 8px calc(7px + env(safe-area-inset-bottom)); border-top: 1px solid #263a51; background: #091421f2; backdrop-filter: blur(18px); }
+      .nav button { min-width: 0; min-height: 43px; padding: 4px 2px; gap: 3px; justify-content: center; flex-direction: column; text-align: center; font-size: 10px; line-height: 1.1; }
+      .nav svg { width: 16px; height: 16px; }
+      .sidebar-foot { display: none; }
+      main { padding: 17px 12px 22px; }
+      .topbar { margin-bottom: 15px; align-items: center; gap: 10px; }
+      h1 { font-size: 21px; }
+      .subtitle { font-size: 11px; }
+      .top-meta { gap: 0; flex-direction: column; align-items: flex-end; }
+      .last-update { display: none; }
+      .pill { font-size: 10px; padding: 6px 8px; }
+      .stats { gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats .stat { min-height: 94px; padding: 13px 12px; gap: 8px; }
+      .stats .stat:first-child, .stats .stat:last-child { grid-column: auto; }
+      .stats .state-stat { grid-area: state; }
+      .stats .nozzle-stat { grid-area: nozzle; }
+      .stats .bed-stat { grid-area: bed; }
+      .stats .firmware-stat { grid-area: firmware; }
+      .stats { grid-template-areas: "state firmware" "nozzle bed"; }
+      .state-icon { width: 34px; height: 34px; }
+      .state-icon svg { width: 19px; height: 19px; }
+      .stat-value { font-size: 24px; }
+      .state-word { font-size: 20px; }
+      .stat-label { font-size: 11px; }
+      .stat-sub { font-size: 10px; }
+      .temperature-stat { padding-left: 15px !important; }
+      .temperature-stat::before { inset-block: 14px; }
+      .firmware-stat .stat-value { font-size: 17px !important; }
+      .section-grid { margin-top: 9px; gap: 9px; }
+      .home-tools-grid { gap: 9px; }
+      .home-panel { padding: 13px; }
+      .home-motion-chart { height: 140px; }
+      .chart-card, .status-card { padding: 14px; }
+      .chart-wrap { height: 175px; }
+      .card-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+      .chart-legend { justify-content: flex-start; gap: 7px 11px; font-size: 9px; }
+      .metric-grid { gap: 8px; margin-top: 9px; }
+      .metric { min-height: 60px; padding: 9px 8px; gap: 7px; }
+      .metric svg { width: 17px; height: 17px; }
+      .metric strong { font-size: 11px; }
+      .metric span { font-size: 9px; }
+      .overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .view-heading { align-items: flex-start; flex-direction: column; margin: 4px 0 13px; }
+      .view-heading .btn, .view-heading .range { align-self: flex-end; }
+      .temp-pair { gap: 8px; }
+      .temp-card { padding: 15px 12px 15px 16px; }
+      .temp-card .stat-value { font-size: 30px; }
+      .temp-card .stat-sub { font-size: 11px; }
+      .diag-grid { grid-template-columns: 1fr; }
+      .motion-axis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .motion-axis { padding: 12px; }
+      .motion-axis strong { font-size: 21px; }
+      .motion-chart-wrap { height: 235px; }
+      .api-item { grid-template-columns: 48px minmax(115px, 1fr); gap: 8px; }
+      .api-item span:last-child { grid-column: 2; }
+      .api-list code { font-size: 10px; }
+      .catalog-grid { gap: 8px; }
+      .feedrate-chart-wrap { height:220px; }
+      .feedrate-controls { gap:4px; }
+      .feedrate-controls .btn { padding:5px 7px; }
+      .operation-card { padding: 12px; gap: 8px; }
+      .operation-card h3 { font-size: 12px; }
+      .operation-card p { min-height: 0; font-size: 11px; }
+      .operation-card .btn { min-height: 38px; padding: 8px; }
+      #execute-dialog { width: min(94vw, 520px); max-height: 88dvh; overflow-y: auto; }
+      #execute-form { gap: 10px; }
+      #execute-form .dialog-actions { position: sticky; bottom: 0; padding: 8px 0 0; background: var(--panel); }
+      .machine-tabs { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .machine-tabs button { padding-inline: 6px; font-size: 11px; }
+      .machine-state-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+      .machine-state-cell { padding: 9px 10px; }
+      .preview-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .capability-row { grid-template-columns: 1fr 1fr; }
+      .capability-row span:last-child { grid-column: 1 / -1; }
+      footer { padding-top: 22px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brandmark" viewBox="0 0 40 44" aria-hidden="true"><path d="M20 3v36M20 17 7 8v20a13 13 0 0 0 26 0V8L20 17Z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m20 3-5 8h10l-5-8Z" fill="currentColor"/></svg>
+        <div>Neptune<br>Observatory<small>Printer telemetry</small></div>
+      </div>
+      <div class="mobile-brand"><svg class="brandmark" viewBox="0 0 40 44" aria-hidden="true"><path d="M20 3v36M20 17 7 8v20a13 13 0 0 0 26 0V8L20 17Z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m20 3-5 8h10l-5-8Z" fill="currentColor"/></svg>Neptune Observatory</div>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="active" data-view="overview"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1V10Z"/></svg>Overview</button>
+        <button data-view="temperatures"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z"/><path d="M11 11v7"/></svg>Temperatures</button>
+        <button data-view="motion"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 16l4-5 3 2 5-7"/><circle cx="7" cy="16" r="1"/><circle cx="11" cy="11" r="1"/><circle cx="14" cy="13" r="1"/><circle cx="19" cy="6" r="1"/></svg>Motion</button>
+        <button data-view="machine"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h3m5 0h.01M8 19v2m8-2v2"/></svg>Machine</button>
+        <button data-view="sdcard"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 4v5h8V4M8 20v-6h8v6"/></svg>SD Card</button>
+        <button data-view="diagnostics"><svg viewBox="0 0 24 24"><path d="M4 19V5h10l6 6v8H4Z"/><path d="M14 5v6h6M8 15h8"/></svg>Diagnostics</button>
+        <button data-view="digital-twin"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"/></svg>Twin</button>
+        <button data-view="console"><svg viewBox="0 0 24 24"><path d="m4 6 5 6-5 6m8 0h8"/></svg>Console</button>
+      </nav>
+      <div class="sidebar-foot"><div class="connection-line"><i id="side-dot" class="dot"></i><span id="side-connection">Connecting</span></div><small id="side-poll">Waiting for first reading</small></div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><h1>Elegoo Neptune 2</h1><div class="subtitle">Real-time monitoring <span aria-hidden="true">·</span> MKS WiFi <span id="printer-address">· TCP 8080</span></div></div>
+        <div class="top-meta"><div class="last-update">Last update<strong id="updated-at">Waiting for printer</strong></div><span id="live-pill" class="pill"><i class="dot"></i><span>Connecting</span></span></div>
+      </header>
+
+      <section class="view active" id="view-overview" aria-label="Printer overview">
+        <div class="grid stats">
+          <article class="card stat state-stat"><div id="state-icon" class="state-icon unknown"><svg viewBox="0 0 24 24"><path d="M12 3v9m0 0 4-4m-4 4L8 8M5 14a7 7 0 1 0 14 0"/></svg></div><div class="stat-main"><div id="printer-state" class="state-word">Waiting</div><div id="state-sub" class="stat-sub">No reading received yet</div></div></article>
+          <article class="card stat temperature-stat nozzle-stat"><div class="stat-main"><div class="stat-label"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z"/><path d="M11 11v7"/></svg>Nozzle</div><div id="nozzle-value" class="stat-value">—</div><div id="nozzle-target" class="stat-sub">Target —</div></div></article>
+          <article class="card stat temperature-stat bed-stat"><div class="stat-main"><div class="stat-label"><svg viewBox="0 0 24 24" style="color:var(--green)"><path d="M7 3v4m5-4v4m5-4v4M5 8h14l-2 5v5H7v-5L5 8Z"/><path d="M9 21v-3m6 3v-3"/></svg>Bed</div><div id="bed-value" class="stat-value">—</div><div id="bed-target" class="stat-sub">Target —</div></div></article>
+          <article class="card stat firmware-stat"><div class="stat-main"><div class="stat-label"><svg viewBox="0 0 24 24" style="color:#bdc9db"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3M9 9h6v6H9z"/></svg>Firmware</div><div id="firmware-value" class="stat-value" style="font-size:21px">—</div><div class="stat-sub">MKS identifier</div></div></article>
+        </div>
+        <div class="grid section-grid">
+          <article class="card chart-card"><div class="card-head"><h2 class="card-title">Temperature history <span id="overview-range-label" class="muted" style="font-size:10px;font-weight:450">· last 15 min</span></h2><div class="chart-legend"><span class="legend"><i></i>Nozzle raw</span><span class="legend bed"><i></i>Bed raw</span><span class="legend average"><i></i>60 s average</span></div></div><div class="chart-wrap"><canvas id="chart-overview" aria-label="Nozzle and bed raw step readings with a 60 second rolling average"></canvas><div class="chart-empty visible" id="empty-overview">Waiting for real temperature samples</div></div></article>
+          <article class="card status-card"><h2 class="card-title">Connection diagnostics</h2><div class="status-list">
+            <div class="status-row"><div class="status-icon"><svg viewBox="0 0 24 24"><path d="M5 10a11 11 0 0 1 14 0M8 13a6.5 6.5 0 0 1 8 0m-5 4h.01"/><path d="M12 20h.01"/></svg></div><div><strong>Printer link</strong><small id="link-detail">Waiting for first poll</small></div></div>
+            <div class="status-row"><div class="status-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><strong>Data freshness</strong><small id="fresh-detail">No successful reading yet</small></div></div>
+            <div class="status-row"><div class="status-icon"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg></div><div><strong>Polling worker</strong><small id="worker-detail">Starting</small></div></div>
+          </div></article>
+        </div>
+        <div class="grid metric-grid overview-metrics">
+          <article class="card metric"><svg viewBox="0 0 24 24"><path d="M3 9a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0m-9 3a4 4 0 0 1 6 0m-3 4h.01"/></svg><div><span>Connection</span><strong id="metric-connection">—</strong></div></article>
+          <article class="card metric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><span>Poll latency</span><strong id="metric-latency">—</strong></div></article>
+          <article class="card metric"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg><div><span>Sample age</span><strong id="metric-age">—</strong></div></article>
+        </div>
+        <div class="grid home-tools-grid">
+          <article class="card home-panel"><div class="home-panel-head"><h2>Motion Telemetry</h2><button class="home-panel-link" data-open-view="motion">Open Motion ↗</button></div><div id="home-motion-values" class="home-motion-values"><span>X <strong>—</strong></span><span>Y <strong>—</strong></span><span>Z <strong>—</strong></span><span>E <strong>—</strong></span></div><div class="home-motion-chart"><canvas id="chart-home-motion" aria-label="Firmware-reported or planned coordinate history; sources are labeled separately"></canvas><div class="chart-empty visible" id="empty-home-motion">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note" id="home-motion-note">M114 coordinates are unavailable from the current printer response.</div><div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span></div><div class="home-feedrate-chart"><canvas id="chart-home-feedrate" aria-label="Shared axis-specific planned feedrate over time; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-home-feedrate">Waiting for motion timeline</div></div><div class="note">Feedrate is planned or estimated from G-code and acknowledged dashboard moves; motor speed is not reported by this firmware.</div><div class="reference-events" id="home-motion-events" aria-live="polite"></div></article>
+          <article class="card home-panel"><div class="home-panel-head"><h2>Digital Twin</h2><button class="home-panel-link" data-open-view="digital-twin">Open Twin ↗</button></div><div class="home-twin-canvas" id="home-twin"><div class="chart-empty visible">Loading local 3D preview…</div></div><div class="twin-status-row"><span class="twin-status-chip" id="home-twin-state">Printer · waiting</span><span class="twin-status-chip" id="home-twin-nozzle">Nozzle · —</span><span class="twin-status-chip" id="home-twin-bed">Bed · —</span><span class="twin-status-chip" id="home-twin-position">Toolhead · illustrative</span><span class="twin-status-chip" id="home-twin-progress">Progress unavailable</span></div><div class="note">Schematic Neptune 2 kinematics · operator-observed references are distinguished from measured position</div><div class="note" id="home-twin-action">Last machine action · none recorded</div></article>
+        </div>
+        <article class="card home-panel"><div class="home-panel-head"><h2>Observatory Console · read only</h2><button class="home-panel-link" data-open-view="console">Full console ↗</button></div><div class="console-panel" data-console><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Neptune Observatory read-only console. Type help to list supported queries. Arbitrary code and G-code are not accepted.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div></article>
+      </section>
+
+      <section class="view" id="view-temperatures" aria-label="Temperature monitoring">
+        <div class="view-heading"><div><h1>Temperatures</h1><p>Live readings and in-memory history from the printer.</p></div><div class="range" role="group" aria-label="Chart time range"><button data-range="5">5m</button><button data-range="15" class="active">15m</button><button data-range="60">1h</button></div></div>
+        <div class="grid temp-pair">
+          <article class="card temp-card"><div class="stat-label"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z"/><path d="M11 11v7"/></svg>Nozzle temperature</div><div id="nozzle-value-large" class="stat-value">—</div><div id="nozzle-target-large" class="stat-sub">Target —</div></article>
+          <article class="card temp-card"><div class="stat-label"><svg viewBox="0 0 24 24" style="color:var(--green)"><path d="M7 3v4m5-4v4m5-4v4M5 8h14l-2 5v5H7v-5L5 8Z"/><path d="M9 21v-3m6 3v-3"/></svg>Bed temperature</div><div id="bed-value-large" class="stat-value">—</div><div id="bed-target-large" class="stat-sub">Target —</div></article>
+        </div>
+        <article class="card chart-card"><div class="card-head"><h2 class="card-title">Temperature trend</h2><div class="chart-legend"><span class="legend"><i></i>Nozzle raw</span><span class="legend bed"><i></i>Bed raw</span><span class="legend average"><i></i>60 s average</span></div></div><div class="chart-wrap" style="height:360px"><canvas id="chart-temperature" aria-label="Temperature history chart with raw step readings and 60 second averages"></canvas><div class="chart-empty visible" id="empty-temperature">Waiting for real temperature samples</div></div></article>
+        <div class="grid metric-grid"><article class="card metric"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg><div><span>Samples retained</span><strong id="sample-count">0</strong></div></article><article class="card metric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><span>History window</span><strong>Up to 1 hour</strong></div></article></div>
+      </section>
+
+      <section class="view" id="view-motion" aria-label="Motion telemetry">
+        <div class="view-heading"><div><h1>Motion Telemetry</h1><p>Firmware-reported coordinates, operator references, and planned G-code paths are shown as separate signals.</p></div><div class="range" role="group" aria-label="Motion chart time range"><button data-motion-range="5">5m</button><button data-motion-range="15" class="active">15m</button><button data-motion-range="60">1h</button></div></div>
+        <article class="card motion-status" id="motion-status"><div id="motion-status-text">M114 polling and one-shot queries are disabled until separately authorized. No simulated values are shown.</div><div class="preview-actions" style="margin-top:10px"><button class="btn" id="motion-query-button" type="button" disabled>One-shot M114 query · disabled</button><span class="disabled-note" id="motion-query-note">Read-only position queries require explicit server opt-in and a fresh idle state.</span></div></article>
+        <div class="grid motion-axis-grid" style="margin-top:12px">
+          <article class="card motion-axis"><small id="motion-x-label">X · mm</small><strong id="motion-x">—</strong></article>
+          <article class="card motion-axis"><small>Y · mm</small><strong id="motion-y">—</strong></article>
+          <article class="card motion-axis"><small>Z · mm</small><strong id="motion-z">—</strong></article>
+          <article class="card motion-axis"><small>E · mm</small><strong id="motion-e">—</strong></article>
+        </div>
+        <div class="grid motion-layout">
+          <article class="card chart-card"><div class="card-head"><h2 class="card-title">Coordinate history</h2><div class="chart-legend"><span class="legend"><i></i>X</span><span class="legend bed"><i></i>Y</span><span class="legend average"><i style="border:0;background:#bb8aff;height:2px"></i>Z</span><span class="legend"><i style="background:var(--amber)"></i>E</span></div></div><div class="motion-chart-wrap"><canvas id="chart-motion-position" aria-label="Firmware-reported or planned X Y Z and E coordinate history; source is labeled separately"></canvas><div class="chart-empty visible" id="empty-motion-position">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note">Horizontal axis: time. Coordinate history uses firmware-reported samples when present; otherwise, analyzed G-code is shown as a planned path, never measured motion.</div><div class="reference-events" id="motion-reference-events" aria-live="polite"></div></article>
+          <article class="card"><div class="sd-top"><h2 class="card-title">Movement activity</h2><span id="motion-state-tag" class="tag">Unavailable</span></div><div id="motion-activity" class="motion-activity"><div class="disabled-note">No position intervals available.</div></div></article>
+        </div>
+        <div class="grid motion-layout">
+          <article class="card chart-card feedrate-card">
+            <div class="card-head"><h2 class="card-title">Feedrate over time</h2><span class="muted" style="font-size:10px" id="feedrate-source">No live motion trace</span></div>
+            <div class="feedrate-controls" role="group" aria-label="Feedrate time controls">
+              <button class="btn active" data-feedrange="5">5m</button><button class="btn" data-feedrange="15">15m</button><button class="btn" data-feedrange="60">1h</button><button class="btn" data-feedrange="1440">24h</button>
+              <span class="control-spacer"></span><button class="btn" id="feed-pan-back" aria-label="Pan earlier">←</button><button class="btn" id="feed-pan-forward" aria-label="Pan later">→</button><button class="btn" id="feed-zoom-out" aria-label="Zoom out">−</button><button class="btn" id="feed-zoom-in" aria-label="Zoom in">+</button>
+            </div>
+            <div class="feedrate-controls"><label for="feed-session-select">Recorded print</label><select id="feed-session-select" aria-label="Choose a backend-recorded print session"><option value="">Live timeline</option></select><button class="btn" id="feed-load-session" type="button" disabled>Load history</button><span id="feed-session-label" class="muted">Server recording · shared poller</span></div>
+            <div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span><span>planned/estimated · not motor feedback</span></div><div class="feedrate-chart-wrap"><canvas id="chart-motion-feedrate" aria-label="Axis-specific planned feedrate over time in millimeters per minute; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-motion-feedrate">No motion trace for the selected range. Idle intervals show zero only while the printer is freshly reported idle.</div></div>
+            <label class="feedrate-scrubber">Time cursor <input id="feedrate-scrub" type="range" min="0" max="1000" value="1000"><span id="feedrate-cursor-label">Live</span></label>
+            <div class="feedrate-demo-row"><label><input type="checkbox" id="feedrate-demo-toggle"> Show built-in offline movement demonstration</label><span class="muted">Simulated · never printer telemetry</span></div>
+            <div class="feedrate-event-strip" id="feedrate-events" aria-label="Recent machine events on the timeline"></div>
+            <div class="note">Horizontal axis: time. Vertical axis: commanded or estimated feedrate in mm/min, starting at zero. Firmware state can indicate idle but provides no motor-speed feedback.</div>
+          </article>
+          <article class="card diag-card"><h2>Data quality</h2><div class="diag-list"><div class="diag-item"><span>Connection</span><strong id="motion-connection">Waiting</strong></div><div class="diag-item"><span>Latest sample age</span><strong id="motion-age">—</strong></div><div class="diag-item"><span>Query / poll latency</span><strong id="motion-latency">—</strong></div><div class="diag-item"><span>Source</span><strong id="motion-source">M114 · read-only</strong></div><div class="diag-item"><span>Position kind</span><strong id="motion-position-kind">Unavailable</strong></div><div class="diag-item"><span>Confidence</span><strong id="motion-confidence">Unavailable</strong></div></div><div class="note">M114 reports the firmware's planned position by default, not measured carriage position. G-code paths are planned, and M27-mapped positions are estimates; neither is physical measurement. Origin changes caused outside this dashboard, including G92 or touchscreen homing, may not be distinguishable from coordinates alone.</div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-digital-twin" aria-label="Digital Twin">
+        <div class="view-heading"><div><h1>Digital Twin</h1><p>Neptune 2 kinematics preview with local G-code simulation. Planned paths and printer telemetry are shown as separate sources.</p></div><span class="tag preview">SCHEMATIC MODEL</span></div>
+        <div class="twin-mode-tabs" role="tablist" aria-label="Digital Twin mode"><button class="active" data-twin-mode="live" role="tab" aria-selected="true">Live Sync</button><button data-twin-mode="simulation" role="tab" aria-selected="false">Simulation</button><button data-twin-mode="history" role="tab" aria-selected="false">Historical Replay</button></div>
+        <div class="twin-workspace"><article class="card" style="padding:10px"><div class="twin-stage" id="full-twin"><div class="chart-empty visible">Loading local 3D preview…</div></div><div class="twin-status-row"><span class="twin-status-chip" id="full-twin-state">Printer · waiting</span><span class="twin-status-chip" id="full-twin-nozzle">Nozzle · —</span><span class="twin-status-chip" id="full-twin-bed">Bed · —</span><span class="twin-status-chip" id="full-twin-position">Toolhead · unavailable</span><span class="twin-status-chip" id="full-twin-progress">Progress unavailable</span></div><div class="note" id="full-twin-action">Last machine action · none recorded</div></article>
+          <div class="twin-controls"><article class="card twin-control-card" id="twin-live-panel"><h2>Live Sync</h2><p>MKS reports print percentage, file name, printer state, and elapsed time through the existing read-only telemetry poll. When the selected local G-code filename matches the active file, percentage maps to an estimated planned path position. It is not an exact current line or firmware-reported toolhead position. When no match or position report exists, the model remains an illustrative pose.</p><div class="diag-list"><div class="diag-item"><span>Progress source</span><strong>MKS M27 · cached</strong></div><div class="diag-item"><span>Path matching</span><strong id="twin-motion-source">Select matching local G-code</strong></div><div class="diag-item"><span>Sync quality</span><strong id="twin-sync-quality">Awaiting active print and matching file</strong></div></div></article>
+            <article class="card twin-control-card" id="twin-simulation-panel" hidden><h2>Offline G-code Simulation</h2><p>Choose an OrcaSlicer-exported G-code file from this device, or load the built-in movement demonstration. User files are analyzed by the Observatory and never sent to the printer. The built-in sequence uses the shared server interpreter and can be replayed without a file.</p><div class="preview-actions"><input id="twin-gcode-file" type="file" accept=".gcode,.gco,.gc,.g"><button class="btn" id="twin-demo-load" type="button">Load offline movement demo</button></div><div id="twin-file-status" class="disabled-note" style="margin-top:8px">No file loaded · simulation is empty.</div><div id="twin-homing-status" class="note">A G28 in this file will create a simulated reference only; it cannot confirm that the physical printer homed.</div><div id="twin-machine-limits" class="note">220 × 220 × 250 mm published print envelope · firmware travel limits not verified</div><div id="twin-feature-summary" class="disabled-note">Perimeter, infill, and support classification appears when OrcaSlicer feature comments are present.</div><label for="twin-time">Replay timeline</label><input id="twin-time" type="range" min="0" max="1000" value="0" disabled><div class="diag-list"><div class="diag-item"><span>Replay time</span><strong id="twin-time-label">0:00 / 0:00</strong></div><div class="diag-item"><span>Layer</span><strong><select id="twin-layer-select" disabled><option value="all">—</option></select> <small id="twin-layer"></small></strong></div><div class="diag-item"><span>Playback</span><strong><select id="twin-speed"><option value="1">1×</option><option value="4">4×</option><option value="16">16×</option><option value="64">64×</option></select></strong></div></div><div class="preview-actions"><button class="btn" id="twin-play" type="button" disabled>Play</button><button class="btn" id="twin-reset" type="button" disabled>Reset</button><label class="twin-toggle"><input id="twin-frame-transparent" type="checkbox"> Ghost frame</label></div><div class="twin-color-key"><span><i class="outer"></i>Perimeters</span><span><i class="infill"></i>Infill</span><span><i class="support"></i>Support</span><span><i class="travel"></i>Future path</span></div></article>
+            <article class="card twin-control-card" id="twin-history-panel" hidden><h2>Historical Replay</h2><p>Print telemetry is recorded automatically by the FastAPI service while its shared read-only polling worker is running; the iPhone browser can close. To reconstruct a path, select the matching OrcaSlicer G-code in Offline Simulation. The file is stored only for analysis and never sent to the printer.</p><div class="preview-actions"><select id="twin-history-select" aria-label="Server-recorded print sessions"><option value="">Choose a recorded print</option></select><button class="btn" id="twin-history-refresh" type="button">Refresh</button><button class="btn" id="twin-history-load" type="button" disabled>Load session</button></div><div id="twin-history-note" class="disabled-note" style="margin-top:10px">The server records sessions when its shared poller detects an active print.</div><label for="twin-history-time">Recorded session timeline</label><input id="twin-history-time" type="range" min="0" max="1" value="0" disabled><div class="preview-actions"><button class="btn" id="twin-history-play" type="button" disabled>Play</button><button class="btn" id="twin-history-reset" type="button" disabled>Reset</button><label>Playback <select id="twin-history-speed"><option value="1">1×</option><option value="4">4×</option><option value="16">16×</option></select></label></div><div class="twin-status-row"><span class="twin-status-chip" id="twin-recording-status">Server recorder · shared telemetry poller</span></div></article>
+            <article class="card twin-control-card"><h2>Machine model and signal quality</h2><p><strong>Bed-slinger axes:</strong> X moves the extruder carriage, Y translates the build plate beneath the stationary nozzle, and Z raises the X gantry.<br><strong>Simulated reference:</strong> G28 resets the selected virtual axes to their configured nominal switch coordinate.<br><strong>Firmware-reported:</strong> MKS state, temperatures, and M27 progress.<br><strong>Planned / estimated:</strong> local G-code toolpath and progress-mapped location.</p><div class="note">Blue outline: Elegoo's 220 × 220 × 250 mm printable volume. Amber outline: the factory Robin Nano V1.2 V1.0.4 configuration's 0–235 mm X/Y and 0–260 mm Z travel defaults. The dashboard reports TFT28/32 rather than a firmware release; the active firmware version, EEPROM overrides, and exact switch coordinates are not confirmed.</div></article>
+          </div></div>
+      </section>
+
+      <section class="view" id="view-console" aria-label="Read-only Observatory Console">
+        <div class="view-heading"><div><h1>Observatory Console</h1><p>Run named, read-only telemetry queries against Neptune Observatory’s cached local API.</p></div><span class="tag">NO G-CODE · NO CODE EVALUATION</span></div>
+        <div class="card home-panel"><div class="console-panel" data-console><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Type help to list supported queries. This is not a shell, JavaScript REPL, Python console, or G-code terminal.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div><div class="note" style="margin-top:10px">Supported commands only read cached REST data. The `motion` query does not send M114. Use the Motion page’s separate, server-gated button for a one-shot position request.</div></div>
+      </section>
+
+      <section class="view" id="view-machine" aria-label="Machine control and macro library">
+        <div class="view-heading"><div><h1>Machine Control</h1><p>Operate and monitor the Neptune 2 from this dashboard. Printer-screen prompts are not part of these workflows; fresh telemetry, exact previews, and operator confirmations stay here.</p></div><span class="tag preview" id="control-mode">OPERATOR MODE · DISARMED</span></div>
+        <div class="machine-state-strip" aria-label="Current printer state">
+          <div class="machine-state-cell"><span>Connection</span><strong id="machine-connection">Waiting</strong></div>
+          <div class="machine-state-cell"><span>Printer state</span><strong id="machine-printer-state">Unknown</strong></div>
+          <div class="machine-state-cell"><span>Nozzle / target</span><strong id="machine-nozzle">—</strong></div>
+          <div class="machine-state-cell"><span>Bed / target</span><strong id="machine-bed">—</strong></div>
+        </div>
+        <article class="card commissioning-card"><h2>Operator Mode</h2><p class="disabled-note" id="control-session-status">Controls are locked. Arm while beside the printer; Operator Mode stays armed until you disarm it or the service restarts.</p><div class="preview-actions"><button id="control-arm" class="btn" type="button" disabled>Arm Operator Mode</button><button id="control-disarm" class="btn" type="button" hidden>Disarm controls</button></div></article>
+        <div class="machine-tabs" role="tablist" aria-label="Machine tools">
+          <button class="active" role="tab" aria-selected="true" data-machine-panel="control">Control</button>
+          <button role="tab" aria-selected="false" data-machine-panel="macros">Macro Library</button>
+          <button role="tab" aria-selected="false" data-machine-panel="calibration">Calibration</button>
+        </div>
+        <div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong id="control-notice-title">Controls locked · no command sent</strong><span id="control-notice-text">Arm Operator Mode to use fixed controls directly. Commissioning is optional; fresh telemetry, safety checks, and confirmation remain required.</span></div></div>
+        <div class="machine-panel active" id="machine-panel-control" role="tabpanel">
+          <div id="control-cards" class="catalog-grid"></div>
+        </div>
+        <div class="machine-panel" id="machine-panel-macros" role="tabpanel">
+          <div id="macro-cards" class="catalog-grid"></div>
+        </div>
+        <div class="machine-panel" id="machine-panel-calibration" role="tabpanel">
+          <div class="machine-notice"><span aria-hidden="true">ⓘ</span><div><strong>Calibration files come from OrcaSlicer</strong>This dashboard does not generate or start test prints. These cards are workflow pointers; a sliced file and operator review are required upstream.</div></div>
+          <div id="calibration-cards" class="catalog-grid"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-sdcard" aria-label="SD card root listing">
+        <div class="view-heading"><div><h1>SD Card</h1><p>Read-only root directory listing from the printer.</p></div><button class="btn" id="refresh-sd"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3"/></svg>Refresh listing</button></div>
+        <article class="card sd-card"><div class="sd-top"><h2 class="card-title">Root directory</h2><span id="sd-count" class="muted" style="font-size:11px">Not requested</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Size</th></tr></thead><tbody id="sd-rows"><tr><td colspan="3" class="empty-row">Select refresh to request a read-only M20 listing.</td></tr></tbody></table></div><div id="sd-note" class="note">The listing cannot retrieve file contents. Refreshing sends one fixed, read-only M20 command.</div><div class="preview-actions sd-control-actions"><label>Selected file <strong id="sd-selected-file">None</strong></label><button class="btn" data-sd-macro="start_sd_print" type="button" disabled>Preview print start</button><button class="btn" data-sd-macro="pause_print" type="button">Preview pause</button><button class="btn" data-sd-macro="resume_print" type="button">Preview resume</button><button class="btn" data-sd-macro="cancel_print" type="button">Preview cancel</button></div><div class="note">These open the same guarded command previews and confirmation path as Machine Control. No SD operation is sent from this page without the separate armed-session and exact confirmation checks.</div><div class="sd-upload"><h3>Wireless G-code upload</h3><p id="sd-upload-status" class="note">Makerbase source documents a raw /upload route; this printer’s installed firmware has not been verified. Upload stays disabled by default.</p><input id="sd-upload-file" type="file" accept=".gcode,.gco,.gc"><button class="btn" id="sd-upload-start" type="button" disabled>Upload unavailable · server gate off</button><progress id="sd-upload-progress" max="100" value="0" hidden></progress></div></article>
+      </section>
+
+      <section class="view" id="view-diagnostics" aria-label="Connection diagnostics">
+        <div class="view-heading"><div><h1>Diagnostics</h1><p>Application health and read-only connection details.</p></div></div>
+        <div class="grid diag-grid"><article class="card diag-card"><h2>Printer connection</h2><div class="diag-list">
+          <div class="diag-item"><span>TCP endpoint</span><strong id="diag-endpoint">MKS WiFi · TCP 8080</strong></div><div class="diag-item"><span>Status</span><strong id="diag-connected">Waiting</strong></div><div class="diag-item"><span>Transport</span><strong>Raw TCP</strong></div><div class="diag-item"><span>Firmware ID</span><strong id="diag-firmware">—</strong></div><div class="diag-item"><span>Latest successful poll</span><strong id="diag-success">—</strong></div><div class="diag-item"><span>Latest error</span><strong id="diag-error">None</strong></div>
+        </div></article><article class="card diag-card"><h2>Polling worker</h2><div class="diag-list">
+          <div class="diag-item"><span>Worker</span><strong id="diag-worker">Starting</strong></div><div class="diag-item"><span>Poll interval</span><strong id="diag-interval">2 s</strong></div><div class="diag-item"><span>Last latency</span><strong id="diag-latency">—</strong></div><div class="diag-item"><span>Successful polls</span><strong id="diag-success-count">0</strong></div><div class="diag-item"><span>Failed polls</span><strong id="diag-failed-count">0</strong></div><div class="diag-item"><span>Application uptime</span><strong id="diag-uptime">—</strong></div>
+        </div></article><article class="card diag-card"><h2>Read-only safety</h2><div class="diag-list"><div class="diag-item"><span>Telemetry queries</span><strong>M105 · M997 · M27 · M994 · M992 · M115 · M114 disabled by default</strong></div><div class="diag-item"><span>Manual SD listing</span><strong>M20 only</strong></div><div class="diag-item"><span>Machine control</span><strong>Disarmed on startup; existing dashboard sign-in; explicit per-action confirmation</strong></div><div class="diag-item"><span>OpenAPI docs</span><strong><a href="/docs" style="color:var(--cyan)">/docs</a></strong></div><div class="diag-item"><span>API reference</span><strong><a href="#" data-open-api style="color:var(--cyan)">API Docs ↗</a></strong></div><div class="diag-item"><span>SD upload</span><strong>Separate server gate · installed firmware unverified</strong></div></div></article><article class="card diag-card"><h2>Service health</h2><div class="diag-list"><div class="diag-item"><span>Health endpoint</span><strong><a href="/health" style="color:var(--cyan)">GET /health</a></strong></div><div class="diag-item"><span>WebSocket</span><strong>/ws/printer</strong></div></div></article></div>
+        <details class="card diag-card" style="margin-top:14px"><summary>Advanced command and firmware diagnostics</summary><h2 style="margin-top:14px">Firmware capability reference</h2><div id="capability-list" class="capability-list"></div><p class="disabled-note">Generic Marlin documentation does not confirm support in this installed Elegoo firmware or MKS WiFi transport.</p><h2 style="margin-top:18px">Machine activity and command replies</h2><div id="command-audit" class="diag-list"><div class="disabled-note">Waiting for machine activity.</div></div><p class="disabled-note">Command requests and transport replies are retained here. An acknowledgment is separate from physical verification.</p></details>
+      </section>
+
+      <section class="view" id="view-api" aria-label="API documentation links">
+        <div class="view-heading"><div><h1>API Documentation</h1><p>Read-only telemetry plus authenticated, guarded operator controls and optional commissioning tools.</p></div><a class="btn" href="/docs" target="_blank" rel="noreferrer">Open Swagger UI ↗</a></div>
+        <div class="api-list"><div class="api-item"><b class="method">GET</b><code>/health</code><span>Application and poller health</span></div><div class="api-item"><b class="method">GET</b><code>/api/printer/status</code><span>Latest cached telemetry, connection, freshness</span></div><div class="api-item"><b class="method">GET</b><code>/api/printer/temperatures</code><span>Current and target temperatures plus bounded history</span></div><div class="api-item"><b class="method">GET</b><code>/api/printer/motion</code><span>Cached M114 positions and coordinate interval estimates</span></div><div class="api-item"><b class="method">GET</b><code>/api/printer/firmware</code><span>Cached MKS firmware identification</span></div><div class="api-item"><b class="method">GET</b><code>/api/printer/sdcard</code><span>Cached root listing; use ?refresh=true for one M20 request</span></div><div class="api-item"><b class="method">GET</b><code>/api/diagnostics</code><span>Polling and application diagnostics</span></div><div class="api-item"><b class="method">GET</b><code>/api/control/catalog</code><span>Fixed macro definitions, calibration cards, and capability matrix</span></div><div class="api-item"><b class="method">POST</b><code>/api/control/preview</code><span>Validate typed parameters and build local preview; no printer I/O</span></div><div class="api-item"><b class="method">POST</b><code>/api/control/workflows</code><span>Start authenticated manual confirmation workflow; no printer commands</span></div><div class="api-item"><b class="method">POST</b><code>/api/control/workflows/{id}/confirm</code><span>Confirm current step after server-side safety revalidation</span></div><div class="api-item"><b class="method">POST</b><code>/api/control/execute</code><span>Existing dashboard sign-in, fixed command allowlist, fresh telemetry, and per-action confirmation</span></div><div class="api-item"><b class="method">GET</b><code>/api/control/commissioning/cooldown</code><span>One-time cooldown test arming status and saved evidence</span></div><div class="api-item"><b class="method">POST</b><code>/api/control/commissioning/cooldown</code><span>Disabled by default; fixed M104 S0 and M140 S0 commissioning operation</span></div><div class="api-item"><b class="method">GET</b><code>/api/control/audit</code><span>Bounded in-memory activity and operation history</span></div><div class="api-item"><b class="method ws">WS</b><code>/ws/printer</code><span>Real-time cached telemetry snapshots</span></div></div>
+      </section>
+      <footer>NEPTUNE OBSERVATORY <span aria-hidden="true">·</span> LOCAL PRINTER MONITORING</footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="auth-dialog"><form id="auth-form"><h2>Local access token</h2><p>This dashboard is in LAN mode. Enter the token configured on the Mac to open a temporary local session.</p><label for="auth-token">Access token</label><input id="auth-token" type="password" autocomplete="current-password" required><div class="dialog-actions"><button class="btn" type="submit">Connect dashboard</button></div></form></dialog>
+  <dialog id="macro-dialog"><form id="macro-form"><h2 id="macro-dialog-title">Review operation</h2><p id="macro-dialog-description"></p><div id="macro-parameters" class="preview-form"></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-macro">Cancel</button><button class="btn" type="submit">Review exact commands</button></div></form></dialog>
+  <dialog id="execute-dialog"><form id="execute-form"><h2 id="execute-title">Confirm machine operation</h2><p id="execute-description">Review the exact operation before continuing.</p><div class="execute-command-box"><strong>Exact command sequence</strong><pre id="execute-commands"></pre></div><p id="execute-readiness" class="disabled-note"></p><ul id="execute-requirements" class="workflow-list"></ul><label id="execute-clear-path-label" style="display:flex;gap:8px;align-items:flex-start"><input id="execute-clear-path" type="checkbox" style="width:auto;margin:0">The axis travel path is clear.</label><label id="execute-axis-home-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-axis-home" type="checkbox" style="width:auto;margin:0"><span id="execute-axis-home-text"></span></label><label id="execute-gantry-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-gantry-supported" type="checkbox" style="width:auto;margin:0">The gantry is mechanically supported before motor release.</label><div id="execute-guided-workflow" class="guided-session" hidden></div><div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong>Physical completion is reported only when evidence exists</strong>A transport acknowledgment is a controller reply, not a position measurement. Cancellation is not an emergency stop.</div></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-execute">Back</button><button class="btn" type="button" id="execute-start-guided" hidden>Open guided steps</button><button class="btn" type="button" id="execute-arm-inline" hidden>Arm Operator Mode</button><button class="btn primary" type="submit" id="confirm-execute">Run action</button></div></form></dialog>
+  <dialog id="arm-dialog"><form id="arm-form"><h2>Arm Operator Mode</h2><p>Uses your existing dashboard sign-in; no separate control credential is needed. Operator Mode stays armed until you disarm it or the service restarts. Each action still requires an explicit confirmation and fresh safety checks.</p><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-attended" type="checkbox" required style="width:auto;margin:0">I am physically beside and monitoring the printer.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-power-switch" type="checkbox" required style="width:auto;margin:0">The printer power switch is within reach.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-no-clients" type="checkbox" required style="width:auto;margin:0">Other printer clients are disconnected.</label><div class="dialog-actions"><button class="btn" type="button" id="cancel-arm">Cancel</button><button class="btn primary" type="submit" id="confirm-arm">Arm Operator Mode</button></div></form></dialog>
+  <dialog id="motion-query-dialog"><form id="motion-query-form"><h2>Read-only position query</h2><p>This sends exactly one <code>M114</code> and reads the firmware's reported position. It does not move or home axes, but support on this firmware is still unverified.</p><label for="motion-query-confirmation">Type M114 exactly</label><input id="motion-query-confirmation" autocomplete="off" required><div class="dialog-actions"><button class="btn" type="button" id="cancel-motion-query">Cancel</button><button class="btn primary" type="submit" id="submit-motion-query">Request position sample</button></div></form></dialog>
+  <dialog id="sd-upload-dialog"><form id="sd-upload-form"><h2>Upload G-code to printer SD</h2><p>This writes one file to the printer over its MKS WiFi HTTP endpoint. The installed firmware’s upload support is not verified. Do not upload while printing. After an HTTP response, refresh M20 and verify the file; do not assume transfer completion.</p><label for="sd-upload-confirmation">Type the exact phrase shown</label><input id="sd-upload-confirmation" autocomplete="off" required><label><input type="checkbox" id="sd-upload-attended" required> I am beside the printer.</label><label><input type="checkbox" id="sd-upload-switch" required> The power switch is reachable.</label><label><input type="checkbox" id="sd-upload-clients" required> Other printer clients are disconnected.</label><div class="dialog-actions"><button class="btn" type="button" id="sd-upload-cancel">Cancel</button><button class="btn primary" type="submit" id="sd-upload-submit">Confirm upload</button></div></form></dialog>
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null };
+      let twinModulePromise = null;
+      const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+      const fmtTemp = (reading) => reading && reading.status === "available" && Number.isFinite(reading.value) ? `${Number(reading.value).toFixed(1)} °C` : "—";
+      const fmtTarget = (reading) => reading && reading.status === "available" && Number.isFinite(reading.target_c) ? `Target ${Number(reading.target_c).toFixed(1)} °C` : "Target —";
+      const timeText = (value) => value ? new Date(value).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "—";
+      const duration = (n) => { if (!Number.isFinite(n)) return "—"; if (n < 10) return `${n.toFixed(1)} s`; if (n < 60) return `${Math.round(n)} s`; return `${Math.floor(n/60)}m ${Math.floor(n%60)}s`; };
+      function showToast(message) { const t = $("toast"); t.textContent = message; t.classList.add("show"); clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => t.classList.remove("show"), 3600); }
+      function requireLogin() { const d = $("auth-dialog"); if (!d.open) d.showModal(); }
+      async function api(path, options = {}) {
+        const response = await fetch(path, {credentials:"same-origin", ...options, headers:{"Accept":"application/json", ...(options.headers || {})}});
+        if (response.status === 401) { requireLogin(); throw new Error("Authentication required"); }
+        if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || `Request failed (${response.status})`); }
+        return response.json();
+      }
+      const consoleRoutes = {
+        status: "/api/printer/status",
+        temperatures: "/api/printer/temperatures",
+        motion: "/api/printer/motion",
+        firmware: "/api/printer/firmware",
+        diagnostics: "/api/diagnostics",
+        health: "/health",
+        history: "/api/control/audit",
+      };
+      document.querySelectorAll("[data-console]").forEach((panel) => {
+        const form = panel.querySelector(".console-form");
+        const input = form.querySelector("input");
+        const output = panel.querySelector(".console-output");
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const query = input.value.trim().toLowerCase();
+          input.value = "";
+          if (query === "clear") { output.textContent = "Console cleared. Type help for read-only queries."; return; }
+          if (query === "help") {
+            output.textContent = "Supported read-only queries: " + Object.keys(consoleRoutes).join(", ") + ", clear.\nNo shell, code evaluation, arbitrary endpoint, or G-code commands are accepted.";
+            return;
+          }
+          const route = consoleRoutes[query];
+          if (!route) { output.textContent = `Rejected: ${query || "empty input"}. Type help for the fixed allowlist.`; return; }
+          const button = form.querySelector("button"); button.disabled = true;
+          try {
+            const result = await api(route);
+            output.textContent = `$ ${query}  ·  ${new Date().toLocaleTimeString()}\n${JSON.stringify(result, null, 2)}`;
+          } catch (error) { output.textContent = `$ ${query}\nError: ${error.message}`; }
+          finally { button.disabled = false; output.scrollTop = output.scrollHeight; }
+        });
+      });
+      $("auth-form").addEventListener("submit", async (event) => {
+        event.preventDefault(); const button = event.submitter; button.disabled = true;
+        try {
+          await api("/api/auth/session", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({token:$("auth-token").value})});
+          $("auth-token").value = ""; $("auth-dialog").close(); await bootstrap(); connectSocket();
+        } catch (error) { showToast(error.message); }
+        finally { button.disabled = false; }
+      });
+      document.querySelectorAll(".nav button[data-view]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("active", b === button));
+        document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${button.dataset.view}`));
+        if (button.dataset.view === "diagnostics") loadDiagnostics();
+        if (button.dataset.view === "machine") loadCatalog();
+        if (button.dataset.view === "motion") loadMotion();
+        if (button.dataset.view === "digital-twin") loadDigitalTwin();
+        if (button.dataset.view === "overview") maybeLoadTwinPreview();
+        drawCharts();
+      }));
+      document.querySelectorAll("[data-open-view]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelector(`.nav button[data-view="${button.dataset.openView}"]`)?.click();
+      }));
+      document.querySelectorAll("[data-twin-mode]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll("[data-twin-mode]").forEach((item) => { const active = item === button; item.classList.toggle("active", active); item.setAttribute("aria-selected", String(active)); });
+        $("twin-live-panel").hidden = button.dataset.twinMode !== "live";
+        $("twin-simulation-panel").hidden = button.dataset.twinMode !== "simulation";
+        $("twin-history-panel").hidden = button.dataset.twinMode !== "history";
+        window.dispatchEvent(new CustomEvent("neptune:twin-mode", {detail:button.dataset.twinMode}));
+        if (button.dataset.twinMode === "simulation") loadDigitalTwin();
+        if (button.dataset.twinMode === "history") loadDigitalTwin().then((module) => module?.refreshHistoryList());
+      }));
+      const twinPreviewObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadDigitalTwin();
+      }, {rootMargin:"120px"});
+      twinPreviewObserver.observe($("home-twin"));
+      function maybeLoadTwinPreview() {
+        const panel = $("home-twin");
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 120 && rect.bottom > -120) loadDigitalTwin();
+      }
+      window.addEventListener("scroll", maybeLoadTwinPreview, {passive:true});
+      maybeLoadTwinPreview();
+      async function loadDigitalTwin() {
+        if (!twinModulePromise) twinModulePromise = import("/static/digital_twin.js").then((module) => {
+          module.initializeTwins();
+          if (state.snapshot) module.updateTelemetry(state.snapshot);
+          return module;
+        }).catch((error) => {
+          console.error("Digital Twin module load failed", error);
+          twinModulePromise = null;
+          for (const id of ["home-twin", "full-twin"]) if ($(id)) $(id).innerHTML = `<div class="chart-empty visible">3D preview unavailable: ${esc(error.message)}</div>`;
+          showToast("3D preview unavailable: " + error.message);
+          return null;
+        });
+        return twinModulePromise;
+      }
+      document.querySelectorAll("[data-open-api]").forEach((link) => link.addEventListener("click", (event) => {
+        event.preventDefault(); document.querySelectorAll(".nav button").forEach((b) => b.classList.remove("active"));
+        document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-api"));
+      }));
+      document.querySelectorAll("[data-machine-panel]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll("[data-machine-panel]").forEach((b) => { const active = b === button; b.classList.toggle("active", active); b.setAttribute("aria-selected", String(active)); });
+        document.querySelectorAll(".machine-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `machine-panel-${button.dataset.machinePanel}`));
+      }));
+      $("cancel-macro").addEventListener("click", () => $("macro-dialog").close());
+      $("motion-query-button").addEventListener("click", () => $("motion-query-dialog").showModal());
+      $("cancel-motion-query").addEventListener("click", () => $("motion-query-dialog").close());
+      $("motion-query-form").addEventListener("submit", async (event) => {
+        event.preventDefault(); const button=$("submit-motion-query"); button.disabled=true;
+        try {
+          const result=await api("/api/printer/motion/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({confirmation:$("motion-query-confirmation").value})});
+          $("motion-query-dialog").close(); $("motion-query-confirmation").value=""; renderMotion(result.motion); showToast(result.sample.status === "available" ? "Position sample received." : `M114 returned ${result.sample.status}.`);
+        } catch(error) { showToast(error.message); }
+        finally { button.disabled=false; }
+      });
+      $("macro-form").addEventListener("submit", async (event) => {
+        event.preventDefault(); const macro = state.pendingMacro; if (!macro) return;
+        if (macro.id === "filament_change_guided") {
+          const threshold = Number($("parameter-minimum_nozzle_temperature_c").value);
+          if (!Number.isFinite(threshold) || threshold < 150 || threshold > 260) { showToast("Temperature must be between 150 and 260 °C."); return; }
+          state.pendingWorkflowParameters = {minimum_nozzle_temperature_c: threshold};
+          $("macro-dialog").close(); await createPreview(macro, {}); return;
+        }
+        const values = {};
+        for (const parameter of macro.parameters) {
+          const field = document.getElementById(`parameter-${parameter.name}`);
+          values[parameter.name] = parameter.kind === "number" ? Number(field.value) : field.value;
+        }
+        $("macro-dialog").close(); await createPreview(macro, values);
+      });
+      $("cancel-execute").addEventListener("click", () => $("execute-dialog").close());
+      $("execute-start-guided").addEventListener("click", async () => {
+        const pending = state.lastPreview;
+        if (pending) await startGuidedWorkflow(pending.macro, state.pendingWorkflowParameters || {});
+      });
+      $("control-arm").addEventListener("click", () => {
+        $("arm-attended").checked = false;
+        $("arm-power-switch").checked = false;
+        $("arm-no-clients").checked = false;
+        $("arm-dialog").showModal();
+      });
+      $("cancel-arm").addEventListener("click", () => $("arm-dialog").close());
+      $("control-disarm").addEventListener("click", async () => {
+        try {
+          await api("/api/control/disarm", {method:"POST"});
+          await refreshControlAuthorization();
+        } catch (error) { showToast(error.message); }
+      });
+      $("arm-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = $("confirm-arm"); button.disabled = true;
+        try {
+          await api("/api/control/arm", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({confirmation:"ENABLE OPERATOR MODE",attended:$("arm-attended").checked,power_switch_reachable:$("arm-power-switch").checked,no_competing_clients:$("arm-no-clients").checked}),
+          });
+          $("arm-dialog").close();
+          $("arm-attended").checked=false; $("arm-power-switch").checked=false; $("arm-no-clients").checked=false;
+          await refreshControlAuthorization();
+          if (state.reopenPreviewAfterArm && state.lastPreview) {
+            const pending = state.lastPreview;
+            state.reopenPreviewAfterArm = false;
+            await createPreview(pending.macro, pending.parameters, pending.commissioning, pending.retreat_from_home);
+          }
+        } catch (error) { showToast(error.message); }
+        finally { button.disabled=false; }
+      });
+      $("execute-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const pending = state.lastPreview;
+        if (!pending) return;
+        const button = $("confirm-execute");
+        button.disabled = true;
+        try {
+          const operation = await api("/api/control/execute", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+              macro_id: pending.macro.id,
+              parameters: pending.parameters,
+              confirmation: pending.macro.name,
+              clear_travel_path: $("execute-clear-path").checked,
+              axis_at_home: $("execute-axis-home").checked,
+              retreat_from_home: Boolean(pending.retreat_from_home),
+              mode: pending.commissioning ? "commissioning" : "operator",
+              commissioning: Boolean(pending.commissioning),
+              gantry_supported: $("execute-gantry-supported").checked,
+            }),
+          });
+          state.activeOperationId = operation.id;
+          operation._originCard = pending.originCard || null;
+          $("execute-dialog").close();
+          renderOperation(operation);
+          pollOperation(operation.id);
+        } catch (error) {
+          showToast(error.message);
+        } finally {
+          button.disabled = false;
+        }
+      });
+      function operationStateMatches(macro) {
+        const currentState = state.snapshot?.telemetry?.printer_state?.value;
+        const expectedState = macro.id === "pause_print" ? "printing" : macro.id === "resume_print" ? "paused" : macro.id === "cancel_print" ? "active_print" : "idle";
+        return expectedState === "active_print"
+          ? ["printing","paused"].includes(currentState) && state.snapshot?.telemetry?.print_active?.value === true
+          : currentState === expectedState;
+      }
+      function openExecuteDialog(macro, preview, commissioning = false) {
+        const commands = preview.commands || [];
+        const hasAxisRetreat = ["home_x", "home_y", "home_z", "home_axes"].includes(macro.id);
+        const manualWorkflow = macro.id === "filament_change_guided";
+        $("execute-title").textContent = `${macro.name} · final check`;
+        $("execute-description").textContent = `${commissioning ? "Optional supervised verification" : "Guarded operation"} · ${commands.length} fixed command(s). One confirmation sends this sequence; the response and any available telemetry will appear on the ${macro.name} card.`;
+        $("execute-commands").textContent = commands.length ? commands.join("\n") : "No printer command. This is an operator-guided workflow.";
+        const reviewItems = [...(preview.workflow || []), ...(preview.requirements || [])];
+        $("execute-requirements").innerHTML = reviewItems.map((item) => `<li>${esc(item)}</li>`).join("");
+        const needsClearPath = macro.id.startsWith("home_") || macro.id.startsWith("jog_") || macro.id === "neptune_3_axis_orbital_dance";
+        $("execute-clear-path-label").hidden = !needsClearPath;
+        $("execute-clear-path").required = needsClearPath;
+        $("execute-clear-path").checked = false;
+        $("execute-axis-home-label").hidden = !hasAxisRetreat;
+        $("execute-axis-home").required = false;
+        $("execute-axis-home").checked = Boolean(state.lastPreview?.retreat_from_home);
+        $("execute-axis-home-text").textContent = macro.id === "home_axes"
+          ? "Use a visible 30 mm retreat; I confirm all three axes are at their home switches."
+          : "Use a visible 30 mm retreat; I confirm this axis is at its home switch.";
+        $("execute-axis-home").onchange = async () => {
+          const pending = state.lastPreview;
+          if (!pending) return;
+          const retreat = $("execute-axis-home").checked;
+          try {
+            const updated = await api("/api/control/preview", {
+              method:"POST", headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({macro_id:pending.macro.id, parameters:pending.parameters, mode:pending.commissioning ? "commissioning" : "operator", commissioning:pending.commissioning, retreat_from_home:retreat}),
+            });
+            state.lastPreview = {...pending, preview:updated, retreat_from_home:retreat};
+            openExecuteDialog(pending.macro, updated, pending.commissioning);
+          } catch (error) {
+            $("execute-axis-home").checked = false;
+            showToast(error.message);
+          }
+        };
+        const needsGantrySupport = macro.id === "motors_disable";
+        $("execute-gantry-label").hidden = !needsGantrySupport;
+        $("execute-gantry-supported").required = needsGantrySupport;
+        $("execute-gantry-supported").checked = false;
+        const ready = Boolean(preview.execution_enabled && state.snapshot && !state.snapshot.stale && state.snapshot.connection?.connected && operationStateMatches(macro));
+        const armed = Boolean(state.operatorModeArmed);
+        $("execute-readiness").textContent = ready
+          ? "Ready after you complete the checks and confirm below."
+          : preview.execution_notice || preview.readiness?.reason || (armed ? "Waiting for fresh telemetry or the printer state required by this action." : "Arm Operator Mode first; this preview has not sent anything.");
+        $("confirm-execute").disabled = !ready;
+        $("confirm-execute").textContent = ready ? (manualWorkflow ? "Open guided steps" : "Run action") : "Not ready to run";
+        $("execute-start-guided").hidden = !manualWorkflow;
+        $("execute-guided-workflow").hidden = true;
+        $("execute-guided-workflow").replaceChildren();
+        $("execute-arm-inline").hidden = armed || !commands.length;
+        $("execute-arm-inline").onclick = () => {
+          state.reopenPreviewAfterArm = true;
+          $("execute-dialog").close();
+          $("control-arm").click();
+        };
+        $("execute-dialog").showModal();
+      }
+      function renderOperationInline(operation) {
+        if (!operation?.macro_id) return;
+        state.operationResults[operation.macro_id] = operation;
+        const card = [...document.querySelectorAll(".operation-card[data-macro-id]")].find((item) => item.dataset.macroId === operation.macro_id);
+        const host = card?.querySelector("[data-operation-status]");
+        if (!host) return;
+        host.hidden = false;
+        const results = (operation.command_results || []).map((result) => `<div><strong>${esc(result.command)}</strong> · ${esc(result.state.replaceAll("_", " "))}${result.acknowledgment ? ` · ${esc(result.acknowledgment)}` : ""}${result.error ? ` · ${esc(result.error)}` : ""}</div>`).join("");
+        const commandText = (operation.commands || []).map(esc).join("\n");
+        const evidence = operation.physical_completion_confirmed
+          ? "Physical result observed"
+          : operation.state === "transport_acknowledged"
+            ? "Controller acknowledged · physical result not independently measured"
+            : operation.error ? esc(operation.error) : "Waiting for command result";
+        const temps=(sample)=>{const nozzle=sample?.nozzle_temperature?.value,bed=sample?.bed_temperature?.value;return Number.isFinite(nozzle)||Number.isFinite(bed)?`Nozzle ${Number.isFinite(nozzle)?`${Number(nozzle).toFixed(1)} °C`:"—"} · bed ${Number.isFinite(bed)?`${Number(bed).toFixed(1)} °C`:"—"}`:"";};
+        const temperatureLine=operation.telemetry_after?`<p>Latest temperatures after reply · ${esc(temps(operation.telemetry_after))}</p>`:"";
+        const estimateLine=Number.isFinite(operation.proposed_position_mm)?`<p>${esc(operation.planned_axis.toUpperCase())} position estimate · ${Number(operation.proposed_position_mm).toFixed(1)} mm · command-derived</p>`:"";
+        host.innerHTML = `<strong>${esc(operation.state.replaceAll("_", " "))}</strong><pre>${commandText}</pre>${results}<p>${evidence}</p>${temperatureLine}${estimateLine}`;
+      }
+      function renderOperation(operation) { renderOperationInline(operation); }
+      async function pollOperation(operationId) {
+        try {
+          const operation = await api("/api/control/operations/" + encodeURIComponent(operationId));
+          renderOperation(operation);
+          if (["queued", "running"].includes(operation.state)) {
+            setTimeout(() => pollOperation(operationId), 1000);
+          } else if (!operation.telemetry_after && (state.operationPollCount || 0) < 12) {
+            state.operationPollCount = (state.operationPollCount || 0) + 1;
+            setTimeout(() => pollOperation(operationId), 1000);
+          } else {
+            state.activeOperationId = null;
+            state.operationPollCount = 0;
+            await refreshControlAuthorization();
+            await loadCommandAudit();
+          }
+        } catch (error) {
+          if (error.message !== "Authentication required") showToast(error.message);
+        }
+      }
+      document.querySelectorAll("[data-range]").forEach((button) => button.addEventListener("click", () => {
+        setHistoryRange(Number(button.dataset.range));
+      }));
+      document.querySelectorAll("[data-motion-range]").forEach((button) => button.addEventListener("click", () => {
+        setHistoryRange(Number(button.dataset.motionRange));
+      }));
+      document.querySelectorAll("[data-feedrange]").forEach((button)=>button.addEventListener("click",()=>{
+        state.feedRange=Number(button.dataset.feedrange);state.feedPanMs=0;state.feedScrubMs=null;
+        document.querySelectorAll("[data-feedrange]").forEach((item)=>item.classList.toggle("active",item===button));drawMotionFeedrate();
+      }));
+      $("feed-pan-back").addEventListener("click",()=>{state.feedPanMs-=state.feedRange*60000*.75;drawMotionFeedrate();});
+      $("feed-pan-forward").addEventListener("click",()=>{state.feedPanMs=Math.min(0,state.feedPanMs+state.feedRange*60000*.75);drawMotionFeedrate();});
+      $("feed-zoom-in").addEventListener("click",()=>{state.feedRange=Math.max(5,Math.round(state.feedRange/2));syncFeedRange();});
+      $("feed-zoom-out").addEventListener("click",()=>{state.feedRange=Math.min(1440,state.feedRange*2);syncFeedRange();});
+      function syncFeedRange(){document.querySelectorAll("[data-feedrange]").forEach((item)=>item.classList.toggle("active",Number(item.dataset.feedrange)===state.feedRange));state.feedPanMs=0;drawMotionFeedrate();}
+      $("feedrate-demo-toggle").addEventListener("change",async(event)=>{if(!event.currentTarget.checked){state.feedDemo=false;state.feedDemoData=null;drawMotionFeedrate();return;}try{state.feedDemoData=await api("/api/timeline/offline-demo");state.feedDemo=true;state.feedSession=null;state.feedPanMs=0;state.feedScrubMs=null;drawMotionFeedrate();}catch(error){event.currentTarget.checked=false;showToast(error.message);}});
+      $("feedrate-scrub").addEventListener("input",(event)=>{const last=!state.feedDemo&&(state.feedSession?.feedrate_history?.at(-1)?.observed_at||state.feedSession?.telemetry?.at(-1)?.observed_at),end=(last?Date.parse(last):Date.now())+state.feedPanMs,start=end-state.feedRange*60000;state.feedScrubMs=start+(end-start)*Number(event.currentTarget.value)/1000;$("feedrate-cursor-label").textContent=new Date(state.feedScrubMs).toLocaleTimeString([],{hour:"numeric",minute:"2-digit",second:"2-digit"});drawMotionFeedrate();});
+      const feedCanvas=$("chart-motion-feedrate");let feedDrag=null;
+      feedCanvas.addEventListener("pointerdown",(event)=>{feedDrag={x:event.clientX,pan:state.feedPanMs};feedCanvas.setPointerCapture(event.pointerId);});
+      feedCanvas.addEventListener("pointermove",(event)=>{if(!feedDrag)return;const width=feedCanvas.getBoundingClientRect().width;state.feedPanMs=feedDrag.pan-((event.clientX-feedDrag.x)/Math.max(width,1))*state.feedRange*60000;drawMotionFeedrate();});
+      feedCanvas.addEventListener("pointerup",()=>{feedDrag=null;});
+      feedCanvas.addEventListener("wheel",(event)=>{event.preventDefault();state.feedRange=Math.max(5,Math.min(1440,state.feedRange*(event.deltaY<0?.8:1.25)));syncFeedRange();},{passive:false});
+      $("feed-session-select").addEventListener("change",(event)=>{$("feed-load-session").disabled=!event.currentTarget.value;});
+      $("feed-load-session").addEventListener("click",async()=>{const id=$("feed-session-select").value;if(!id){state.feedSession=null;state.feedPanMs=0;drawMotionFeedrate();return;}try{state.feedSession=await api(`/api/timeline/sessions/${encodeURIComponent(id)}`);state.feedPanMs=0;state.feedDemo=false;$("feedrate-demo-toggle").checked=false;$("feed-session-label").textContent=`${state.feedSession.filename||"Recorded print"} · ${timeText(state.feedSession.started_at)}`;drawMotionFeedrate();}catch(error){showToast(error.message);}});
+      function renderFeedSessionOptions(){const select=$("feed-session-select"),selected=select.value;const sessions=state.snapshot?.timeline?.sessions||[];select.replaceChildren(new Option("Live timeline",""));for(const session of sessions){const title=`${session.filename||"Unmatched print"} · ${timeText(session.started_at)}${session.state?` · ${session.state}`:""}`;select.add(new Option(title,session.id));}if(sessions.some((item)=>item.id===selected))select.value=selected;}
+      function setHistoryRange(minutes) {
+        state.range=minutes;
+        document.querySelectorAll("[data-range]").forEach((button)=>button.classList.toggle("active",Number(button.dataset.range)===minutes));
+        document.querySelectorAll("[data-motion-range]").forEach((button)=>button.classList.toggle("active",Number(button.dataset.motionRange)===minutes));
+        $("overview-range-label").textContent=`· last ${minutes} min`;drawCharts();
+      }
+      function connectionView(snapshot) {
+        state.snapshot = snapshot;
+        renderFeedSessionOptions();
+        renderCommandActivity(snapshot.command_activity);
+        renderMotion(snapshot.motion || {enabled:false,status:"disabled",history:[]});
+        const telemetry = snapshot.telemetry || {};
+        const nozzle = telemetry.nozzle_temperature;
+        const bed = telemetry.bed_temperature;
+        const connection = snapshot.connection || {};
+        const connected = Boolean(connection.connected) && !snapshot.stale;
+        const status = telemetry.printer_state?.value || "unknown";
+        const twinStateText = `Printer · ${status.replaceAll("_", " ")}`;
+        const nozzleText = `Nozzle · ${fmtTemp(nozzle)}`;
+        const bedText = `Bed · ${fmtTemp(bed)}`;
+        for (const id of ["home-twin-state", "full-twin-state"]) if ($(id)) $(id).textContent = twinStateText;
+        for (const id of ["home-twin-nozzle", "full-twin-nozzle"]) if ($(id)) $(id).textContent = nozzleText;
+        for (const id of ["home-twin-bed", "full-twin-bed"]) if ($(id)) $(id).textContent = bedText;
+        const lastAction=(snapshot.command_activity?.operations||[]).slice().sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0))[0];
+        const latestStateEvent=snapshot.timeline?.machine_state_events?.[0];
+        const actionText=latestStateEvent?`Latest observed state change · ${latestStateEvent.kind.replaceAll("_"," ")} · ${latestStateEvent.data_class==="external_state_change_inferred"?"unmatched source · may be TFT or another path":"MKS telemetry"} · ${timeText(latestStateEvent.observed_at)}`:lastAction?`Last machine action · ${lastAction.macro_id.replaceAll("_"," ")} · ${(lastAction.commands||[]).join(" → ")} · ${lastAction.operator_observation==="operator_reported_external_tft_homing"?"TFT home separately reported":lastAction.physical_completion_confirmed?"operator observed":"transport result only"} · position is displayed separately`:`Last machine action · none recorded`;
+        for(const id of ["home-twin-action","full-twin-action"])if($(id))$(id).textContent=actionText;
+        const position = snapshot.motion?.latest?.axes;
+        const hasPosition = Boolean(snapshot.motion?.latest?.fresh && position?.x?.status === "available" && position?.y?.status === "available" && position?.z?.status === "available");
+        if ($("full-twin-position")) $("full-twin-position").textContent = hasPosition
+          ? `Toolhead · X${Number(position.x.value_mm).toFixed(1)} Y${Number(position.y.value_mm).toFixed(1)} Z${Number(position.z.value_mm).toFixed(1)} mm · planned`
+          : "Toolhead · unavailable";
+        if ($("twin-motion-source")) $("twin-motion-source").textContent = hasPosition ? "M114 · firmware planned coordinates" : "Awaiting M114";
+        if (twinModulePromise) twinModulePromise.then((module) => module?.updateTelemetry(snapshot));
+        const age = snapshot.data_age_seconds;
+        $("machine-connection").textContent = connected ? "Connected" : snapshot.stale ? "Offline / stale" : "Connecting";
+        $("machine-printer-state").textContent = status === "unknown" ? "Unknown" : status[0].toUpperCase() + status.slice(1);
+        $("machine-nozzle").textContent = fmtTemp(nozzle) + " · " + fmtTarget(nozzle).replace("Target ", "");
+        $("machine-bed").textContent = fmtTemp(bed) + " · " + fmtTarget(bed).replace("Target ", "");
+        $("printer-address").textContent = `· TCP ${connection.port || 8080}`;
+        $("nozzle-value").textContent = fmtTemp(nozzle); $("nozzle-target").textContent = fmtTarget(nozzle);
+        $("bed-value").textContent = fmtTemp(bed); $("bed-target").textContent = fmtTarget(bed);
+        $("nozzle-value-large").textContent = fmtTemp(nozzle); $("nozzle-target-large").textContent = fmtTarget(nozzle);
+        $("bed-value-large").textContent = fmtTemp(bed); $("bed-target-large").textContent = fmtTarget(bed);
+        $("printer-state").textContent = status; $("state-sub").textContent = snapshot.stale ? (snapshot.last_error ? "Last reading is stale" : "Waiting for a current reading") : (status === "idle" ? "Printer ready" : status === "unknown" ? "State not reported" : "Printer activity reported");
+        $("state-icon").classList.toggle("unknown", status === "unknown" || snapshot.stale);
+        const pill = $("live-pill"); pill.classList.toggle("offline", !connected); pill.querySelector(".dot").className = `dot ${connected ? "live" : "offline"}`; pill.querySelector("span").textContent = connected ? "Live" : (snapshot.observed_at ? "Stale" : "Connecting");
+        $("side-dot").className = `dot ${connected ? "live" : snapshot.observed_at ? "offline" : "warn"}`; $("side-connection").textContent = connected ? "Connected" : snapshot.observed_at ? "Disconnected" : "Connecting";
+        $("side-poll").textContent = `Polling every ${Number(snapshot.poll_interval_seconds || 2).toFixed(1)} s`;
+        $("updated-at").textContent = timeText(snapshot.observed_at);
+        $("fresh-detail").textContent = age == null ? "No successful reading yet" : `${duration(age)}${snapshot.stale ? " · stale" : " · current"}`;
+        $("link-detail").textContent = connected ? `MKS WiFi · TCP ${connection.port || 8080}` : snapshot.last_error || "No active connection";
+        $("worker-detail").textContent = `One shared worker · ${snapshot.poll_interval_seconds || 2} s interval`;
+        $("metric-connection").textContent = connected ? "Connected" : "Offline";
+        $("metric-age").textContent = age == null ? "—" : duration(age);
+        $("firmware-value").textContent = snapshot.firmware_identification || "—";
+        $("diag-endpoint").textContent = `MKS WiFi · TCP ${connection.port || 8080}`;
+        $("diag-connected").textContent = connected ? "Connected" : snapshot.observed_at ? "Disconnected · stale data" : "Waiting";
+        $("diag-firmware").textContent = snapshot.firmware_identification || "Not reported";
+        $("diag-success").textContent = timeText(snapshot.observed_at);
+        $("diag-error").textContent = snapshot.last_error || "None";
+        if (snapshot.observed_at && Array.isArray(snapshot.telemetry) === false) {
+          const last = state.history[state.history.length - 1];
+          if (!last || last.observed_at !== snapshot.observed_at) state.history.push({observed_at:snapshot.observed_at,nozzle_c:nozzle?.value ?? null,bed_c:bed?.value ?? null});
+          if (state.history.length > 1800) state.history.splice(0, state.history.length - 1800);
+        }
+        $("sample-count").textContent = state.history.length.toLocaleString(); drawCharts();
+      }
+      function drawChart(canvas, emptyId) {
+        const rect = canvas.getBoundingClientRect(); if (!rect.width || !rect.height) return;
+        const dpr = Math.max(1, window.devicePixelRatio || 1); canvas.width = Math.round(rect.width*dpr); canvas.height = Math.round(rect.height*dpr);
+        const ctx = canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w = rect.width, h = rect.height, left = 39, right = 8, top = 12, bottom = 27;
+        ctx.clearRect(0,0,w,h);
+        const cutoff = Date.now() - state.range*60*1000;
+        const rows = state.history.filter((p) => new Date(p.observed_at).getTime() >= cutoff && (Number.isFinite(p.nozzle_c) || Number.isFinite(p.bed_c)));
+        $(emptyId).classList.toggle("visible", rows.length < 2);
+        if (rows.length < 2) return;
+        const vals = rows.flatMap((p) => [p.nozzle_c,p.bed_c]).filter(Number.isFinite);
+        const rawMin = Math.min(...vals), rawMax = Math.max(...vals), rawSpan = Math.max(0.5, rawMax - rawMin);
+        const targetStep = Math.max(0.25, rawSpan * 0.34);
+        const step = [0.25,0.5,1,2,5,10,20,50,100].find((candidate) => candidate >= targetStep) || 200;
+        const padding = Math.max(step, rawSpan * 0.08);
+        const min = Math.floor((rawMin-padding)/step)*step, max = Math.ceil((rawMax+padding)/step)*step;
+        const plotW=w-left-right, plotH=h-top-bottom;
+        ctx.font="10px system-ui"; ctx.textAlign="right"; ctx.textBaseline="middle";
+        const decimals = step < 1 ? 1 : 0;
+        for (let val=min; val<=max+step*0.01; val+=step) {
+          const y=top+(max-val)/(max-min)*plotH;
+          ctx.strokeStyle="#263a50"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(w-right,y); ctx.stroke();
+          ctx.fillStyle="#98a9bc"; ctx.fillText(`${val.toFixed(decimals)}°C`,left-7,y);
+        }
+        const times=rows.map((p)=>new Date(p.observed_at).getTime());
+        const t0=times[0], t1=Math.max(times[times.length-1],t0+1000), timeSpan=t1-t0;
+        const tickCount = w < 420 ? 3 : 5;
+        const timeFormat = timeSpan < 120000 ? {hour:"numeric",minute:"2-digit",second:"2-digit"} : {hour:"numeric",minute:"2-digit"};
+        ctx.textBaseline="top"; ctx.fillStyle="#98a9bc"; ctx.font="10px system-ui";
+        for (let i=0;i<tickCount;i++) {
+          const ratio=i/(tickCount-1), x=left+ratio*plotW, at=t0+ratio*timeSpan;
+          ctx.strokeStyle="#202f42"; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+plotH); ctx.stroke();
+          ctx.textAlign=i===0?"left":i===tickCount-1?"right":"center";
+          ctx.fillText(new Date(at).toLocaleTimeString([], timeFormat),x,top+plotH+8);
+        }
+        const yFor = (value) => top+(max-value)/(max-min)*plotH;
+        const xFor = (time) => left+(time-t0)/timeSpan*plotW;
+        ctx.save(); ctx.beginPath(); ctx.rect(left,top,plotW,plotH); ctx.clip();
+        const rawSeries = (key,color) => {
+          ctx.beginPath(); let previous=null;
+          for (let i=0;i<rows.length;i++) {
+            const value=rows[i][key], point={x:xFor(times[i]),y:Number.isFinite(value)?yFor(value):null};
+            if (point.y===null) { previous=null; continue; }
+            if (!previous) ctx.moveTo(point.x,point.y);
+            else { ctx.lineTo(point.x,previous.y); ctx.lineTo(point.x,point.y); }
+            previous=point;
+          }
+          ctx.globalAlpha=.25; ctx.strokeStyle=color; ctx.lineWidth=.9; ctx.lineJoin="miter"; ctx.lineCap="butt"; ctx.stroke(); ctx.globalAlpha=1;
+        };
+        const averageSeries = (key,color) => {
+          let start=0,total=0,count=0; const values=[];
+          for (let i=0;i<rows.length;i++) {
+            const value=rows[i][key];
+            if (Number.isFinite(value)) { total+=value; count++; }
+            while (start<=i && times[i]-times[start]>60000) {
+              const old=rows[start][key]; if (Number.isFinite(old)) { total-=old; count--; }
+              start++;
+            }
+            values.push(count ? total/count : null);
+          }
+          ctx.beginPath(); let started=false;
+          for (let i=0;i<values.length;i++) {
+            if (!Number.isFinite(values[i])) { started=false; continue; }
+            const x=xFor(times[i]), y=yFor(values[i]);
+            if (!started) { ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+          }
+          ctx.setLineDash([5,4]); ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.lineJoin="round"; ctx.lineCap="round"; ctx.stroke(); ctx.setLineDash([]);
+        };
+        rawSeries("nozzle_c","#43a9ff"); rawSeries("bed_c","#46e58e");
+        averageSeries("nozzle_c","#43a9ff"); averageSeries("bed_c","#46e58e");
+        if (Number.isFinite(state.selectedTime) && state.selectedTime >= t0 && state.selectedTime <= t1) {
+          const x=xFor(state.selectedTime); ctx.setLineDash([3,4]); ctx.strokeStyle="#ffffffb0"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+plotH); ctx.stroke(); ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
+      function renderMotion(motion) {
+        state.motion = motion || {enabled:false,status:"disabled",history:[]};
+        const latest=state.motion.latest, enabled=Boolean(state.motion.enabled);
+        const values=latest?.axes || {};
+        const references=state.motion.operator_reference?.axes || {};
+        const operationEvents=state.motion.operation_events||[];
+        const age=state.motion.data_age_seconds;
+        const planned=state.motion.planned_history||[];
+        const plannedLatest=planned.filter((row)=>row.source==="uploaded_gcode_plan").at(-1);
+        const commandedLatest=planned.filter((row)=>row.source==="commanded_operation").at(-1);
+        const progressPosition=state.snapshot?.timeline?.reconstruction?.position;
+        for (const axis of ["x","y","z","e"]) {
+          const field=values[axis], reference=references[axis];
+          const firmwareValue=field?.status === "available" && latest?.fresh && Number.isFinite(field.value_mm);
+          const referenceValue=reference?.homed && Number.isFinite(reference.position_mm);
+          const progressValue=Number.isFinite(progressPosition?.[axis]);
+          const plannedValue=plannedLatest?.axes?.[axis]?.status==="planned"&&Number.isFinite(plannedLatest.axes[axis].value_mm);
+          const commandValue=commandedLatest?.axes?.[axis]?.status==="planned"&&Number.isFinite(commandedLatest.axes[axis].value_mm);
+          const coordinate=progressValue?progressPosition[axis]:plannedValue?plannedLatest.axes[axis].value_mm:commandedLatest?.axes?.[axis]?.value_mm;
+          $("motion-"+axis).textContent=firmwareValue ? `${Number(field.value_mm).toFixed(2)} mm` : referenceValue ? `${Number(reference.position_mm).toFixed(2)} mm*` : progressValue ? `${Number(coordinate).toFixed(2)} mm · estimate` : plannedValue ? `${Number(coordinate).toFixed(2)} mm · plan end` : commandValue ? `${Number(coordinate).toFixed(2)} mm · target` : "—";
+          const label=$("motion-"+axis+"-label");
+          const referenceKind=reference?.reference_observation?.kind||"";
+          const referenceLabel=referenceKind==="operator_reported_external_homing_reference"||referenceKind==="operator_observed_homing_reference"?"operator-reported reference":"command-acknowledged estimate";
+          if(label) label.textContent=`${axis.toUpperCase()} · mm${firmwareValue?" · firmware reported":referenceValue?` · ${referenceLabel}`:progressValue?" · MKS progress mapped":plannedValue?" · G-code endpoint":commandValue?" · unverified command target":""}`;
+        }
+        const homeValues=$("home-motion-values")?.querySelectorAll("span") || [];
+        ["x","y","z","e"].forEach((axis,index)=>{const field=values[axis],reference=references[axis],reported=field?.status === "available"&&latest?.fresh&&Number.isFinite(field.value_mm),pv=Number.isFinite(progressPosition?.[axis])?progressPosition[axis]:plannedLatest?.axes?.[axis]?.value_mm,commandTarget=commandedLatest?.axes?.[axis]?.value_mm,plannedValue=Number.isFinite(pv),value=reported?`${Number(field.value_mm).toFixed(1)} mm`:reference?.homed&&Number.isFinite(reference.position_mm)?`${Number(reference.position_mm).toFixed(1)} mm*`:plannedValue?`${Number(pv).toFixed(1)} mm · plan`:Number.isFinite(commandTarget)?`${Number(commandTarget).toFixed(1)} mm · target`:"—";homeValues[index]?.querySelector("strong")&&(homeValues[index].querySelector("strong").textContent=value);});
+        const observedReferences=Object.entries(references).filter(([,reference])=>reference?.homed&&reference.reference_observation);
+        const referenceText=observedReferences.map(([axis,reference])=>{const kind=reference.reference_observation.kind;const source=kind==="operator_reported_external_homing_reference"||kind==="operator_observed_homing_reference"?"operator reported":"home command acknowledged; position estimated";return `${axis.toUpperCase()} reference · ${source}${reference.reference_observation.observed_at?` · ${timeText(reference.reference_observation.observed_at)}`:""}`;}).join(" · ");
+        const eventText=operationEvents.length?"Discrete command/observation events are shown below; they do not provide a path or measured coordinates.":"";
+        $("home-motion-note").textContent=latest?.fresh
+          ? "Firmware-reported planned coordinates · sample " + duration(age ?? 0) + " old." + (referenceText?` ${referenceText}.`:"")
+          : (referenceText ? `${referenceText}. Estimated references are not M114 samples. No continuous measured path was recorded.` : (operationEvents.length?eventText:(state.motion.note || "Awaiting authorized M114 position samples. No synthetic readings are displayed.")));
+        if(planned.length&&!latest?.fresh)$("home-motion-note").textContent="Dashed command/G-code paths are planned estimates and do not confirm actual movement.";
+        // Chart renderers own the range-aware empty state. Discrete references
+        // and acknowledgments are not coordinate samples.
+        const referenceMarkup=[...observedReferences.map(([axis,reference])=>`<span class="reference-event">${axis.toUpperCase()} home · operator recorded<small>${reference.reference_observation.kind==="operator_reported_external_homing_reference"?"Stock touchscreen · ":"Dashboard operation · "}${reference.reference_observation.observed_at?esc(timeText(reference.reference_observation.observed_at)):"time unavailable"} · reference only, no path samples</small></span>`),...operationEvents.map((event)=>`<span class="reference-event">${esc((event.macro_id||"motion").replaceAll("_"," "))} · ${esc((event.state||"unknown").replaceAll("_"," "))}<small>${esc((event.commands||[]).join(" → "))} · ${event.operator_observation==="operator_reported_external_tft_homing"?"separate TFT home reported":event.physical_completion_confirmed?"operator observed":"acknowledgment only"} · ${event.timestamp_precision==="approximate"?"approx. ":""}${esc(timeText(event.updated_at||event.created_at))}</small></span>`)].join("");
+        for(const id of ["home-motion-events","motion-reference-events"]){const target=$(id);if(target)target.innerHTML=referenceMarkup;}
+        const hasGcodePlan=planned.some((row)=>row.source==="uploaded_gcode_plan"),hasCommandPath=planned.some((row)=>row.source==="commanded_operation"),hasProgress=Boolean(progressPosition);
+        $("motion-connection").textContent=state.snapshot?.connection?.connected ? (state.snapshot.stale?"Connected · stale":"Connected · live") : "Printer disconnected";
+        $("motion-age").textContent=age != null ? duration(age) : state.snapshot?.data_age_seconds == null ? "—" : duration(state.snapshot.data_age_seconds);
+        const latency=latest?.latency_ms ?? state.snapshot?.poll_latency_ms;
+        $("motion-latency").textContent=latency == null ? "—" : `${Number(latency).toFixed(1)} ms`;
+        $("motion-source").textContent=latest?.source_command || (hasProgress?"MKS M27 + matching G-code":hasGcodePlan?"Uploaded G-code plan":hasCommandPath?"Acknowledged jog command":"M114 · query disabled");
+        $("motion-position-kind").textContent=latest?.fresh?"Firmware planned position":hasProgress?"Progress-mapped estimate":hasGcodePlan?"G-code planned path":hasCommandPath?"Command target":"Operator reference only";
+        $("motion-confidence").textContent=latest?.fresh?"Firmware-reported":hasProgress?"Estimated from MKS percent":hasGcodePlan?"Planned · no acceleration model":hasCommandPath?"Acknowledged, not physically confirmed":"No coordinates";
+        $("motion-state-tag").textContent=hasGcodePlan?"G-code plan":hasCommandPath?"Command target":String(state.motion.status || "unavailable").replaceAll("_"," ");
+        $("motion-status-text").textContent=enabled
+          ? (state.motion.note || (latest?.error ? `M114 unavailable: ${latest.error}` : "Waiting for an idle printer sample."))
+          : (state.motion.note || "M114 polling and one-shot queries are disabled until separately authorized. No simulated values are shown.");
+        if (enabled && latest?.error) $("motion-status-text").textContent += ` Latest query: ${latest.error}`;
+        const queryButton=$("motion-query-button");
+        const queryReady=Boolean(state.motion.query_enabled && state.snapshot && !state.snapshot.stale && state.snapshot.connection?.connected && state.snapshot.telemetry?.printer_state?.value === "idle" && state.snapshot.telemetry?.print_active?.value === false);
+        queryButton.disabled=!queryReady;
+        queryButton.textContent=queryReady?"Request one read-only M114 sample":"One-shot M114 query · disabled";
+        $("motion-query-note").textContent=queryReady?"Server opt-in is enabled. This click sends one M114 after exact-name confirmation; no periodic polling is started.":state.motion.query_enabled?"Waiting for fresh telemetry showing the printer is idle.":"Read-only position queries require explicit server opt-in and a fresh idle state.";
+        drawMotionCharts();
+      }
+      async function loadMotion() {
+        try { renderMotion(await api("/api/printer/motion")); }
+        catch (error) { if (error.message !== "Authentication required") showToast(error.message); }
+      }
+      function motionRows() {
+        const reported=(state.motion?.history || []);
+        const planned=(state.motion?.planned_history || []);
+        return [...reported,...planned].sort((a,b)=>new Date(a.poll_timestamp||a.observed_at)-new Date(b.poll_timestamp||b.observed_at));
+      }
+      function feedrateRows() {
+        const timeline=state.snapshot?.timeline||{};
+        const source=state.feedDemo?state.feedDemoData?.feedrate_history:state.feedSession?.feedrate_history||timeline.feedrate_history;
+        const historicalLast=state.feedDemo?state.feedDemoData?.ended_at:state.feedSession?.feedrate_history?.at(-1)?.observed_at||state.feedSession?.telemetry?.at(-1)?.observed_at;
+        const end=(historicalLast?Date.parse(historicalLast):Date.now())+state.feedPanMs,start=end-state.feedRange*60000;
+        const rows=(source||[]).filter((row)=>{const t=Date.parse(row.observed_at);return Number.isFinite(t)&&t>=start&&t<=end;});
+        if(!state.feedDemo&&!state.feedSession&&state.feedPanMs===0&&state.snapshot?.connection?.connected&&!state.snapshot?.stale&&state.snapshot?.telemetry?.printer_state?.value==="idle"&&state.snapshot?.telemetry?.print_active?.value===false){const points=state.snapshot?.timeline?.telemetry||[];for(const point of points){if(point.state!=="idle")continue;const time=Date.parse(point.observed_at);if(Number.isFinite(time)&&time>=start&&time<=end&&!rows.some((row)=>row.observed_at===point.observed_at))rows.push({observed_at:point.observed_at,axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}const now=Date.now();if(now>=start&&now<=end&&!rows.some((row)=>row.observed_at===state.snapshot?.observed_at))rows.push({observed_at:state.snapshot.observed_at||new Date(now).toISOString(),axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}
+        return rows.sort((a,b)=>Date.parse(a.observed_at)-Date.parse(b.observed_at));
+      }
+      function drawMotionFeedrate(canvasId="chart-motion-feedrate",emptyId="empty-motion-feedrate",compact=false) {
+        const canvas=$(canvasId); if(!canvas)return;
+        const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return;
+        const dpr=Math.max(1,window.devicePixelRatio||1);canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
+        const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w=rect.width,h=rect.height,left=compact?34:47,right=10,top=8,bottom=compact?20:31,plotW=w-left-right,plotH=h-top-bottom;
+        ctx.clearRect(0,0,w,h);
+        const historicalLast=state.feedDemo?state.feedDemoData?.ended_at:state.feedSession?.feedrate_history?.at(-1)?.observed_at||state.feedSession?.telemetry?.at(-1)?.observed_at;
+        const end=(historicalLast?Date.parse(historicalLast):Date.now())+state.feedPanMs,start=end-state.feedRange*60000,span=Math.max(1,end-start);
+        const rows=feedrateRows();
+        const active=state.snapshot?.telemetry?.printer_state?.value;
+        const allRows=[...rows];
+        const axisKeys=["x","y","z","e"],colors={x:"#43a9ff",y:"#46e58e",z:"#bb8aff",e:"#ffc56b"};
+        const valid=allRows.filter((row)=>axisKeys.some((axis)=>Number.isFinite(Number(row.axis_feedrates_mm_min?.[axis]))));
+        const liveIdle=!state.feedDemo&&!state.feedSession&&active==="idle"&&!state.snapshot?.stale&&state.snapshot?.connection?.connected&&state.snapshot?.telemetry?.print_active?.value===false;
+        const empty=$(emptyId);if(empty){empty.classList.toggle("visible",valid.length<2&&!liveIdle);empty.textContent=state.feedDemo?"Offline G-code demonstration · simulated only":liveIdle?"Idle · no movement reported; baseline is zero":"No axis motion trace in this range. Planned estimates appear with a matching G-code path.";}
+        const plotted=valid.length?valid:liveIdle?allRows.filter((row)=>Number.isFinite(Date.parse(row.observed_at))):[];
+        const maxValue=Math.max(600,...valid.flatMap((row)=>axisKeys.map((axis)=>Number(row.axis_feedrates_mm_min?.[axis])).filter(Number.isFinite)))*1.08;
+        const xAt=(time)=>left+(time-start)/span*plotW,yAt=(value)=>top+plotH-(Math.max(0,value)/maxValue)*plotH;
+        for(let i=0;i<=3;i++){
+          const value=maxValue*(1-i/3),y=yAt(value);ctx.strokeStyle="#263a50";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();
+          ctx.fillStyle="#98a9bc";ctx.font="10px system-ui";ctx.textAlign="right";ctx.fillText(`${Math.round(value)}`,left-7,y+3);
+          const x=left+i*plotW/3;ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();ctx.textAlign="center";ctx.fillText(new Date(start+i*span/3).toLocaleTimeString([],{hour:"numeric",minute:compact?undefined:"2-digit",second:compact?undefined:"2-digit"}),x,h-7);
+        }
+        ctx.save();ctx.fillStyle="#98a9bc";ctx.textAlign="center";ctx.translate(10,top+plotH/2);ctx.rotate(-Math.PI/2);ctx.fillText(compact?"mm/min":"mm/min",0,0);ctx.restore();
+        const drawAxis=(axis)=>{let previous=null,segments=0;ctx.beginPath();for(const row of plotted){const time=Date.parse(row.observed_at),value=Number(row.axis_feedrates_mm_min?.[axis]);if(!Number.isFinite(time)||time<start||time>end||!Number.isFinite(value)){previous=null;continue;}const point={x:xAt(time),y:yAt(value)};if(!previous)ctx.moveTo(point.x,point.y);else{ctx.lineTo(point.x,previous.y);ctx.lineTo(point.x,point.y);}previous=point;segments++;}if(segments){ctx.strokeStyle=colors[axis];ctx.lineWidth=compact?1.8:2;const simulated=plotted.some((row)=>row.data_class==="simulated"||row.data_class==="simulated_idle");ctx.setLineDash(simulated?[4,3]:[]);ctx.stroke();ctx.setLineDash([]);}return segments;};
+        const lineCounts=Object.fromEntries(axisKeys.map((axis)=>[axis,drawAxis(axis)]));
+        const eventRows=state.feedDemo?state.feedDemoData?.events||[]:state.feedSession?state.feedSession.events||[]:state.snapshot?.timeline?.timeline_events||[];
+        const sessionEvents=state.feedDemo?eventRows:state.feedSession?eventRows.map((event)=>({...event,observed_at:new Date(Date.parse(state.feedSession.started_at)+Number(event.time_seconds??event.start_seconds??0)*1000).toISOString()})):eventRows;
+        const events=sessionEvents.filter((event)=>{const t=Date.parse(event.observed_at);return Number.isFinite(t)&&t>=start&&t<=end;});
+        ctx.save();ctx.beginPath();ctx.rect(left,top,plotW,plotH);ctx.clip();
+        events.forEach((event,index)=>{const x=xAt(Date.parse(event.observed_at)),axis=String(event.kind||"").match(/(?:jog|home)_([xyze])/i)?.[1]?.toLowerCase(),y=h-bottom+3+(index%3)*3;ctx.fillStyle=colors[axis]||"#d4a85e";ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3,y+5);ctx.lineTo(x+3,y+5);ctx.closePath();ctx.fill();});ctx.restore();
+        if(Number.isFinite(state.feedScrubMs)&&state.feedScrubMs>=start&&state.feedScrubMs<=end){const x=xAt(state.feedScrubMs);ctx.save();ctx.strokeStyle="#f3f7ff";ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();ctx.restore();}
+        const latestEvents=events.slice(-5);$("feedrate-events").innerHTML=latestEvents.map((event)=>`<span class="feedrate-event-marker" title="${esc(event.data_class||"event")} · ${esc(timeText(event.observed_at))}">${esc((event.label||event.kind||"event").replaceAll("_"," "))} · ${esc(timeText(event.observed_at))}</span>`).join("");
+        if(!compact){$("feedrate-source").textContent=state.feedDemo?"Offline G-code estimate · simulated":state.feedSession?"Backend-recorded session · planned estimate":valid.some((p)=>p.data_class==="estimated_planned_feedrate")?"Planned estimate · MKS progress mapped":liveIdle?"Firmware idle state · not motor feedback":valid.length?"Commanded/planned · not measured":"No motion trace";}
+      }
+      function drawMotionPosition(canvasId="chart-motion-position", emptyId="empty-motion-position") {
+        const canvas=$(canvasId); if (!canvas) return;
+        const rect=canvas.getBoundingClientRect(); if (!rect.width || !rect.height) return;
+        const dpr=Math.max(1,window.devicePixelRatio||1); canvas.width=Math.round(rect.width*dpr); canvas.height=Math.round(rect.height*dpr);
+        const ctx=canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); const w=rect.width,h=rect.height,left=35,right=8,top=10,bottom=24;
+        ctx.clearRect(0,0,w,h); const all=motionRows(),cutoff=Date.now()-state.range*60000,rows=all.filter((sample)=>Date.parse(sample.poll_timestamp||sample.observed_at)>=cutoff&&(["available","planned"].includes(sample.axes?.x?.status)||["available","planned"].includes(sample.axes?.y?.status)||["available","planned"].includes(sample.axes?.z?.status)||["available","planned"].includes(sample.axes?.e?.status)));
+        const hasPoint=rows.some((sample)=>["x","y","z","e"].some((axis)=>["available","planned"].includes(sample.axes?.[axis]?.status)&&Number.isFinite(sample.axes[axis].value_mm)));
+        const empty=$(emptyId),old=all.some((sample)=>{const time=Date.parse(sample.poll_timestamp||sample.observed_at);return Number.isFinite(time)&&time<cutoff;});
+        if(empty){empty.classList.toggle("visible",!hasPoint);empty.textContent=hasPoint?"":old?`Motion history exists outside the last ${state.range} minutes; choose a wider range`:"Position telemetry unavailable: this printer response has no coordinates. Analyzed G-code and command targets appear separately when available.";}
+        if (!hasPoint) return;
+        const t=rows.map((row)=>new Date(row.poll_timestamp||row.observed_at).getTime()), t0=t[0],t1=Math.max(t[t.length-1],t0+1000),span=t1-t0,plotW=w-left-right,bandH=(h-top-bottom)/4;
+        const colors={x:"#43a9ff",y:"#46e58e",z:"#bb8aff",e:"#ffc56b"};
+        for (let index=0;index<4;index++) {
+          const axis=["x","y","z","e"][index], y0=top+index*bandH, y1=y0+bandH-5;
+          ctx.strokeStyle="#25384d";ctx.beginPath();ctx.moveTo(left,y1);ctx.lineTo(w-right,y1);ctx.stroke();
+          ctx.fillStyle=colors[axis];ctx.font="bold 10px system-ui";ctx.textAlign="left";ctx.fillText(axis.toUpperCase(),4,y0+12);
+          const vals=rows.map((row)=>["available","planned"].includes(row.axes?.[axis]?.status)?row.axes[axis].value_mm:null).filter(Number.isFinite);
+          if (!vals.length) continue; const min=Math.min(...vals),max=Math.max(...vals),pad=Math.max(.1,(max-min)*.1),lo=min-pad,hi=max+pad;
+          const xy=(row,i)=>{const v=["available","planned"].includes(row.axes?.[axis]?.status)?row.axes[axis].value_mm:null;return Number.isFinite(v)?{x:left+(t[i]-t0)/span*plotW,y:y1-(v-lo)/(hi-lo)*(bandH-17)}:null;};
+          const groups=[[rows.filter((row)=>row.axes?.[axis]?.status==="available"),"reported"],[rows.filter((row)=>row.source==="uploaded_gcode_plan"&&row.axes?.[axis]?.status==="planned"),"planned"],[rows.filter((row)=>row.source==="commanded_operation"&&row.axes?.[axis]?.status==="planned"),"commanded"]];for(const [group,kind] of groups){if(!group.length)continue;ctx.beginPath();let prev=null;group.forEach((row)=>{const i=rows.indexOf(row),point=xy(row,i);if(!point){prev=null;return;}if(!prev)ctx.moveTo(point.x,point.y);else{ctx.lineTo(point.x,prev.y);ctx.lineTo(point.x,point.y);}prev=point;});ctx.strokeStyle=colors[axis];ctx.globalAlpha=kind==="reported" ? .95 : .62;ctx.lineWidth=kind==="reported"?2:1.5;ctx.setLineDash(kind==="reported"?[]:[4,3]);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;}
+        }
+        ctx.fillStyle="#98a9bc";ctx.font="10px system-ui";ctx.textAlign="left";ctx.fillText(new Date(t0).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}),left,h-5);ctx.textAlign="right";ctx.fillText(new Date(t1).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}),w-right,h-5);
+        if(Number.isFinite(state.selectedTime)&&state.selectedTime>=t0&&state.selectedTime<=t1){const x=left+(state.selectedTime-t0)/span*plotW;ctx.setLineDash([3,4]);ctx.strokeStyle="#ffffffb0";ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,h-bottom);ctx.stroke();ctx.setLineDash([]);}
+      }
+      function renderMotionActivity() {
+        const target=$("motion-activity"),operationEvents=state.motion?.operation_events||[],stateEvents=state.snapshot?.timeline?.machine_state_events||[];
+        const refs=Object.entries(state.motion?.operator_reference?.axes||{}).filter(([,reference])=>reference?.homed&&reference.reference_observation).map(([axis,reference])=>({observed_at:reference.reference_observation.observed_at,axis:axis.toUpperCase(),label:"Home reference recorded",distance:"—",feed:"—",source:"Operator-reported reference",evidence:"reference only · no path",commands:[]}));
+        const events=[...operationEvents.map((event)=>({observed_at:event.updated_at||event.created_at,axis:(event.planned_axis||event.macro_id?.match(/(?:jog|home)_([xyz])/i)?.[1]||"—").toUpperCase(),label:(event.macro_id||"Machine action").replaceAll("_"," "),distance:Number.isFinite(event.distance_mm)?`${Number(event.distance_mm).toFixed(2)} mm`:"distance unavailable",feed:Number.isFinite(event.feed_mm_min)?`${Number(event.feed_mm_min)} mm/min`:"feedrate unavailable",source:"Dashboard",evidence:event.physical_completion_confirmed?"operator observed":event.transport_acknowledged?"transport acknowledged":"requested",commands:event.commands||[]})),...stateEvents.map((event)=>({observed_at:event.observed_at,axis:event.kind.includes("nozzle")?"T":event.kind.includes("bed")?"B":"—",label:event.kind.replaceAll("_"," "),distance:event.details?.previous!==undefined?`${event.details.previous} → ${event.details.value}`:"—",feed:event.details?.field||"—",source:event.source==="unmatched_telemetry_change"?"Unmatched telemetry":"MKS telemetry",evidence:event.data_class==="external_state_change_inferred"?"external change inferred":"firmware state observed",commands:[]})),...refs];
+        events.sort((a,b)=>Date.parse(b.observed_at||0)-Date.parse(a.observed_at||0));
+        if(!events.length){target.innerHTML='<div class="disabled-note">No motion or observed state changes in the retained timeline. This firmware does not report TFT-originated axis moves or extrusion commands.</div>';return;}
+        target.innerHTML=events.slice(0,30).map((event)=>{const commands=event.commands?.length?` · ${event.commands.map((command)=>String(command).slice(0,48)).join(" → ")}`:"";return `<div class="activity-row"><span class="activity-axis">${esc(event.axis)}</span><div class="activity-detail">${esc(event.label)}${esc(commands)}<small>${esc(event.distance)} · ${esc(event.feed)} · ${esc(event.source)} · ${esc(timeText(event.observed_at))}</small></div><span class="activity-evidence">${esc(event.evidence)}</span></div>`;}).join("");
+      }
+      function drawMotionCharts() { drawMotionPosition();drawMotionPosition("chart-home-motion","empty-home-motion");drawMotionFeedrate("chart-motion-feedrate","empty-motion-feedrate");drawMotionFeedrate("chart-home-feedrate","empty-home-feedrate",true);renderMotionActivity(); }
+      function drawCharts() { drawChart($("chart-overview"),"empty-overview"); drawChart($("chart-temperature"),"empty-temperature"); drawMotionCharts(); }
+      function renderOperationCard(macro, target) {
+        const buttonLabel = macro.execution_block_reason
+          ? "Preview sequence"
+          : macro.parameters.length ? "Choose settings · run" : "Run action";
+        const unavailable = macro.compatibility === "unknown";
+        const commissioningLabel = ({
+          ready_to_confirm: "READY TO RUN",
+          verified: "READY TO RUN",
+          disarmed: "ARM OPERATOR MODE",
+          awaiting_homing: "HOME AXIS FIRST",
+          temperature_gate_unconfigured: "EXTRUSION LIMIT NEEDED",
+          temporarily_unavailable: macro.execution_block_reason ? "PREVIEW ONLY" : "PRINTER STATE NOT READY",
+          unsupported: "UNSUPPORTED",
+          not_enabled: "CONTROL NOT ENABLED",
+          not_implemented: "NOT IMPLEMENTED",
+        }[macro.readiness?.status] || (unavailable ? "UNSUPPORTED" : "AVAILABLE IN OPERATOR MODE"));
+        const card = document.createElement("article"); card.className = "card operation-card";
+        card.dataset.macroId = macro.id;
+        card.innerHTML = `<div class="operation-head"><div class="operation-icon" aria-hidden="true">${esc(macro.icon)}</div><span class="tag preview">${esc(commissioningLabel)}</span></div><h3>${esc(macro.name)}</h3><p>${esc(macro.description)}</p><div class="operation-meta"><span class="tag">${esc(macro.risk)} risk</span></div><p class="disabled-note">${esc(macro.readiness?.reason || "Select to review the exact operation and run it when safety checks pass.")}</p><button class="btn primary preview-btn" type="button" ${unavailable ? "disabled title=\"Safe sequence unavailable\"" : ""}>${unavailable ? "Unavailable" : buttonLabel}</button><div class="operation-inline-status" data-operation-status hidden></div>`;
+        const action = card.querySelector("button");
+        if (!unavailable) action.addEventListener("click", () => openMacroDialog(macro, false, card));
+        target.append(card);
+        if (state.operationResults[macro.id]) renderOperationInline(state.operationResults[macro.id]);
+      }
+      function showMachinePanel(name) {
+        document.querySelectorAll("[data-machine-panel]").forEach((button) => {
+          const active = button.dataset.machinePanel === name;
+          button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active));
+        });
+        document.querySelectorAll(".machine-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `machine-panel-${name}`));
+      }
+      async function loadCatalog() {
+        if (state.catalog) return;
+        try {
+          state.catalog = await api("/api/control/catalog");
+          renderControlAuthorization(state.catalog.control);
+          const controls = state.catalog.macros.filter((item) => item.category === "control");
+          const macros = state.catalog.macros.filter((item) => item.category === "macro");
+          controls.forEach((item) => renderOperationCard(item, $("control-cards")));
+          macros.forEach((item) => renderOperationCard(item, $("macro-cards")));
+          for (const item of state.catalog.calibrations) {
+            const card = document.createElement("article"); card.className = "card operation-card";
+            const steps = item.steps.map((step) => `<li>${esc(step)}</li>`).join("");
+            const prerequisites = item.prerequisites.map((step) => `<li>${esc(step)}</li>`).join("");
+            const states = (item.state_machine || []).map((step) => `<li>${esc(step)}</li>`).join("");
+            card.innerHTML = `<div class="operation-head"><div class="operation-icon" aria-hidden="true">▧</div><span class="tag">OrcaSlicer workflow</span></div><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><div class="operation-meta"><span class="tag">Manual review</span><span class="tag">No file generated</span></div><details class="operation-steps"><summary>Preparation steps</summary><ol class="workflow-list">${steps}</ol><h4>Prerequisites</h4><ul class="workflow-list">${prerequisites}</ul><h4>Workflow states</h4><ol class="workflow-list">${states}</ol></details><div class="disabled-note">${esc(item.cancellation)} This dashboard does not export G-code or start a print.</div>`;
+            $("calibration-cards").append(card);
+            card.querySelectorAll(".operation-steps ol li").forEach((step) => {
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.setAttribute("aria-label", "Mark preparation step complete");
+              step.prepend(checkbox, document.createTextNode(" "));
+            });
+          }
+          renderCapabilityList(state.catalog.capabilities);
+          const controlState = await api("/api/control/state");
+          const latestOperation = controlState.operations?.at(-1);
+          if (latestOperation) renderOperation(latestOperation);
+          await loadCommandAudit();
+        } catch (error) { if (error.message !== "Authentication required") showToast(error.message); }
+      }
+      function renderCapabilityList(capabilities) {
+        const target = $("capability-list");
+        target.replaceChildren();
+        for (const item of capabilities || []) {
+          const row = document.createElement("div"); row.className = "capability-row";
+          row.innerHTML = `<strong>${esc(item.command)}</strong><span>${esc(item.purpose)} · ${esc(item.status.replaceAll("_", " "))}</span><span>${esc(item.basis)}</span>`;
+          target.append(row);
+        }
+      }
+      function renderControlAuthorization(control) {
+        const armed = Boolean(control?.session_armed);
+        state.operatorModeArmed = armed;
+        const configured = Boolean(control?.configured);
+        $("control-mode").textContent = armed ? "OPERATOR MODE · ARMED" : "OPERATOR MODE · DISARMED";
+        $("control-notice-title").textContent = armed
+          ? "Operator Mode armed · fixed validated operations"
+          : "Controls locked · no command sent";
+        $("control-notice-text").textContent = armed
+          ? "Operator Mode remains armed until you disarm it or the service restarts. Commands require fresh state and explicit per-action confirmation; acknowledgment does not prove physical completion."
+          : control?.blocked_reason || "Machine control is disarmed.";
+        $("control-arm").disabled = !configured || armed;
+        $("control-disarm").hidden = !armed;
+        $("control-session-status").textContent = armed
+          ? "Operator Mode is armed until you disarm it or the service restarts. Each operation still requires its own confirmation and fresh safety checks."
+          : configured
+            ? "Controls are disarmed. Arm with your dashboard sign-in; operation-specific state requirements still apply."
+            : "Machine control is disabled in server settings. No separate control credential is required.";
+      }
+      async function refreshControlAuthorization() {
+        const latest = await api("/api/control/catalog");
+        state.catalog = latest;
+        renderControlAuthorization(latest.control);
+        $("control-cards").replaceChildren();
+        $("macro-cards").replaceChildren();
+        latest.macros.filter((item) => item.category === "control").forEach((item) => renderOperationCard(item, $("control-cards")));
+        latest.macros.filter((item) => item.category === "macro").forEach((item) => renderOperationCard(item, $("macro-cards")));
+        renderCapabilityList(latest.capabilities);
+        await refreshSdUploadStatus();
+      }
+      function openMacroDialog(macro, commissioning = false, originCard = null) {
+        state.pendingMacro = macro;
+        state.pendingCommissioning = commissioning;
+        state.pendingOriginCard = originCard || null;
+        $("macro-dialog-title").textContent = macro.name;
+        $("macro-dialog-description").textContent = `${macro.description} Review the exact command preview. Execution requires armed Operator Mode, fresh safety checks, and your confirmation.`;
+        const fields = $("macro-parameters"); fields.replaceChildren();
+        if (macro.id === "filament_change_guided") {
+          const label = document.createElement("label"); label.textContent = "Minimum nozzle temperature (°C; live telemetry is checked before advancing)";
+          const input = document.createElement("input"); input.type = "number"; input.id = "parameter-minimum_nozzle_temperature_c"; input.min = "150"; input.max = "260"; input.step = "1"; input.value = "190"; label.append(input); fields.append(label);
+          $("macro-dialog").showModal(); return;
+        }
+        for (const parameter of macro.parameters) {
+          const label = document.createElement("label"); label.textContent = parameter.label;
+          const input = document.createElement(parameter.kind === "select" || parameter.kind === "file" ? "select" : "input");
+          input.id = `parameter-${parameter.name}`;
+          if (parameter.kind === "select" || parameter.kind === "file") {
+            const options = parameter.kind === "file"
+              ? (state.sd?.entries || []).filter((entry) => entry.kind === "file").map((entry) => entry.name)
+              : parameter.options;
+            if (!options.length) {
+              const node = document.createElement("option"); node.value = ""; node.textContent = "Refresh SD listing first"; input.append(node); input.disabled = true;
+            }
+            for (const option of options) { const node = document.createElement("option"); node.value = option; node.textContent = option; input.append(node); }
+          } else {
+            input.type = "number"; input.min = parameter.minimum; input.max = parameter.maximum; input.step = "1";
+            input.value = parameter.default;
+          }
+          label.append(input); fields.append(label);
+        }
+        if (!macro.parameters.length) { $("macro-dialog").close(); createPreview(macro, {}, commissioning); return; }
+        $("macro-dialog").showModal();
+      }
+      async function createPreview(macro, parameters, commissioning = state.pendingCommissioning, retreatFromHome = false) {
+        try {
+          const preview = await api("/api/control/preview", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({macro_id:macro.id, parameters, mode:commissioning ? "commissioning" : "operator", commissioning, retreat_from_home:retreatFromHome})});
+          state.lastPreview = {macro, parameters, preview, commissioning, originCard:state.pendingOriginCard, retreat_from_home:retreatFromHome};
+          if (macro.id === "filament_change_guided") {
+            $("execute-description").textContent = `${macro.description} This is a manual checklist; no G-code is sent.`;
+            $("execute-commands").textContent = "No printer commands";
+          }
+          openExecuteDialog(macro, preview, commissioning);
+        } catch (error) { if (error.message !== "Authentication required") { showToast(error.message); await loadCommandAudit(); } }
+      }
+      async function startGuidedWorkflow(macro, parameters) {
+        try {
+          const result = await api("/api/control/workflows", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({macro_id:macro.id, parameters})});
+          renderGuidedWorkflow(result);
+        } catch (error) { showToast(error.message); }
+      }
+      function renderGuidedWorkflow(workflow) {
+        const panel = $("execute-dialog").open ? $("execute-guided-workflow") : $("guided-workflow"); if (!panel) return;
+        if (!workflow) { panel.hidden = true; panel.replaceChildren(); return; }
+        panel.hidden = false;
+        const current = workflow.current_step || (workflow.state === "completed" ? "Checklist completed." : "Checklist cancelled.");
+        panel.innerHTML = `<h3>Guided operator checklist · ${esc(workflow.state.replaceAll("_", " "))}</h3><p class="disabled-note">${esc(workflow.notice || "Manual steps only; no printer commands are sent.")}</p><div class="current-step">${esc(current)}</div>${workflow.last_error ? `<p class="error">${esc(workflow.last_error)}</p>` : ""}<div class="workflow-actions"></div>`;
+        const actions = panel.querySelector(".workflow-actions");
+        if (workflow.state === "awaiting_operator_confirmation") {
+          for (const macroId of workflow.available_operations || []) {
+            const macro = state.catalog?.macros.find((item) => item.id === macroId);
+            if (!macro) continue;
+            const launch = document.createElement("button");
+            launch.className = "btn";
+            launch.type = "button";
+            launch.textContent = `Open ${macro.name} controls`;
+            launch.addEventListener("click", () => openMacroDialog(macro));
+            actions.append(launch);
+          }
+          const confirm = document.createElement("button"); confirm.className = "btn primary"; confirm.textContent = "I completed this step";
+          confirm.addEventListener("click", async () => {
+            confirm.disabled = true;
+            try { const next = await api(`/api/control/workflows/${encodeURIComponent(workflow.id)}/confirm`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({step_token:workflow.step_token, confirmed:true})}); renderGuidedWorkflow(next); }
+            catch (error) { showToast(error.message); await refreshGuidedWorkflow(); }
+            finally { confirm.disabled = false; }
+          }); actions.append(confirm);
+          const cancel = document.createElement("button"); cancel.className = "btn"; cancel.textContent = "Cancel checklist";
+          cancel.addEventListener("click", async () => { try { const done = await api(`/api/control/workflows/${encodeURIComponent(workflow.id)}/cancel`, {method:"POST"}); renderGuidedWorkflow(done); } catch (error) { showToast(error.message); } }); actions.append(cancel);
+        }
+      }
+      async function refreshGuidedWorkflow() { try { const data=await api("/api/control/workflows"); renderGuidedWorkflow(data.active_workflow); } catch (error) { if (error.message !== "Authentication required") showToast(error.message); } }
+      async function loadCommandAudit() {
+        try {
+          const data = await api("/api/control/audit"); const target = $("command-audit");
+          if (!target) return;
+          const operationRows = (data.operations || []).slice().reverse().slice(0, 12).map((item) =>
+            `<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc((item.commands||[]).join(" → "))}</span><strong>${esc(item.state.replaceAll("_", " "))}${item.transport_acknowledged?" · transport acknowledged":""}${item.physical_completion_confirmed?" · operator observed":""}${item.operator_observation==="operator_reported_external_tft_homing"?" · separate TFT homing reported":""}${item.error ? ` · ${esc(item.error)}` : ""}</strong></div>`
+          );
+          const eventRows = (data.entries || []).slice().reverse().slice(0, 12).map((item) =>
+            `<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)}</span><strong>${esc(item.result.replaceAll("_", " "))}${item.error ? ` · ${esc(item.error)}` : ""}</strong></div>`
+          );
+          const rows = [...operationRows, ...eventRows];
+          target.innerHTML = rows.length ? rows.join("") : '<div class="disabled-note">No preview or operation activity yet.</div>';
+        } catch (error) { if (error.message !== "Authentication required") showToast(error.message); }
+      }
+      function renderCommandActivity(activity) {
+        const target=$("command-audit"); if(!target||!activity)return;
+        const operations=(activity.operations||[]).slice().reverse().slice(0,8).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc((item.commands||[]).join(" → "))}</span><strong>${esc((item.state||"unknown").replaceAll("_"," "))}${item.transport_acknowledged?" · ack":""}${item.physical_completion_confirmed?" · observed":""}${item.error?` · ${esc(item.error)}`:""}</strong></div>`);
+        const events=(activity.events||[]).slice().reverse().slice(0,5).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)}</span><strong>${esc(item.result.replaceAll("_"," "))}${item.error?` · ${esc(item.error)}`:""}</strong></div>`);
+        const observed=(state.snapshot?.timeline?.machine_state_events||[]).slice(0,6).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.observed_at))} · ${esc(item.kind.replaceAll("_"," "))}</span><strong>${esc(item.data_class.replaceAll("_"," "))}${item.data_class==="external_state_change_inferred"?" · source unknown":" · MKS telemetry"}</strong></div>`);
+        target.innerHTML=[...operations,...observed,...events].join("")||'<div class="disabled-note">No machine actions or observed state changes recorded.</div>';
+      }
+      async function loadDiagnostics() { try { state.diagnostics=await api("/api/diagnostics"); const d=state.diagnostics; $("metric-latency").textContent=d.latency_last_ms==null?"—":`${Math.round(d.latency_last_ms)} ms`; $("diag-worker").textContent=d.worker_running?"Running":"Stopped"; $("diag-interval").textContent=`${Number(d.poll_interval_seconds).toFixed(1)} s`; $("diag-latency").textContent=d.latency_last_ms==null?"—":`${Math.round(d.latency_last_ms)} ms`; $("diag-success-count").textContent=d.successful_polls; $("diag-failed-count").textContent=d.failed_polls; $("diag-uptime").textContent=duration(d.uptime_seconds); } catch (e) { if (e.message !== "Authentication required") showToast(e.message); } }
+      function renderSd(data) {
+        state.sd=data; const rows=$("sd-rows");
+        if (!data.entries?.length) rows.innerHTML=`<tr><td colspan="3" class="empty-row">${esc(data.status === "not_requested" ? "Select refresh to request a read-only M20 listing." : data.error || (data.status === "available" ? "The root listing is empty." : "No complete listing received."))}</td></tr>`;
+        else rows.innerHTML=data.entries.map((entry)=>`<tr data-sd-entry="${esc(entry.name)}" data-sd-kind="${esc(entry.kind)}"><td><div class="file-name"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/><path d="M3 8h18"/></svg><span>${esc(entry.name)}</span></div></td><td>${entry.kind === "directory" ? "Directory" : "File"}</td><td class="muted">${entry.size_bytes == null ? "—" : `${Number(entry.size_bytes).toLocaleString()} B`}</td></tr>`).join("");
+        rows.querySelectorAll("[data-sd-entry]").forEach((row)=>row.addEventListener("click",()=>{if(row.dataset.sdKind!=="file")return;state.selectedSdFile=row.dataset.sdEntry;$("sd-selected-file").textContent=state.selectedSdFile;$("sd-rows").querySelectorAll("tr").forEach((item)=>item.classList.toggle("selected",item===row));document.querySelector('[data-sd-macro="start_sd_print"]').disabled=false;}));
+        $("sd-count").textContent=data.status === "available"?`${data.entries.length} entries${data.refreshed_at?` · ${timeText(data.refreshed_at)}`:""}`:data.status.replaceAll("_"," ");
+        $("sd-note").textContent=data.error?`${data.error} · The display may retain only a complete listing.`:"Read-only root listing. File contents cannot be downloaded through this dashboard.";
+      }
+      $("refresh-sd").addEventListener("click", async (event) => { const button=event.currentTarget; button.disabled=true; button.innerHTML="<span>Requesting M20…</span>"; try { renderSd(await api("/api/printer/sdcard?refresh=true")); } catch(e) { if(e.message!=="Authentication required") showToast(e.message); } finally { button.disabled=false; button.innerHTML='<svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3"/></svg>Refresh listing'; } });
+      async function refreshSdUploadStatus(){try{state.sdUpload=await api("/api/printer/sdcard/upload");const available=Boolean(state.sdUpload.available&&state.selectedUploadFile);$("sd-upload-start").disabled=!available;$("sd-upload-start").textContent=available?"Review and upload selected file":state.sdUpload.configured?"Upload · arm machine controls first":"Upload unavailable · server gate off";$("sd-upload-status").textContent=state.sdUpload.note||state.sdUpload.status;}catch(error){$("sd-upload-status").textContent=error.message;}}
+      $("sd-upload-file").addEventListener("change",async(event)=>{state.selectedUploadFile=event.currentTarget.files?.[0]||null;await refreshSdUploadStatus();});
+      $("sd-upload-start").addEventListener("click",()=>{if(!state.selectedUploadFile)return;$("sd-upload-confirmation").placeholder=`UPLOAD ${state.selectedUploadFile.name}`;$("sd-upload-dialog").showModal();});
+      $("sd-upload-cancel").addEventListener("click",()=>$("sd-upload-dialog").close());
+      $("sd-upload-form").addEventListener("submit",async(event)=>{event.preventDefault();const file=state.selectedUploadFile;if(!file)return;const button=$("sd-upload-submit"),progress=$("sd-upload-progress");button.disabled=true;progress.hidden=false;progress.value=0;$("sd-upload-status").textContent=`Transferring ${file.name} to the printer. Do not repeat if the response is ambiguous.`;try{const response=await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open("POST",`/api/printer/sdcard/upload?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader("Content-Type","application/octet-stream");xhr.setRequestHeader("X-Upload-Confirmation",$("sd-upload-confirmation").value);xhr.setRequestHeader("X-Operator-Attended",String($("sd-upload-attended").checked));xhr.setRequestHeader("X-Power-Switch-Reachable",String($("sd-upload-switch").checked));xhr.setRequestHeader("X-No-Competing-Clients",String($("sd-upload-clients").checked));xhr.upload.onprogress=(item)=>{if(item.lengthComputable)progress.value=item.loaded/item.total*100;};xhr.onload=()=>{let body;try{body=JSON.parse(xhr.responseText);}catch{body={detail:xhr.responseText};}if(xhr.status>=200&&xhr.status<300)resolve(body);else reject(new Error(body.detail||`Upload rejected (${xhr.status})`));};xhr.onerror=()=>reject(new Error("Upload connection failed; do not retry until the SD listing has been refreshed."));xhr.ontimeout=()=>reject(new Error("Upload response timed out; outcome may be unknown. Do not retry until you refresh M20."));xhr.timeout=35000;xhr.send(file);});$("sd-upload-dialog").close();$("sd-upload-status").textContent=`${response.filename}: HTTP response ${response.http_status}; transfer completion is unconfirmed. Refresh M20 to verify the file.`;await loadCommandAudit();}catch(error){$("sd-upload-status").textContent=error.message;showToast(error.message);}finally{button.disabled=false;await refreshSdUploadStatus();}});
+      document.querySelectorAll("[data-sd-macro]").forEach((button)=>button.addEventListener("click",async()=>{document.querySelector('.nav button[data-view="machine"]')?.click();await loadCatalog();const macro=state.catalog?.macros.find((item)=>item.id===button.dataset.sdMacro);if(!macro){showToast("Machine control catalog is unavailable.");return;}if(macro.id==="start_sd_print"&&!state.selectedSdFile){showToast("Select a listed G-code file first.");return;}showMachinePanel("control");openMacroDialog(macro);if(macro.id==="start_sd_print")setTimeout(()=>{const select=$("parameter-filename");if(select)select.value=state.selectedSdFile;},0);}));
+      async function bootstrap() {
+        try {
+          const [snapshot, temps, sd] = await Promise.all([api("/api/printer/status"),api("/api/printer/temperatures"),api("/api/printer/sdcard")]);
+          state.history=temps.history||[]; connectionView(snapshot); renderSd(sd); await refreshSdUploadStatus(); await loadDiagnostics(); await refreshGuidedWorkflow();
+        } catch(e) { if(e.message!=="Authentication required") showToast(e.message); }
+      }
+      function connectSocket() {
+        if (state.socket && (state.socket.readyState===WebSocket.OPEN || state.socket.readyState===WebSocket.CONNECTING)) return;
+        const scheme=location.protocol==="https:"?"wss":"ws"; const ws=new WebSocket(`${scheme}://${location.host}/ws/printer`); state.socket=ws;
+        ws.onopen=()=>{ state.retry=1000; clearInterval(state.fallback); state.fallback=null; };
+        ws.onmessage=(event)=>{ try { connectionView(JSON.parse(event.data)); loadDiagnostics(); } catch(e) { console.error("Invalid telemetry snapshot",e); } };
+        ws.onclose=(event)=>{ if(event.code===4401){requireLogin();} else if(event.code===4403){showToast("WebSocket origin rejected by server.");} if(!document.hidden) setTimeout(connectSocket,state.retry); state.retry=Math.min(state.retry*2,15000); if(!state.fallback) state.fallback=setInterval(bootstrap,10000); };
+        ws.onerror=()=>ws.close();
+      }
+      document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ bootstrap(); if(!state.socket || state.socket.readyState>=WebSocket.CLOSING) connectSocket(); } });
+      function selectChartTime(event, motionChart=false) {
+        const rect=event.currentTarget.getBoundingClientRect();
+        const rows=motionChart ? motionRows().filter((row)=>row.status==="available") : state.history.filter((row)=>new Date(row.observed_at).getTime()>=Date.now()-state.range*60000);
+        if(rows.length<2)return;
+        const left=motionChart?35:39,right=8,x=event.clientX-rect.left;
+        if(x<left||x>rect.width-right)return;
+        const times=rows.map((row)=>new Date(row.poll_timestamp||row.observed_at).getTime());
+        const first=times[0],last=Math.max(times[times.length-1],first+1000);
+        state.selectedTime=first+(x-left)/(rect.width-left-right)*(last-first);drawCharts();
+      }
+      $("chart-temperature").addEventListener("click",(event)=>selectChartTime(event,false));
+      $("chart-overview").addEventListener("click",(event)=>selectChartTime(event,false));
+      $("chart-motion-position").addEventListener("click",(event)=>selectChartTime(event,true));
+      window.addEventListener("resize",drawCharts,{passive:true});
+      bootstrap().then(connectSocket);
+    })();
+  </script>
+</body>
+</html>
