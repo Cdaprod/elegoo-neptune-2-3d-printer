@@ -51,6 +51,14 @@ These images are captured from the running application, not mockups.
 
 The app's read-only telemetry and root SD listing have been exercised against the target printer. Dashboard `G28 X` has been physically observed to home the X carriage. Other control families are implemented behind runtime checks, but this does not mean every command has been independently verified on every firmware revision. See [feature status](docs/feature-status.md) before enabling controls.
 
+## Root Compose deployment (Raspberry Pi)
+
+The repository root `compose.yaml` includes both the existing Observatory stack and the optional OctoPrint integration, so **`docker compose up -d --build` from the repository root starts both services**. This requires Docker Compose v2.20+ with `include` support, a Linux Raspberry Pi host with the printer connected over USB, and correctly configured `integrations/mks-wifi/.env` and `integrations/octoprint/.env`. Follow [OctoPrint setup](integrations/octoprint/README.md) to identify the serial device before starting. The root deployment will fail if the required device is missing; this is intentional rather than silently starting an unusable printer controller.
+
+**MacBook warning:** do not run the combined root stack on Docker Desktop without a Linux USB-device passthrough solution. Continue using `docker compose -f integrations/mks-wifi/compose.yaml --env-file integrations/mks-wifi/.env up -d --build` for Observatory-only deployment, or run Compose from its integration directory as before.
+
+OctoPrint uses USB and Observatory uses MKS WiFi. Keep only one active G-code controller; disable Observatory command execution during OctoPrint commissioning. The root stack does not flash firmware.
+
 ## Quick start with Docker Compose
 
 Requirements: Docker Desktop (or Docker Engine) with Compose v2, a computer on the same network as the printer, and the printer's MKS WiFi module reachable at TCP port 8080.
