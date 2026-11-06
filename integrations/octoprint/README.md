@@ -14,13 +14,13 @@ OctoPrint is available at `http://localhost:5001` (override `OCTOPRINT_HOST_PORT
 
 ### Remote Connection plugin
 
-The custom [Dockerfile](Dockerfile) installs **OctoPrint-Remote_connection** during image build from the URL tracked in [plugins.txt](plugins.txt):
+The custom [Dockerfile](Dockerfile) builds offline wheels for **OctoPrint-Remote_connection** during image build and the startup initializer installs them into the active Python environment from the URL tracked in [plugins.txt](plugins.txt):
 
 ```text
 https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
 ```
 
-After the image builds and OctoPrint starts, in the plugin's remote-connection settings, add the MKS WiFi hostname/IP and TCP port **8080**, selecting **raw TCP** (not RFC2217). Choose the new remote port in OctoPrint's Connection panel. The module accepts line-delimited G-code over a raw socket; its compatibility with OctoPrint's streaming/acknowledgment expectations remains **unverified**. Do not start a print until read-only M115/M105 tests and connection stability pass. The plugin is installed into the image's OctoPrint Python environment at build time. Its configuration is saved in the persistent `/octoprint` data volume, so configure the network endpoint only once. If the plugin is not shown after deployment, inspect the Docker build logs and OctoPrint's Plugin Manager; a successful image build alone does not prove runtime compatibility.
+After the image builds and OctoPrint starts, in the plugin's remote-connection settings, add the MKS WiFi hostname/IP and TCP port **8080**, selecting **raw TCP** (not RFC2217). Choose the new remote port in OctoPrint's Connection panel. The module accepts line-delimited G-code over a raw socket; its compatibility with OctoPrint's streaming/acknowledgment expectations remains **unverified**. Do not start a print until read-only M115/M105 tests and connection stability pass. The plugin is installed from the image's offline wheelhouse by `90-install-octoprint-plugins` at each container startup, and its entry point is checked before OctoPrint starts. Its configuration is saved in the persistent `/octoprint` data volume, so configure the network endpoint only once. If the plugin is not shown after deployment, inspect the Docker build logs and OctoPrint's Plugin Manager; a successful image build alone does not prove runtime compatibility.
 
 **Single-client constraint:** MKS WiFi accepts only one active TCP client. Stop Observatory completely before testing OctoPrint:
 
@@ -70,4 +70,8 @@ The current image inherits the upstream Python version; a Python end-of-life war
 
 ## Dark mode (Themeify)
 
-The custom image installs [Themeify](https://github.com/birkbjo/OctoPrint-Themeify) alongside Remote Connection during `docker compose --profile octoprint up -d --build`. Once rebuilt, open **Settings → Plugins → Themeify** and select its **Dark** theme. Themeify's theme selection is stored in OctoPrint's persistent `octoprint-data` volume and should survive future rebuilds; the image install alone does not guarantee Dark is selected automatically. For a correctly styled header, Themeify's documentation recommends **Settings → Appearance → Color: default** and disabling **Transparent Color**.
+The custom image bundles and installs [Themeify](https://github.com/birkbjo/OctoPrint-Themeify) alongside Remote Connection during `docker compose --profile octoprint up -d --build`. Once rebuilt, open **Settings → Plugins → Themeify** and select its **Dark** theme. Themeify's theme selection is stored in OctoPrint's persistent `octoprint-data` volume and should survive future rebuilds; the image install alone does not guarantee Dark is selected automatically. For a correctly styled header, Themeify's documentation recommends **Settings → Appearance → Color: default** and disabling **Transparent Color**.
+
+### Startup plugin recovery
+
+The image builds a local wheelhouse under `/opt/octoprint-plugin-wheels`. The s6 initialization script `/etc/cont-init.d/90-install-octoprint-plugins` installs Remote Connection 0.1.1 and Themeify 1.2.2 using `--no-index`, then verifies both `octoprint.plugin` entry points. This addresses the observed case where packages existed in the built image but were absent in the running container. No plugin download is needed at container startup; installation is idempotent and preserves the `/octoprint` configuration volume. If the startup check fails, inspect `docker compose logs octoprint` for `[neptune-plugins]` lines. Verify with `docker exec neptune-octoprint python3 -m pip list | grep -Ei 'themeify|remote'`. The initialization fix still requires validation on the MacBook.
