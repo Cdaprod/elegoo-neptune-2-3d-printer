@@ -1,5 +1,6 @@
 services:
   octoprint:
+    profiles: ["octoprint"]
     image: octoprint/octoprint:latest
     container_name: neptune-octoprint
     restart: unless-stopped
@@ -8,7 +9,7 @@ services:
     volumes:
       - octoprint-data:/octoprint
     devices:
-      - "${OCTOPRINT_SERIAL_DEVICE:?Set OCTOPRINT_SERIAL_DEVICE to the Raspberry Pi USB serial device}:/dev/ttyUSB-printer"
+      - "${OCTOPRINT_SERIAL_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB-printer"
     environment:
       ENABLE_MJPG_STREAMER: "false"
     logging:
