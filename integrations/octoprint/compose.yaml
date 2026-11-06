@@ -1,7 +1,10 @@
 services:
   octoprint:
     profiles: ["octoprint"]
-    image: octoprint/octoprint:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cdaprod/neptune-octoprint:local
     container_name: neptune-octoprint
     restart: unless-stopped
     ports:
