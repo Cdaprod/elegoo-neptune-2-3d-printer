@@ -1,12 +1,19 @@
 #!/bin/sh
 set -eu
 
+# s6 cont-init runs with a restricted PATH; use the interpreter from the image.
+PYTHON=/usr/local/bin/python3
+if [ ! -x "$PYTHON" ]; then
+  echo '[neptune-plugins] ERROR: expected OctoPrint Python executable missing' >&2
+  exit 1
+fi
+
 echo "[neptune-plugins] Installing bundled plugins into active OctoPrint Python..."
-python3 -m pip install --no-index --find-links=/opt/octoprint-plugin-wheels \
+"$PYTHON" -m pip install --no-index --find-links=/opt/octoprint-plugin-wheels \
   'OctoPrint-Remote_connection==0.1.1' 'Themeify==1.2.2'
 
 echo "[neptune-plugins] Checking OctoPrint plugin entry points..."
-python3 - <<'PY'
+"$PYTHON" - <<'PY'
 from importlib.metadata import entry_points
 found = {ep.name for ep in entry_points(group="octoprint.plugin")}
 required = {"remote_connection", "themeify"}
