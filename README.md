@@ -51,13 +51,17 @@ These images are captured from the running application, not mockups.
 
 The app's read-only telemetry and root SD listing have been exercised against the target printer. Dashboard `G28 X` has been physically observed to home the X carriage. Other control families are implemented behind runtime checks, but this does not mean every command has been independently verified on every firmware revision. See [feature status](docs/feature-status.md) before enabling controls.
 
-## Root Compose deployment (Raspberry Pi)
+## Root Compose deployment
 
-The repository root `compose.yaml` includes both the existing Observatory stack and the optional OctoPrint integration, so **`docker compose up -d --build` from the repository root starts both services**. This requires Docker Compose v2.20+ with `include` support, a Linux Raspberry Pi host with the printer connected over USB, and correctly configured `integrations/mks-wifi/.env` and `integrations/octoprint/.env`. Follow [OctoPrint setup](integrations/octoprint/README.md) to identify the serial device before starting. The root deployment will fail if the required device is missing; this is intentional rather than silently starting an unusable printer controller.
+The repository root `compose.yaml` includes Neptune Observatory and an **opt-in** OctoPrint service. Ordinary `docker compose up -d --build` starts Observatory only. OctoPrint is assigned the `octoprint` profile so MacBook deployments do not require a Linux USB device. Docker Compose v2.20+ is required for `include`.
 
-**MacBook warning:** do not run the combined root stack on Docker Desktop without a Linux USB-device passthrough solution. Continue using `docker compose -f integrations/mks-wifi/compose.yaml --env-file integrations/mks-wifi/.env up -d --build` for Observatory-only deployment, or run Compose from its integration directory as before.
+On the Raspberry Pi, connect the printer over USB, follow [OctoPrint setup](integrations/octoprint/README.md), and set `OCTOPRINT_SERIAL_DEVICE` in `integrations/octoprint/.env` to the resolved serial device. Then from the repository root run:
 
-OctoPrint uses USB and Observatory uses MKS WiFi. Keep only one active G-code controller; disable Observatory command execution during OctoPrint commissioning. The root stack does not flash firmware.
+```bash
+docker compose --profile octoprint up -d --build
+```
+
+When deploying Observatory only, configure `integrations/mks-wifi/.env` as described below. OctoPrint and Observatory use different control paths (USB and MKS WiFi); do not send competing G-code commands. The root stack does not flash firmware.
 
 ## Quick start with Docker Compose
 
