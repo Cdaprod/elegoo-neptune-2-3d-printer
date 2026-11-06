@@ -1,0 +1,5 @@
+# Optional USB passthrough: combine with compose.yaml on a Linux host.
+services:
+  octoprint:
+    devices:
+      - "${OCTOPRINT_SERIAL_DEVICE:?Set OCTOPRINT_SERIAL_DEVICE to the resolved host serial device}:/dev/ttyUSB-printer"
