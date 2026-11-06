@@ -52,3 +52,4 @@ services:
 
 volumes:
   commissioning-data:
+    name: mks-wifi_commissioning-data
