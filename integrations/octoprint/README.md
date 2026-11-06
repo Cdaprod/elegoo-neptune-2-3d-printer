@@ -67,3 +67,7 @@ docker compose logs --tail=100 octoprint
 Open `http://192.168.0.9:5001` on the local network and check **Settings → Plugin Manager** for Remote Connection. The build installs the package; its settings are entered once in the UI and persisted to `octoprint-data`. A normal `up -d --build` does **not** delete the volume. Do not use `down -v` when redeploying. The image build requires GitHub access to download the plugin; once built, the running container does not need to download it again.
 
 The current image inherits the upstream Python version; a Python end-of-life warning is separate from network connectivity and should be addressed with a tested base-image upgrade. The plugin and MKS TCP handshake have not been verified against the physical printer.
+
+## Dark mode (Themeify)
+
+The custom image installs [Themeify](https://github.com/birkbjo/OctoPrint-Themeify) alongside Remote Connection during `docker compose --profile octoprint up -d --build`. Once rebuilt, open **Settings → Plugins → Themeify** and select its **Dark** theme. Themeify's theme selection is stored in OctoPrint's persistent `octoprint-data` volume and should survive future rebuilds; the image install alone does not guarantee Dark is selected automatically. For a correctly styled header, Themeify's documentation recommends **Settings → Appearance → Color: default** and disabling **Transparent Color**.
