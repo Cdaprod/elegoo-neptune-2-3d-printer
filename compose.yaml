@@ -1,0 +1,6 @@
+# Root stack entrypoint for Docker Compose v2.20+.
+# Run on the Raspberry Pi with the Neptune 2 USB serial device connected.
+# Each included stack loads its own .env from its project directory.
+include:
+  - path: ./integrations/mks-wifi/compose.yaml
+  - path: ./integrations/octoprint/compose.yaml
