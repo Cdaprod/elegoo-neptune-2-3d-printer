@@ -5,5 +5,4 @@ FROM octoprint/octoprint:latest
 ARG REMOTE_CONNECTION_PLUGIN_URL=https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
 RUN set -eux; \
     test -x /opt/octoprint/venv/bin/python; \
-    /opt/octoprint/venv/bin/python -m pip install --no-cache-dir "$REMOTE_CONNECTION_PLUGIN_URL"; \
-    /opt/octoprint/venv/bin/python -m pip show OctoPrint-Remote-Connection
+    /opt/octoprint/venv/bin/python -m pip install --no-cache-dir "$REMOTE_CONNECTION_PLUGIN_URL"
