@@ -1,44 +1,55 @@
-# Neptune 2 — OctoPrint on Raspberry Pi
+# Neptune 2 — OctoPrint: network-first, USB fallback
 
-Optional, independent Docker Compose deployment for an Elegoo Neptune 2 running its **existing Marlin firmware**. **No firmware flashing required.** This stack is separate from `integrations/mks-wifi/` and does not alter Neptune Observatory.
+This integration runs OctoPrint alongside the existing Neptune Observatory repository without changing the printer's Marlin firmware. **Network mode is the default** and works on Docker Desktop for macOS without a USB device. Network transport is experimental until the MKS WiFi raw TCP protocol has been validated with OctoPrint.
 
-## Prerequisites
+## Network deployment (MacBook or Raspberry Pi)
 
-- Raspberry Pi running Linux, Docker Engine and Docker Compose v2.
-- A USB data cable connecting the Pi to the printer.
-- Exclusive access to the printer serial connection while OctoPrint is controlling a print.
-- A compatible OctoPrint Docker image for your Pi's CPU architecture.
-
-## Deploy on the Pi
+From the repository root:
 
 ```bash
-cd integrations/octoprint
-cp .env.example .env
+docker compose --profile octoprint up -d --build
+```
+
+OctoPrint is available at `http://localhost:5001` (override `OCTOPRINT_HOST_PORT` in `integrations/octoprint/.env`). Complete the first-run wizard and enable access control.
+
+### Remote Connection plugin
+
+Install **OctoPrint-Remote_connection** through Settings → Plugin Manager → Get More → Install from URL using the URL tracked in [plugins.txt](plugins.txt):
+
+```text
+https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
+```
+
+Restart OctoPrint. In the plugin's remote-connection settings, add the MKS WiFi hostname/IP and TCP port **8080**, selecting **raw TCP** (not RFC2217). Choose the new remote port in OctoPrint's Connection panel. The module accepts line-delimited G-code over a raw socket; its compatibility with OctoPrint's streaming/acknowledgment expectations remains **unverified**. Do not start a print until read-only M115/M105 tests and connection stability pass. This plugin is listed in the repository but **not automatically installed** by Docker Compose; use Plugin Manager for the first install. The persistent OctoPrint volume retains plugin installation.
+
+**Single-client constraint:** MKS WiFi accepts only one active TCP client. Stop Observatory completely before testing OctoPrint:
+
+```bash
+docker compose stop neptune-observatory
+```
+
+Do not simultaneously operate both controllers. Avoid heating, jogging, SD printing, or uploading during initial connection tests. To restore Observatory, disconnect OctoPrint from the printer first, then `docker compose start neptune-observatory`.
+
+## USB fallback (Linux Raspberry Pi)
+
+Connect a USB data cable between the Pi and printer. Find the actual device:
+
+```bash
 ls -l /dev/serial/by-id/
 readlink -f /dev/serial/by-id/<your-printer-device>
 ```
 
-Set `OCTOPRINT_SERIAL_DEVICE` in `.env` to the **resolved host device** returned by `readlink -f` (typically `/dev/ttyUSB0` or `/dev/ttyACM0`). This Compose file maps it into the container as `/dev/ttyUSB-printer`. If `/dev/serial/by-id/` is absent, inspect `dmesg` or `ls /dev/ttyUSB* /dev/ttyACM*` after connecting; do not guess a port.
+Set `OCTOPRINT_SERIAL_DEVICE` in `integrations/octoprint/.env` to the resolved host path (for example `/dev/ttyUSB0` or `/dev/ttyACM0`). From the **integration directory**, run:
 
 ```bash
-docker compose config
-docker compose up -d
-docker compose ps
-docker compose logs --tail=100 octoprint
+cd integrations/octoprint
+docker compose -f compose.yaml -f compose.usb.yaml --profile octoprint up -d
 ```
 
-Visit `http://<raspberry-pi-ip>:5000`, complete the OctoPrint first-run wizard, enable access control, and select **`/dev/ttyUSB-printer`** as the serial port. Use the printer's Marlin-compatible baud rate (try auto-detect first). Test connection, temperatures and homing **before** sending a print. If the serial device is missing, confirm the USB cable, host device path and permissions; update `.env` and recreate the container if the device path changes.
+Select `/dev/ttyUSB-printer` in OctoPrint's Connection panel. USB passthrough is for a Linux Docker host, not macOS Docker Desktop. The USB override is deliberately not included by the root Compose stack.
 
-## Operational safety
+## Persistence, touchscreen and safety
 
-**Neptune Observatory remains a separate deployment** and may still reach the same printer over MKS WiFi. Do not initiate prints, motion, heating, firmware updates or other G-code operations from both systems simultaneously. Prefer one active control path; disable Observatory command execution (set `NEPTUNE_CONTROL_EXECUTION_ENABLED=false` in its own environment and recreate that service) while commissioning OctoPrint. Passive monitoring may still generate queries, so verify compatibility before relying on simultaneous polling. Do not run two print jobs or connect multiple serial clients.
+The `octoprint-data` named volume retains configuration, uploads and installed plugins. Do not use `docker compose down -v` unless you intend to delete this data. Back up the volume before major upgrades. Raspberry Pi touchscreen clients can access OctoPrint over the LAN in a browser kiosk; no printer USB connection is needed at the display if OctoPrint runs elsewhere.
 
-OctoPrint does **not** require Klipper, Moonraker or a firmware flash. The Pi stays USB-connected for OctoPrint control, but the original Marlin printer interface remains available when OctoPrint is disconnected.
-
-## Touchscreen
-
-OctoPrint's browser UI can be opened in a local Pi touchscreen browser in kiosk mode; a dedicated touchscreen frontend can be evaluated later. This Compose stack intentionally does not assume a particular display driver or XPT2046 calibration. Do not expose port 5000 to the public internet without an authenticated reverse proxy or VPN.
-
-## Persistence and rollback
-
-The `octoprint-data` Docker named volume preserves settings, uploads and plugins. Back it up before upgrades. `docker compose down` stops/removes the service **without** deleting its volume; avoid `down -v` unless you intend to erase OctoPrint data. Pin the image to a tested release/digest after initial commissioning.
+Do not expose port 5001 to the public internet. The existing Marlin firmware and original printer display remain intact. Network and USB connection modes are **alternatives**, not two simultaneous connections.
