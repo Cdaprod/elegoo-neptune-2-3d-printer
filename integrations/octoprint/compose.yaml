@@ -1,0 +1,21 @@
+services:
+  octoprint:
+    image: octoprint/octoprint:latest
+    container_name: neptune-octoprint
+    restart: unless-stopped
+    ports:
+      - "${OCTOPRINT_BIND_ADDRESS:-0.0.0.0}:5000:80"
+    volumes:
+      - octoprint-data:/octoprint
+    devices:
+      - "${OCTOPRINT_SERIAL_DEVICE:?Set OCTOPRINT_SERIAL_DEVICE to the Raspberry Pi USB serial device}:/dev/ttyUSB-printer"
+    environment:
+      ENABLE_MJPG_STREAMER: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  octoprint-data:
