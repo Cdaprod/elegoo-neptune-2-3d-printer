@@ -1,0 +1,3 @@
+# Install through OctoPrint Settings > Plugin Manager > Get More > ...from URL.
+# This plugin adds raw TCP and RFC2217 remote printer connections.
+https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
