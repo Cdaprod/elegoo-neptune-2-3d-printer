@@ -15,6 +15,7 @@ def test_catalogue_is_typed_and_execution_is_disabled() -> None:
     assert {"home_axes", "preheat_pla", "preheat_petg", "cooldown", "purge_nozzle"} <= ids
     assert {"filament_change_guided", "filament_load", "filament_unload", "park_nozzle"} <= ids
     assert {"set_fan_speed", "fan_off", "endstop_status", "cancel_print"} <= ids
+    assert "print_first_layer_sd" in ids
     assert service.execution_enabled is False
     assert all(macro["enabled_for_execution"] is False for macro in catalogue)
     assert all(macro["requirements"] for macro in catalogue)
@@ -127,6 +128,41 @@ def test_sd_print_preview_accepts_only_cached_m20_files() -> None:
     ]
     with pytest.raises(PreviewError):
         service.preview("start_sd_print", {"filename": "../sample.gcode"})
+
+
+def test_first_layer_sd_macro_accepts_live_files_but_does_not_claim_contents_verified() -> None:
+    service = DryRunCommandService()
+    service.allowed_sd_files = {
+        "cube-first-layer.gcode",
+        "first_layer_test.gcode",
+        "complete-print.gcode",
+    }
+
+    preview = service.preview("print_first_layer_sd", {"filename": "complete-print.gcode"})
+    assert preview["commands"] == ["M23 complete-print.gcode", "M24"]
+    assert preview["dry_run"] is True
+    assert preview["execution_enabled"] is False
+    assert any("M20 listing do not prove its contents" in item for item in preview["requirements"])
+    with pytest.raises(PreviewError, match="listed SD-card file"):
+        service.preview("print_first_layer_sd", {"filename": "not-listed-first-layer.gcode"})
+
+
+def test_sd_picker_rejects_duplicate_firmware_names_and_preserves_exact_name() -> None:
+    service = DryRunCommandService()
+    service.update_sd_listing(
+        [
+            {"name": "PART.GCO", "kind": "file"},
+            {"name": "part.gco", "kind": "file"},
+            {"name": "unique name.gcode", "kind": "file"},
+        ]
+    )
+    assert service.is_sd_file_ambiguous("PART.GCO")
+    with pytest.raises(PreviewError, match="duplicate names"):
+        service.preview("start_sd_print", {"filename": "PART.GCO"})
+    assert service.preview("start_sd_print", {"filename": "unique name.gcode"})["commands"] == [
+        "M23 unique name.gcode",
+        "M24",
+    ]
 
 
 @pytest.mark.parametrize(

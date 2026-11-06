@@ -431,6 +431,24 @@ class MotionTimeline:
                     source TEXT NOT NULL, data_class TEXT NOT NULL, confidence TEXT NOT NULL,
                     data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS sd_previews(
+                    filename TEXT PRIMARY KEY COLLATE NOCASE, mime_type TEXT NOT NULL,
+                    image BLOB NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS local_gcode_previews(
+                    relative_path TEXT PRIMARY KEY, filename TEXT NOT NULL,
+                    firmware_key TEXT, source_fingerprint TEXT NOT NULL,
+                    source_size_bytes INTEGER NOT NULL, source_mtime_ns INTEGER NOT NULL,
+                    source_ctime_ns INTEGER NOT NULL,
+                    mime_type TEXT, image BLOB, thumbnail_width INTEGER, thumbnail_height INTEGER,
+                    metadata_json TEXT NOT NULL, preview_available INTEGER NOT NULL,
+                    indexed_at TEXT NOT NULL, source_present INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE INDEX IF NOT EXISTS local_gcode_firmware_key
+                    ON local_gcode_previews(firmware_key);
+                CREATE TABLE IF NOT EXISTS local_gcode_index_state(
+                    singleton INTEGER PRIMARY KEY CHECK(singleton=1), data_json TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS machine_state_time ON machine_state_events(observed_at);
                 CREATE INDEX IF NOT EXISTS telemetry_session_time
                     ON telemetry(session_id, observed_at);
@@ -593,6 +611,246 @@ class MotionTimeline:
         db.execute("PRAGMA foreign_keys=ON")
         return db
 
+    def save_sd_thumbnail(self, filename: str, mime_type: str, image_data: bytes) -> bool:
+        """Persist a bounded G-code preview so SD listings can show its thumbnail."""
+        if (
+            mime_type not in {"image/png", "image/jpeg"}
+            or not image_data
+            or len(image_data) > 512 * 1024
+        ):
+            return False
+        with self.lock:
+            try:
+                with self._db() as db:
+                    db.execute(
+                        "INSERT INTO sd_previews(filename,mime_type,image,updated_at) "
+                        "VALUES(?,?,?,?) ON CONFLICT(filename) DO UPDATE SET "
+                        "mime_type=excluded.mime_type,image=excluded.image,updated_at=excluded.updated_at",
+                        (
+                            filename,
+                            mime_type,
+                            sqlite3.Binary(image_data),
+                            datetime.now(UTC).isoformat(),
+                        ),
+                    )
+                    db.execute(
+                        "DELETE FROM sd_previews WHERE filename NOT IN "
+                        "(SELECT filename FROM sd_previews ORDER BY updated_at DESC LIMIT 100)"
+                    )
+                return True
+            except sqlite3.Error as exc:
+                self.storage_error = f"SD preview storage failed: {exc}"
+                return False
+
+    @staticmethod
+    def now_iso() -> str:
+        return datetime.now(UTC).isoformat()
+
+    def save_local_gcode_record(self, record: dict[str, Any]) -> bool:
+        """Persist local file metadata and its embedded thumbnail, if available."""
+        image = record.get("image")
+        mime_type = record.get("mime_type")
+        if image is not None and (
+            mime_type not in {"image/png", "image/jpeg"} or len(image) > 512 * 1024
+        ):
+            return False
+        with self.lock:
+            try:
+                with self._db() as db:
+                    db.execute(
+                        "INSERT INTO local_gcode_previews("
+                        "relative_path,filename,firmware_key,source_fingerprint,source_size_bytes,"
+                        "source_mtime_ns,source_ctime_ns,mime_type,image,thumbnail_width,thumbnail_height,"
+                        "metadata_json,preview_available,indexed_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(relative_path) DO UPDATE SET filename=excluded.filename,"
+                        "firmware_key=excluded.firmware_key,source_fingerprint=excluded.source_fingerprint,"
+                        "source_size_bytes=excluded.source_size_bytes,source_mtime_ns=excluded.source_mtime_ns,"
+                        "source_ctime_ns=excluded.source_ctime_ns,"
+                        "mime_type=excluded.mime_type,image=excluded.image,"
+                        "thumbnail_width=excluded.thumbnail_width,thumbnail_height=excluded.thumbnail_height,"
+                        "metadata_json=excluded.metadata_json,preview_available=excluded.preview_available,"
+                        "indexed_at=excluded.indexed_at,source_present=1",
+                        (
+                            record["relative_path"],
+                            record["filename"],
+                            record.get("firmware_key"),
+                            record["source_fingerprint"],
+                            record["source_size_bytes"],
+                            record["source_mtime_ns"],
+                            record["source_ctime_ns"],
+                            mime_type,
+                            sqlite3.Binary(image) if image is not None else None,
+                            record.get("thumbnail_width"),
+                            record.get("thumbnail_height"),
+                            json.dumps(record.get("metadata", {}), separators=(",", ":")),
+                            int(bool(record.get("preview_available"))),
+                            self.now_iso(),
+                        ),
+                    )
+                    db.execute(
+                        "DELETE FROM local_gcode_previews WHERE relative_path NOT IN "
+                        "(SELECT relative_path FROM local_gcode_previews "
+                        "ORDER BY preview_available DESC,indexed_at DESC LIMIT 1000)"
+                    )
+                    db.execute(
+                        "UPDATE local_gcode_previews SET image=NULL,mime_type=NULL "
+                        "WHERE relative_path NOT IN "
+                        "(SELECT relative_path FROM local_gcode_previews "
+                        "WHERE preview_available=1 ORDER BY indexed_at DESC LIMIT 200)"
+                    )
+                return True
+            except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:
+                self.storage_error = f"Local G-code index storage failed: {exc}"
+                return False
+
+    @staticmethod
+    def _local_record(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "relative_path": row["relative_path"],
+            "filename": row["filename"],
+            "firmware_key": row["firmware_key"],
+            "source_fingerprint": row["source_fingerprint"],
+            "source_size_bytes": row["source_size_bytes"],
+            "source_mtime_ns": row["source_mtime_ns"],
+            "source_ctime_ns": row["source_ctime_ns"],
+            "mime_type": row["mime_type"],
+            "image": bytes(row["image"]) if row["image"] is not None else None,
+            "thumbnail_width": row["thumbnail_width"],
+            "thumbnail_height": row["thumbnail_height"],
+            "metadata": json.loads(row["metadata_json"] or "{}"),
+            "preview_available": bool(row["preview_available"]) and row["image"] is not None,
+            "indexed_at": row["indexed_at"],
+            "source_present": bool(row["source_present"]),
+        }
+
+    def get_local_gcode_record(self, relative_path: str) -> dict[str, Any] | None:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    row = db.execute(
+                        "SELECT * FROM local_gcode_previews WHERE relative_path=?", (relative_path,)
+                    ).fetchone()
+                return self._local_record(row) if row else None
+            except (sqlite3.Error, json.JSONDecodeError):
+                return None
+
+    def list_local_gcode_records(self) -> list[dict[str, Any]]:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    rows = db.execute(
+                        "SELECT * FROM local_gcode_previews "
+                        "ORDER BY filename COLLATE NOCASE,relative_path COLLATE NOCASE"
+                    ).fetchall()
+                return [self._local_record(row) for row in rows]
+            except (sqlite3.Error, json.JSONDecodeError):
+                return []
+
+    def get_unique_local_gcode_preview(self, filename: str) -> tuple[str, bytes] | None:
+        """Serve a thumbnail only when its firmware-compatible basename is unique."""
+        key = filename.casefold()
+        with self.lock:
+            try:
+                with self._db() as db:
+                    rows = db.execute(
+                        "SELECT firmware_key,mime_type,image,preview_available "
+                        "FROM local_gcode_previews WHERE firmware_key=? COLLATE NOCASE",
+                        (key,),
+                    ).fetchall()
+                if len(rows) != 1 or not rows[0]["preview_available"] or rows[0]["image"] is None:
+                    return None
+                return rows[0]["mime_type"], bytes(rows[0]["image"])
+            except sqlite3.Error:
+                return None
+
+    def get_local_gcode_preview_by_path(self, relative_path: str) -> tuple[str, bytes] | None:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    row = db.execute(
+                        "SELECT mime_type,image,preview_available FROM local_gcode_previews "
+                        "WHERE relative_path=?",
+                        (relative_path,),
+                    ).fetchone()
+                if row is None or not row["preview_available"] or row["image"] is None:
+                    return None
+                return row["mime_type"], bytes(row["image"])
+            except sqlite3.Error:
+                return None
+
+    def local_index_updated_at(self) -> str | None:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    row = db.execute(
+                        "SELECT MAX(indexed_at) AS value FROM local_gcode_previews"
+                    ).fetchone()
+                return row["value"] if row else None
+            except sqlite3.Error:
+                return None
+
+    def save_local_index_state(self, data: dict[str, Any]) -> None:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    db.execute(
+                        "INSERT INTO local_gcode_index_state(singleton,data_json) VALUES(1,?) "
+                        "ON CONFLICT(singleton) DO UPDATE SET data_json=excluded.data_json",
+                        (json.dumps(data, separators=(",", ":")),),
+                    )
+            except (sqlite3.Error, TypeError, ValueError) as exc:
+                self.storage_error = f"Local G-code scan status storage failed: {exc}"
+
+    def get_local_index_state(self) -> dict[str, Any]:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    row = db.execute(
+                        "SELECT data_json FROM local_gcode_index_state WHERE singleton=1"
+                    ).fetchone()
+                return json.loads(row["data_json"]) if row else {}
+            except (sqlite3.Error, json.JSONDecodeError):
+                return {}
+
+    def mark_local_gcode_sources(self, relative_paths: set[str]) -> None:
+        """Mark the complete mounted-volume snapshot without deleting cached previews."""
+        with self.lock:
+            try:
+                with self._db() as db:
+                    db.execute("UPDATE local_gcode_previews SET source_present=0")
+                    db.executemany(
+                        "UPDATE local_gcode_previews SET source_present=1 WHERE relative_path=?",
+                        [(path,) for path in relative_paths],
+                    )
+            except sqlite3.Error as exc:
+                self.storage_error = f"Local G-code index presence update failed: {exc}"
+
+    def has_sd_thumbnail(self, filename: str) -> bool:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    return (
+                        db.execute(
+                            "SELECT 1 FROM sd_previews WHERE filename=? COLLATE NOCASE", (filename,)
+                        ).fetchone()
+                        is not None
+                    )
+            except sqlite3.Error:
+                return False
+
+    def get_sd_thumbnail(self, filename: str) -> tuple[str, bytes] | None:
+        with self.lock:
+            try:
+                with self._db() as db:
+                    row = db.execute(
+                        "SELECT mime_type,image FROM sd_previews WHERE filename=? COLLATE NOCASE",
+                        (filename,),
+                    ).fetchone()
+            except sqlite3.Error:
+                return None
+        return (str(row["mime_type"]), bytes(row["image"])) if row else None
+
     def _segments(self, db: sqlite3.Connection, file_id: str) -> list[dict[str, Any]]:
         cached = self._segment_cache.get(file_id)
         if cached is None:
@@ -686,12 +944,20 @@ class MotionTimeline:
     def record_snapshot(
         self, snapshot: dict[str, Any], operations: list[dict[str, Any]] | None = None
     ) -> None:
+        connection = snapshot.get("connection")
+        if snapshot.get("stale") is True or (
+            isinstance(connection, dict) and connection.get("connected") is False
+        ):
+            # A failed poll carries the last good telemetry for display. It is
+            # not a new observation and must not extend a print session or
+            # create fabricated idle/feedrate history.
+            return
         telemetry = snapshot.get("telemetry") or {}
 
         def val(key: str) -> Any:
             return (telemetry.get(key) or {}).get("value")
 
-        active = val("print_active") is True
+        active = val("print_active")
         filename = val("current_file") or val("filename") or val("sd_filename")
         progress = val("progress_percent")
         state = val("printer_state") or "unknown"
@@ -707,7 +973,7 @@ class MotionTimeline:
                 "SELECT * FROM print_sessions WHERE ended_at IS NULL "
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
-            if active:
+            if active is True:
                 if current is None or (
                     filename
                     and current["filename"]
@@ -772,7 +1038,7 @@ class MotionTimeline:
                         None if latency is None else float(latency),
                     ),
                 )
-            else:
+            elif active is False:
                 session_id = current["id"] if current else None
                 if current:
                     db.execute(
@@ -801,6 +1067,28 @@ class MotionTimeline:
                     "nozzle,nozzle_target,bed,bed_target,latency_ms) "
                     "VALUES(NULL,?,?,?,?,?,?,?,?,?)",
                     (
+                        observed,
+                        state,
+                        filename,
+                        progress,
+                        val("nozzle_temperature"),
+                        (telemetry.get("nozzle_temperature") or {}).get("target_c"),
+                        val("bed_temperature"),
+                        (telemetry.get("bed_temperature") or {}).get("target_c"),
+                        None if latency is None else float(latency),
+                    ),
+                )
+            else:
+                # Missing/unsupported active state is unknown, not evidence
+                # that a current print stopped. Keep the session open and
+                # associate the telemetry sample with it when one exists.
+                session_id = current["id"] if current else None
+                db.execute(
+                    "INSERT INTO telemetry(session_id,observed_at,state,filename,progress,"
+                    "nozzle,nozzle_target,bed,bed_target,latency_ms) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        session_id,
                         observed,
                         state,
                         filename,

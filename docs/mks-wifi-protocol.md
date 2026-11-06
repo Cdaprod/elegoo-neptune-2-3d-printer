@@ -187,10 +187,25 @@ from heat, idle status, or operator narration.
 - The source/file-list behavior is for listing files, not reading arbitrary file
   contents. No documented read-only file-content API for `elegoo.txt` was found.
   Listing support must not be treated as download support.
+- The inspected Makerbase source registers a raw-body `POST /upload` handler
+  with an `X-Filename` argument. It accepts transfers only while its internal
+  printer state is idle and routes file fragments through the ESP-to-controller
+  transfer buffer. Its HTTP success branch accepts either `upload_success` or
+  `rcv_end_flag`; therefore HTTP 200 alone is not proof that all bytes were
+  stored. The handler exposes no content hash or read-back verification. This
+  route is source-confirmed but untested on the installed binary; Observatory
+  keeps upload off by default and does not retry ambiguous transfers.
 - The live root listing contained 18 entries and did not report `elegoo.txt`.
   This only establishes that the name was absent from the returned root
   listing at probe time; it does not rule out nested paths or card changes.
 - No source-confirmed or live-verified remote file-content download method was
-  found. Directory listing does not imply arbitrary file reads. To inspect
-  `elegoo.txt`, use the SD card directly. Do not send M23/M24, upload/file-write
-  commands, or call the HTTP update/config forms.
+  found. In the inspected Makerbase source revision, `FILE_DOWNLOAD_PORT` is
+  only a constant (11188); no listener is created on that port. The active
+  `/upload` handler and the `TRANSFER_GET_FILE` fragment state participate in
+  the upload-to-controller path, not a read-back API for files already on the
+  SD card. The OctoPrint-style `/api/files` routes that could provide file
+  operations are inside `#if 0`. Directory listing therefore does not imply
+  arbitrary file reads. For previews without removing the card, index the
+  original OrcaSlicer exports from a read-only Mac folder or use Observatory's
+  existing one-file thumbnail import. These local previews are matched by
+  filename only and do not prove the printer-side file bytes are identical.

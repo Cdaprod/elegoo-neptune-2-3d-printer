@@ -1,6 +1,6 @@
 # Neptune Observatory completion inventory
 
-Updated 2026-11-02. The normal product flow is Operator Mode; commissioning
+Updated 2026-11-05. The normal product flow is Operator Mode; commissioning
 history is diagnostic evidence, not a prerequisite ladder. No CAD, firmware,
 OrcaSlicer profile, or global Codex configuration was accessed or changed.
 
@@ -16,12 +16,16 @@ OrcaSlicer profile, or global Codex configuration was accessed or changed.
 | P1 | Temperature and extrusion | Implemented, not physically re-tested | Setpoints, presets, cooldown, live samples, and a 180 °C minimum extrusion interlock exist. Heat response and extrusion still need ordinary supervised use if the operator wants hardware evidence. |
 | P1 | Fans, motors, endstops | Implemented, not physically re-tested | Fixed command controls are wired; real fan behavior, stepper release behavior, and M119 responses remain device-specific. |
 | P1 | SD print lifecycle | Implemented, not physically re-tested | Current M20 listing, selected filename checks, print state gates, fixed start/pause/resume/cancel operations. Installed MKS firmware behavior still needs actual use before claiming verified. |
-| P1 | Mobile/Desktop visual check | Pending after current edits | Inspect the rebuilt app at desktop, iPhone portrait, and landscape; confirm no overflow, modal clipping, or broken in-card status. |
-| P1 | Compose deployment | Pending after current edits | Rebuild and health-check the service. Startup remains disarmed. Deployment must not run a machine-control action. |
+| P1 | Print-job recording quality | Improved and regression-tested | Stale/disconnected polls are no longer persisted as new samples; unknown print-active state does not close a session. Fresh MKS telemetry persists sessions server-side. |
+| P1 | SD thumbnail index and picker | Implemented; source unavailable in deployment | Reuses the existing thumbnail parser, exact unique filename matching, persistent cache, read-only Compose mount, and a one-tap manual Orca-export picker. Configure an existing stable export folder to populate automatic previews while the card remains installed. |
+| P1 | Compose deployment | Deployed and healthy | Rebuilt only Observatory. Authenticated health returned 200; fresh MKS telemetry reported idle and a fresh M20 listing returned 17 entries. No physical controls were run. |
+| P1 | Responsive visual review | Partial | The deployed page loads and the local token gate is visible. No token was entered, so authenticated control-page desktop/iPhone layout and browser-console review remain unverified. |
 | P2 | M114 coordinates | Protocol limitation unresolved | Existing read-only query returned only `ok`; keep positions unavailable until a usable report is received. M114 is not required for ordinary homing or bounded jogs after an in-session home reference. |
-| P2 | SD upload | Gated off | Validate installed firmware endpoint, transfer semantics, and end-to-end file integrity before enabling wireless writes. |
+| P2 | SD-card remote readback | Unavailable on current observed interface | Live `GET /api/files/sdcard` returned 404 and port 11188 refused a connection; fresh M20 returns names only. Use the read-only Orca export index or manual preview import. Other firmware builds may differ. |
+| P2 | SD upload | Gated off; transfer integrity unresolved | Makerbase source has raw `/upload?X-Filename=...`, but its success branch can acknowledge request-end without proving stored bytes. No upload was attempted. Keep off until a separately authorized new-file transfer can be checked against fresh M20 and independent content integrity. |
 | P2 | Live Twin synchronization | Partial | M27 progress and matching G-code provide a planned-path estimate, not live position. No actual execution-line or position source is available yet. |
 | P2 | OrcaSlicer integration | Partial | Offline toolpath inspection and calibration guidance work; automatic profile mutation and full slicer management are outside the current bridge. |
+| P2 | Moonraker compatibility | Architecture documented only | Current transport factory and command protocol boundary are reusable seams; no Moonraker adapter or second backend is installed. |
 
 ## Known physical evidence
 

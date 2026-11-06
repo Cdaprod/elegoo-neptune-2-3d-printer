@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import sqlite3
 import time
 from datetime import timedelta
@@ -11,8 +12,9 @@ from fastapi.testclient import TestClient
 from mkswifi import PrinterState, PrinterStatus, Temperature
 
 from mks_wifi_bridge.executor import CommandExecutor
+from mks_wifi_bridge.local_gcode_index import LocalGcodeIndexer
 from mks_wifi_bridge.motion_timeline import MotionTimeline
-from mks_wifi_bridge.observatory import PrinterService, create_app
+from mks_wifi_bridge.observatory import PrinterService, create_app, utc_now
 
 
 class FakeClient:
@@ -87,6 +89,13 @@ def test_polling_worker_caches_real_client_result_and_stops() -> None:
         assert body["connection"]["connected"] is True
         assert body["telemetry"]["nozzle_temperature"]["value"] == 24.0
         assert body["firmware_identification"] == "TFT28/32"
+        assert body["print_job"]["status"] == "idle"
+        assert body["print_job"]["active"] is False
+        dashboard = client.get("/").text
+        assert 'aria-label="Print job tracking"' in dashboard
+        assert 'id="overview-job-history"' in dashboard
+        assert 'id="sd-local-index-pick"' in dashboard
+        assert "current MKS interface exposes filenames, not G-code contents" in dashboard
         assert client.get("/health").json()["poller_running"] is True
         assert client.get("/docs").status_code == 200
         assert client.get("/openapi.json").status_code == 200
@@ -463,11 +472,160 @@ def test_sd_listing_is_manual_and_cached() -> None:
         listing = client.get("/api/printer/sdcard?refresh=true").json()
         assert listing["status"] == "available"
         assert listing["entries"] == [
-            {"name": "Folder/", "kind": "directory", "size_bytes": None},
-            {"name": "part.gcode", "kind": "file", "size_bytes": None},
+            {
+                "name": "Folder/",
+                "kind": "directory",
+                "size_bytes": None,
+                "preview_available": False,
+                "ambiguous": False,
+                "preview_source": "none",
+                "local_preview": False,
+                "local_match": "unmatched",
+                "local_metadata": None,
+            },
+            {
+                "name": "part.gcode",
+                "kind": "file",
+                "size_bytes": None,
+                "preview_available": False,
+                "ambiguous": False,
+                "preview_source": "none",
+                "local_preview": False,
+                "local_match": "unmatched",
+                "local_metadata": None,
+            },
         ]
         assert client.get("/api/printer/sdcard").json()["entries"] == listing["entries"]
         assert calls == 1
+
+
+def test_sd_browser_separates_fresh_m20_from_read_only_local_thumbnail_index(tmp_path) -> None:
+    source = tmp_path / "volume"
+    source.mkdir()
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/1eoAAAAASUVORK5CYII="
+    )
+    encoded = base64.b64encode(image).decode("ascii")
+    (source / "back-dso138.gcode").write_text(
+        "; estimated printing time = 12m\n"
+        "; thumbnail begin 320x320 68\n"
+        f";{encoded}\n"
+        "; thumbnail end\n"
+    )
+    timeline = MotionTimeline(tmp_path / "timeline.sqlite3")
+    indexer = LocalGcodeIndexer(source, timeline, require_mount=False)
+    service = make_service(interval=30.0)
+    service.sd_status = "available"
+    service.sd_entries = [{"name": "back-dso138.gcode", "kind": "file", "size_bytes": None}]
+    service.sd_refreshed_at = utc_now()
+    app = create_app(service, timeline=timeline, local_gcode_indexer=indexer)
+
+    with TestClient(app) as client:
+        wait_for_success(service)
+        listing = client.get("/api/printer/sdcard").json()
+        entry = listing["entries"][0]
+        assert listing["printer_listing_source"] == "firmware_m20"
+        assert entry["preview_available"] is True
+        assert entry["preview_source"] == "cached_local_gcode"
+        assert entry["local_metadata"]["metadata"]["estimated_print_time"] == "12m"
+        preview = client.get("/api/printer/sdcard/preview/back-dso138.gcode")
+        assert preview.status_code == 200
+        assert preview.content == image
+        local_preview = client.get(
+            "/api/printer/sdcard/local-preview", params={"path": "back-dso138.gcode"}
+        )
+        assert local_preview.status_code == 200
+        assert local_preview.content == image
+
+
+def test_orca_thumbnail_is_cached_without_sending_gcode_to_printer(tmp_path) -> None:
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/1eoAAAAASUVORK5CYII="
+    )
+    block = base64.b64encode(image).decode("ascii")
+    gcode = f"; thumbnail begin 100x100 {len(image)}\n;{block}\n; thumbnail end\nG90\nG1 X1 F300\n"
+
+    async def sd_reader(*_args: Any, **_kwargs: Any) -> dict[str, str]:
+        return {
+            "command": "M20",
+            "status": "complete_listing",
+            "raw_response": "Begin file list\npart.gcode\nEnd file list",
+        }
+
+    service = make_service(sd_reader=sd_reader)
+    timeline = MotionTimeline(tmp_path / "timeline.sqlite3")
+    app = create_app(service, timeline=timeline)
+    with TestClient(app) as client:
+        wait_for_success(service)
+        cached = client.post(
+            "/api/printer/sdcard/preview?filename=part.gcode",
+            content=gcode.encode(),
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert cached.status_code == 200
+        assert cached.json()["preview_available"] is True
+        assert timeline.get_sd_thumbnail("part.gcode") == ("image/png", image)
+
+        listing = client.get("/api/printer/sdcard?refresh=true").json()
+        assert listing["entries"][0]["preview_available"] is True
+        assert client.get("/api/printer/sdcard/preview/part.gcode").content == image
+        assert service.sd_entries[0]["name"] == "part.gcode"
+
+
+def test_first_layer_operation_requires_explicit_content_attestation(tmp_path) -> None:
+    sent: list[str] = []
+
+    class Transport:
+        async def connect(self) -> None:
+            return None
+
+        async def send(self, command: str) -> dict[str, Any]:
+            sent.append(command)
+            return {"acknowledged": True, "acknowledgment": "ok"}
+
+        async def close(self) -> None:
+            return None
+
+    executor = CommandExecutor(enabled=True, transport_factory=Transport)
+    service = make_service(interval=30.0)
+    service.sd_entries = [{"name": "test.gcode", "kind": "file", "size_bytes": None}]
+    from datetime import UTC, datetime
+
+    service.sd_refreshed_at = datetime.now(UTC)
+    app = create_app(
+        service,
+        bind_host="0.0.0.0",
+        auth_token="test-token",
+        executor=executor,
+        timeline=MotionTimeline(tmp_path / "timeline.sqlite3"),
+    )
+    headers = {"Authorization": "Bearer test-token"}
+    with TestClient(app) as client:
+        wait_for_success(service)
+        armed = client.post(
+            "/api/control/arm",
+            headers=headers,
+            json={
+                "confirmation": "ENABLE OPERATOR MODE",
+                "attended": True,
+                "no_competing_clients": True,
+                "power_switch_reachable": True,
+            },
+        )
+        assert armed.status_code == 200
+        response = client.post(
+            "/api/control/execute",
+            headers=headers,
+            json={
+                "macro_id": "print_first_layer_sd",
+                "parameters": {"filename": "test.gcode"},
+                "confirmation": "Print first-layer-only SD file",
+                "first_layer_contents_confirmed": False,
+            },
+        )
+        assert response.status_code == 422
+        assert "M20 listing cannot verify" in response.json()["detail"]
+        assert sent == []
 
 
 def test_websocket_receives_cached_snapshot_and_broadcast() -> None:

@@ -502,20 +502,17 @@ MACROS: tuple[Macro, ...] = (
         (
             "Printer state must be freshly observed as idle; this workflow cannot "
             "pause an active print.",
-            "Use the Observatory controls shown inside this guided workflow for "
-            "temperature and bounded filament operations after each is commissioned.",
+            "Use Operator Mode temperature and filament controls; fresh nozzle "
+            "telemetry gates extrusion.",
             "Confirm filament seating and nozzle clearance before finishing the checklist.",
         ),
         workflow=(
             "Confirm Observatory reports idle; stop if a print is active or state is unknown.",
-            "Select the material and review the target in Observatory. If the "
-            "matching temperature control is not commissioned, stop here; do not "
-            "substitute an unreviewed printer command.",
+            "Select the material and set a suitable target using the guarded Observatory controls.",
             "Wait in Observatory until live nozzle telemetry reaches and stabilizes "
             "near the target. Do not extrude while cold.",
-            "Perform the physical filament handoff while watching the printer. Use "
-            "the bounded Filament Load or Unload action in this dashboard only "
-            "after that exact action is commissioned.",
+            "Perform the physical filament handoff while watching the printer, then use "
+            "the guarded Filament Load or Unload action after its live temperature check passes.",
             "Inspect the extruder path and nozzle locally, then confirm the result "
             "in Observatory. This workflow never depends on a TFT prompt and does "
             "not start or resume a print.",
@@ -530,31 +527,31 @@ MACROS: tuple[Macro, ...] = (
         ),
         cancellation=(
             "Stop the checklist and leave the printer in its current state. "
-            "Use an individually commissioned Observatory control or the physical "
+            "Use a guarded Observatory control or the physical "
             "power switch for recovery; this workflow does not resume a print."
         ),
     ),
     Macro(
         "filament_load",
         "Filament load",
-        "Preview one fixed extruder move; relative/absolute extrusion mode is not verified.",
+        "Move bounded filament using fixed relative extrusion, then restore absolute mode.",
         "macro",
         "⇧",
         "high",
         "documented_unverified",
-        ("Nozzle temperature and extrusion mode must be verified; not safe to activate yet.",),
+        ("Requires fresh nozzle telemetry at or above the configured extrusion minimum.",),
         (LENGTH, FEED),
         ("M83", "G1 E{length_mm} F{feed_mm_min}", "M82"),
     ),
     Macro(
         "filament_unload",
         "Filament unload",
-        "Preview one fixed retract move; relative/absolute extrusion mode is not verified.",
+        "Retract bounded filament using fixed relative extrusion, then restore absolute mode.",
         "macro",
         "⇩",
         "high",
         "documented_unverified",
-        ("Nozzle temperature and extrusion mode must be verified; not safe to activate yet.",),
+        ("Requires fresh nozzle telemetry at or above the configured extrusion minimum.",),
         (LENGTH, FEED),
         ("M83", "G1 E-{length_mm} F{feed_mm_min}", "M82"),
     ),
@@ -583,6 +580,23 @@ MACROS: tuple[Macro, ...] = (
         "high",
         "documented_unverified",
         ("Review the exact filename and ensure the bed and toolhead are clear.",),
+        (SD_FILE,),
+        ("M23 {filename}", "M24"),
+    ),
+    Macro(
+        "print_first_layer_sd",
+        "Print first-layer-only SD file",
+        "Start a dedicated G-code file containing only the first layer. "
+        "A normal multi-layer file is not stopped automatically.",
+        "macro",
+        "▤",
+        "high",
+        "documented_unverified",
+        (
+            "Choose the prepared one-layer G-code file. The filename and M20 listing do not "
+            "prove its contents; explicitly confirm this exact file contains only layer one.",
+            "Confirm the bed is clear, the correct material is loaded, and remain at the printer.",
+        ),
         (SD_FILE,),
         ("M23 {filename}", "M24"),
     ),
@@ -657,8 +671,8 @@ CALIBRATIONS: tuple[CalibrationWorkflow, ...] = (
             "In OrcaSlicer, select the Neptune 2 profile and a known material preset.",
             "Choose a small first-layer calibration model from OrcaSlicer's own workflow.",
             "Review the preview, start G-code, target temperatures, and estimated duration.",
-            "After review, use Observatory's SD upload/start actions only after each is "
-            "commissioned; otherwise stop at preparation.",
+            "After review, transfer the export, refresh the SD picker, "
+            "then use the guarded print action.",
         ),
         (
             "Printer is idle and telemetry is fresh.",
@@ -674,8 +688,8 @@ CALIBRATIONS: tuple[CalibrationWorkflow, ...] = (
             "Confirm the printer is idle and the bed is clear.",
             "Choose a reviewed pattern in OrcaSlicer and select the Neptune 2 profile.",
             "Inspect the complete travel path and start G-code in Preview.",
-            "After review, use Observatory's SD upload/start actions only after each is "
-            "commissioned; otherwise stop at preparation.",
+            "After review, transfer the export, refresh the SD picker, "
+            "then use the guarded print action.",
         ),
         ("Printer is idle and telemetry is fresh.", "Travel and start G-code are reviewed."),
     ),
@@ -687,8 +701,8 @@ CALIBRATIONS: tuple[CalibrationWorkflow, ...] = (
             "Select the correct filament and material range in OrcaSlicer.",
             "Generate the tower using OrcaSlicer's calibration workflow.",
             "Inspect every temperature-change command and confirm the range suits the filament.",
-            "Preview the complete file; use Observatory's SD upload/start actions only after "
-            "each is commissioned.",
+            "Preview the complete file, transfer it, refresh the SD "
+            "picker, and use the guarded print action.",
         ),
         ("Printer is idle and telemetry is fresh.", "Material temperature range is known."),
     ),
@@ -700,8 +714,8 @@ CALIBRATIONS: tuple[CalibrationWorkflow, ...] = (
             "Verify the selected material and nozzle are correct.",
             "Use OrcaSlicer's calibration workflow with bounded retraction values.",
             "Inspect the retraction towers and generated settings in Preview.",
-            "Use Observatory's SD upload/start actions only after each is commissioned; "
-            "otherwise keep this as a preparation guide.",
+            "Transfer the reviewed G-code, refresh the SD picker, and start it through the guarded "
+            "print action.",
         ),
         (
             "Printer is idle and telemetry is fresh.",
@@ -716,8 +730,8 @@ CALIBRATIONS: tuple[CalibrationWorkflow, ...] = (
             "Confirm material, nozzle size, and the current OrcaSlicer profile.",
             "Select an OrcaSlicer flow-calibration method appropriate to the profile.",
             "Review generated walls, flow modifiers, and estimated material use.",
-            "Use Observatory's SD upload/start actions only after each is commissioned; "
-            "otherwise keep this as a preparation guide.",
+            "Transfer the reviewed G-code, refresh the SD picker, and start it through the guarded "
+            "print action.",
         ),
         ("Printer is idle and telemetry is fresh.", "Nozzle size and material are known."),
     ),
@@ -738,8 +752,8 @@ CAPABILITIES: tuple[dict[str, str], ...] = (
         "purpose": "Home other axes",
         "status": "documented_unverified",
         "basis": (
-            "The fixed operations are available in the Capability Manager for individual "
-            "supervised testing; this installed firmware's behavior is not yet commissioned."
+            "Fixed G28 variants are exposed through Operator Mode. Runtime responses are recorded; "
+            "an acknowledgment alone is not physical homing evidence."
         ),
     },
     {
@@ -765,8 +779,8 @@ CAPABILITIES: tuple[dict[str, str], ...] = (
         "purpose": "Bounded X jog",
         "status": "awaiting_home_x_observation",
         "basis": (
-            "Bounded jog macros are available for commissioning but remain blocked until "
-            "the current axis is homed and its position reference is known."
+            "Bounded jogs are available in Operator Mode after a current-session home reference "
+            "and fresh idle telemetry."
         ),
     },
     {
@@ -867,6 +881,19 @@ class DryRunCommandService:
     def __init__(self) -> None:
         self.audit: deque[dict[str, Any]] = deque(maxlen=200)
         self.allowed_sd_files: set[str] = set()
+        self.ambiguous_sd_files: set[str] = set()
+
+    def update_sd_listing(self, entries: list[dict[str, Any]]) -> None:
+        """Keep exact firmware names while excluding case-insensitive duplicates."""
+        names = [str(row.get("name", "")) for row in entries if row.get("kind") == "file"]
+        counts: dict[str, int] = {}
+        for name in names:
+            counts[name.casefold()] = counts.get(name.casefold(), 0) + 1
+        self.ambiguous_sd_files = {name.casefold() for name in names if counts[name.casefold()] > 1}
+        self.allowed_sd_files = {name for name in names if counts[name.casefold()] == 1}
+
+    def is_sd_file_ambiguous(self, filename: str) -> bool:
+        return filename.casefold() in self.ambiguous_sd_files
 
     def list_macros(self) -> list[dict[str, Any]]:
         return [macro.as_dict() for macro in MACROS]
@@ -907,13 +934,18 @@ class DryRunCommandService:
                     raise PreviewError(f"{parameter.label} must be at most {parameter.maximum:g}.")
                 normalized[parameter.name] = int(number) if number.is_integer() else number
             elif parameter.kind == "file":
+                if isinstance(value, str) and self.is_sd_file_ambiguous(value):
+                    raise PreviewError(
+                        "The current M20 listing contains duplicate names for this file; "
+                        "selection is blocked because M23 would be ambiguous."
+                    )
                 if (
                     not isinstance(value, str)
                     or value not in self.allowed_sd_files
                     or not value
                     or any(
                         character
-                        not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/"
+                        not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/ "
                         for character in value
                     )
                     or ".." in value

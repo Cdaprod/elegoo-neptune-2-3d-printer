@@ -1,0 +1,11 @@
+# Optional read-only overlay for a local OrcaSlicer export folder (recommended)
+# or a mounted G-code volume. The host path must already exist.
+services:
+  neptune-observatory:
+    volumes:
+      - type: bind
+        source: ${NEPTUNE_GCODE_SOURCE_PATH:-${NEPTUNE_GCODE_VOLUME_PATH:-/Volumes/NEPTUNE}}
+        target: /mnt/neptune-source
+        read_only: true
+        bind:
+          create_host_path: false

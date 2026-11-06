@@ -56,6 +56,20 @@ def test_storage_diagnostics_reports_low_space(monkeypatch, tmp_path) -> None:
     assert timeline.storage_diagnostics()["status"] == "low_space"
 
 
+def test_sd_preview_storage_is_persistent_case_insensitive_and_bounded(tmp_path) -> None:
+    timeline = MotionTimeline(tmp_path / "timeline.sqlite3")
+    image = b"\x89PNG\r\n\x1a\npreview"
+
+    assert timeline.save_sd_thumbnail("sample.gcode", "image/png", image)
+    assert timeline.has_sd_thumbnail("SAMPLE.GCODE")
+    assert timeline.get_sd_thumbnail("Sample.gcode") == ("image/png", image)
+    assert not timeline.save_sd_thumbnail("bad.gcode", "text/html", b"<script>")
+    assert not timeline.save_sd_thumbnail("large.gcode", "image/png", bytes(512 * 1024 + 1))
+
+    reopened = MotionTimeline(tmp_path / "timeline.sqlite3")
+    assert reopened.get_sd_thumbnail("sample.gcode") == ("image/png", image)
+
+
 def test_interpreter_tracks_acceleration_and_idle_dwell_in_feedrate_profile() -> None:
     result = interpret_gcode("M204 S300\nG1 X10 F600\nG4 P2000\nG1 X20 F600\n", "timing.gcode")
     first, second = result["segments"]
@@ -295,6 +309,51 @@ def test_idle_sample_closes_active_print_session(tmp_path) -> None:
     snapshot = timeline.snapshot()
     assert snapshot["active_session"] is None
     assert snapshot["sessions"][0]["ended_at"] == "2026-11-01T12:01:00+00:00"
+
+
+def test_stale_or_unknown_print_state_does_not_end_a_recorded_session(tmp_path) -> None:
+    timeline = MotionTimeline(tmp_path / "timeline.sqlite3")
+    timeline.record_snapshot(
+        {
+            "observed_at": "2026-11-01T12:00:00+00:00",
+            "connection": {"connected": True},
+            "stale": False,
+            "telemetry": {
+                "printer_state": {"value": "printing"},
+                "print_active": {"value": True, "status": "available"},
+                "current_file": {"value": "x.gcode", "status": "available"},
+                "progress_percent": {"value": 20, "status": "available"},
+            },
+        }
+    )
+    timeline.record_snapshot(
+        {
+            "observed_at": "2026-11-01T12:01:00+00:00",
+            "connection": {"connected": False},
+            "stale": True,
+            "telemetry": {
+                "printer_state": {"value": "idle"},
+                "print_active": {"value": False, "status": "available"},
+            },
+        }
+    )
+    timeline.record_snapshot(
+        {
+            "observed_at": "2026-11-01T12:02:00+00:00",
+            "connection": {"connected": True},
+            "stale": False,
+            "telemetry": {
+                "printer_state": {"value": "unknown", "status": "unavailable"},
+                "print_active": {"value": None, "status": "unavailable"},
+                "progress_percent": {"value": 25, "status": "available"},
+            },
+        }
+    )
+
+    snapshot = timeline.snapshot()
+    assert snapshot["active_session"] is not None
+    assert snapshot["active_session"]["ended_at"] is None
+    assert len(snapshot["telemetry"]) == 2
 
 
 def test_unmatched_active_filename_never_uses_an_unrelated_gcode_plan(tmp_path) -> None:

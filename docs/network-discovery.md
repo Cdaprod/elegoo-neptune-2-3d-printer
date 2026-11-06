@@ -65,3 +65,23 @@ from this public note. Automated tests use mocked endpoints.
   direct verification.
 - The server was stopped after the live check. Automated application tests use
   fake clients and a fake SD reader only; they never contact the printer.
+
+## Neptune Observatory live check (2026-11-05)
+
+- The deployed FastAPI health endpoint returned `ok`; the shared poller reported
+  a fresh MKS TCP connection. Telemetry reported idle, no active print, and
+  ambient nozzle/bed temperatures (25 °C, both targets 0 °C). These are
+  read-only observations; no printer state was changed.
+- A fresh `/api/printer/sdcard?refresh=true` request returned a complete
+  firmware `M20` root listing with 17 entries. The listing exposes filenames,
+  not file bytes or thumbnails.
+- A read-only HTTP `GET /api/files/sdcard` on port 80 returned `404`. A TCP
+  connect-only probe to port `11188` was refused. Together with the inspected
+  Makerbase source (where the OctoPrint-style file routes are disabled and no
+  listener is registered on the download-port constant), these checks found no
+  usable remote G-code read path on this device. This does not establish the
+  behavior of other MKS firmware builds.
+- The configured local G-code index reported its source unavailable; all 17
+  live SD entries were unmatched to cached local metadata and had no preview.
+  No upload, file selection, print, motion, heat, extrusion, or other
+  state-changing command was issued.

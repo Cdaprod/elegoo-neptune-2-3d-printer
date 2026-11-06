@@ -118,6 +118,23 @@
     .home-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
     .home-panel-head h2 { margin: 0; font-size: 14px; }
     .home-panel-link { border: 0; background: transparent; color: #9dcfff; cursor: pointer; font-size: 11px; }
+    .print-job-panel { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(220px,.9fr); gap:14px; }
+    .print-job-main { min-width:0; }
+    .print-job-state { display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:650; text-transform:capitalize; }
+    .print-job-state::before { content:""; width:8px; height:8px; border-radius:50%; background:#8290a2; }
+    .print-job-state[data-state="printing"]::before { background:var(--green); box-shadow:0 0 8px #46e58e80; }
+    .print-job-state[data-state="paused"]::before { background:var(--amber); }
+    .print-job-title { display:block; margin:7px 0 4px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
+    .print-job-progress { display:flex; gap:9px; align-items:center; margin:10px 0 5px; }
+    .print-job-progress progress { width:100%; min-width:0; height:8px; accent-color:var(--blue); }
+    .print-job-progress strong { flex:0 0 auto; font-size:11px; font-variant-numeric:tabular-nums; }
+    .print-job-meta { color:var(--muted); font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
+    .print-job-history { min-width:0; border-left:1px solid var(--line); padding-left:14px; }
+    .print-job-history h3 { margin:0 0 7px; color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.06em; }
+    .print-job-history-list { display:grid; gap:6px; max-height:110px; overflow:auto; overscroll-behavior:contain; }
+    .print-job-history-row { display:flex; justify-content:space-between; align-items:center; gap:8px; min-width:0; color:var(--muted); font-size:10px; }
+    .print-job-history-row strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:550; }
+    .print-job-history-row span { flex:0 0 auto; }
     .home-motion-values { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
     .home-motion-values span { color: var(--muted); font-size: 10px; }
     .home-motion-values strong { color: var(--text); font-size: 11px; }
@@ -162,8 +179,9 @@
     #view-overview.view.active { display: flex; flex-direction: column; gap: 14px; }
     #view-overview .section-grid { order: 1; margin-top: 0; }
     #view-overview .overview-metrics { order: 2; margin-top: 0; }
-    #view-overview .home-tools-grid { order: 3; }
-    #view-overview > article.home-panel { order: 4; }
+    #view-overview .print-job-panel { order: 3; }
+    #view-overview .home-tools-grid { order: 4; }
+    #view-overview > article.home-panel { order: 5; }
     .metric { padding: 15px 16px; display: flex; gap: 12px; align-items: center; min-height: 74px; }
     .metric svg { width: 23px; height: 23px; color: #b6c4d5; stroke: currentColor; fill: none; stroke-width: 1.8; flex: 0 0 auto; }
     .metric span { color: var(--muted); display: block; font-size: 10px; }
@@ -191,6 +209,30 @@
     tbody tr:hover { background: #16273a; }
     .file-name { display: flex; gap: 9px; align-items: center; min-width: 180px; }
     .file-name svg { width: 17px; height: 17px; color: var(--blue); stroke: currentColor; fill: none; stroke-width: 1.8; flex: 0 0 auto; }
+    .sd-preview-cell { width: 78px; padding: 6px 10px; }
+    .sd-preview, .sd-preview-empty { width: 58px; height: 44px; display: block; border: 1px solid #314a65; border-radius: 6px; background: #0b1725; object-fit: contain; }
+    .sd-preview-empty { display: grid; place-items: center; color: #8295aa; }
+    .sd-preview-empty svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .sd-file-row { cursor: pointer; }
+    .sd-file-row.selected { background: #173454; }
+    .sd-selected-preview { display:flex; align-items:center; gap:10px; margin-top:10px; color:var(--muted); font-size:11px; }
+    .sd-selected-preview img { width:82px; height:62px; object-fit:contain; border:1px solid #314a65; border-radius:7px; background:#0b1725; }
+    .sd-list-tools { display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid #23364c; }
+    .sd-list-tools input { flex:1; min-width:0; }
+    .sd-local-index { margin: 12px 14px; border: 1px solid #263e53; border-radius: 10px; padding: 10px 12px; }
+    .sd-local-index > summary { cursor:pointer; font-size:12px; font-weight:700; }
+    .sd-local-index .note { margin:8px 0; }
+    #sd-local-index-status { max-height:72px; overflow:auto; overflow-wrap:anywhere; }
+    #sd-local-index-pick { margin:0 0 9px; }
+    .sd-local-index-files { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+    .sd-local-file { display:grid; grid-template-columns:72px minmax(0,1fr); gap:9px; align-items:center; min-width:0; padding:8px; border:1px solid #263e53; border-radius:8px; background:#0b1725; }
+    .sd-local-file img,.sd-local-file .sd-preview-empty { width:68px; height:52px; }
+    .sd-local-file strong,.sd-local-file small { display:block; overflow-wrap:anywhere; }
+    .sd-local-file small { margin-top:3px; color:var(--muted); font-size:10px; line-height:1.4; }
+    .sd-picker { display:grid; gap:8px; min-width:0; }
+    .sd-picker select,.sd-picker input { width:100%; }
+    .sd-picker-preview { display:flex; align-items:center; gap:10px; min-height:62px; color:var(--muted); font-size:11px; }
+    .sd-picker-preview img { width:82px; height:62px; object-fit:contain; border:1px solid #314a65; border-radius:7px; background:#0b1725; }
     .muted { color: var(--muted); }
     .empty-row { text-align: center; color: var(--muted); padding: 30px 16px; }
     .note { color: var(--muted); font-size: 11px; line-height: 1.55; padding: 12px 17px; border-top: 1px solid #23364c; }
@@ -275,14 +317,18 @@
     .operation-card .btn { justify-content: center; width: 100%; margin-top: auto; }
     .operation-card .btn:disabled { cursor: not-allowed; opacity: .45; }
     .operation-card .btn.preview-btn:disabled { opacity: .75; }
-    .operation-inline-status { border: 1px solid #34536a; border-radius: 10px; padding: 10px; background: #0a1725; color: #d8e8f5; font-size: 11px; line-height: 1.45; }
+    .operation-inline-status { border: 1px solid #34536a; border-radius: 10px; padding: 10px; background: #0a1725; color: #d8e8f5; font-size: 11px; line-height: 1.45; display: grid; gap: 6px; width: 100%; max-width: 100%; min-width: 0; max-height: 190px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; overflow-wrap: anywhere; }
     .operation-inline-status[hidden] { display: none; }
-    .operation-inline-status pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b8e6ff; margin: 6px 0; }
+    .operation-inline-status p { margin: 0; }
+    .operation-inline-status pre { max-height: 105px; max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b8e6ff; margin: 6px 0 0; }
+    .operation-inline-status details { min-width: 0; max-width: 100%; border-top: 1px solid #263e53; padding-top: 6px; }
+    .operation-inline-status summary { color: #92c9e8; cursor: pointer; overflow-wrap: anywhere; }
+    .operation-inline-status .operation-result-lines { max-height: 85px; max-width: 100%; overflow: auto; display: grid; gap: 3px; margin-top: 6px; }
     .operation-inline-status .inline-observation { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
     .operation-inline-status .inline-observation .btn { width: auto; min-height: 34px; margin: 0; }
-    .execute-command-box { margin: 12px 0; padding: 11px; border: 1px solid #314961; border-radius: 10px; background: #0a1523; }
+    .execute-command-box { min-width: 0; max-width: 100%; margin: 12px 0; padding: 11px; border: 1px solid #314961; border-radius: 10px; background: #0a1523; overflow: hidden; }
     .execute-command-box strong { display: block; margin-bottom: 6px; font-size: 12px; }
-    .execute-command-box pre { margin: 0; color: #b8e6ff; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+    .execute-command-box pre { max-height: min(32vh, 220px); margin: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; color: #b8e6ff; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
     .preview-panel { display: grid; gap: 13px; }
     .preview-summary { padding: 15px; }
     .preview-summary h3 { margin: 0 0 5px; font-size: 16px; }
@@ -372,6 +418,9 @@
       .metric strong { font-size: 11px; }
       .metric span { font-size: 9px; }
       .overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .print-job-panel { grid-template-columns:minmax(0,1fr); gap:10px; }
+      .print-job-history { border-left:0; border-top:1px solid var(--line); padding:9px 0 0; }
+      .print-job-history-list { max-height:88px; }
       .view-heading { align-items: flex-start; flex-direction: column; margin: 4px 0 13px; }
       .view-heading .btn, .view-heading .range { align-self: flex-end; }
       .temp-pair { gap: 8px; }
@@ -394,6 +443,9 @@
       .operation-card h3 { font-size: 12px; }
       .operation-card p { min-height: 0; font-size: 11px; }
       .operation-card .btn { min-height: 38px; padding: 8px; }
+      .operation-inline-status { max-height: 150px; padding: 8px; }
+      .operation-inline-status pre { max-height: 78px; }
+      .operation-inline-status .operation-result-lines { max-height: 64px; }
       #execute-dialog { width: min(94vw, 520px); max-height: 88dvh; overflow-y: auto; }
       #execute-form { gap: 10px; }
       #execute-form .dialog-actions { position: sticky; bottom: 0; padding: 8px 0 0; background: var(--panel); }
@@ -456,6 +508,15 @@
           <article class="card metric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><span>Poll latency</span><strong id="metric-latency">—</strong></div></article>
           <article class="card metric"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg><div><span>Sample age</span><strong id="metric-age">—</strong></div></article>
         </div>
+        <article class="card home-panel print-job-panel" aria-label="Print job tracking">
+          <div class="print-job-main"><div class="home-panel-head"><h2>Print Job</h2><button class="home-panel-link" data-open-view="sdcard">Open SD Card ↗</button></div>
+            <span id="overview-job-state" class="print-job-state" data-state="unavailable">Waiting for printer status</span>
+            <strong id="overview-job-filename" class="print-job-title">No active file reported</strong>
+            <div id="overview-job-progress-wrap" class="print-job-progress" hidden><progress id="overview-job-progress" max="100" value="0" aria-label="Firmware-reported print progress"></progress><strong id="overview-job-progress-label">—</strong></div>
+            <div id="overview-job-meta" class="print-job-meta">Job state and progress appear here when reported by MKS telemetry.</div>
+          </div>
+          <div class="print-job-history"><h3>Recent server-recorded jobs</h3><div id="overview-job-history" class="print-job-history-list" aria-live="polite"><span class="muted">No print sessions recorded yet.</span></div></div>
+        </article>
         <div class="grid home-tools-grid">
           <article class="card home-panel"><div class="home-panel-head"><h2>Motion Telemetry</h2><button class="home-panel-link" data-open-view="motion">Open Motion ↗</button></div><div id="home-motion-values" class="home-motion-values"><span>X <strong>—</strong></span><span>Y <strong>—</strong></span><span>Z <strong>—</strong></span><span>E <strong>—</strong></span></div><div class="home-motion-chart"><canvas id="chart-home-motion" aria-label="Firmware-reported or planned coordinate history; sources are labeled separately"></canvas><div class="chart-empty visible" id="empty-home-motion">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note" id="home-motion-note">M114 coordinates are unavailable from the current printer response.</div><div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span></div><div class="home-feedrate-chart"><canvas id="chart-home-feedrate" aria-label="Shared axis-specific planned feedrate over time; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-home-feedrate">Waiting for motion timeline</div></div><div class="note">Feedrate is planned or estimated from G-code and acknowledged dashboard moves; motor speed is not reported by this firmware.</div><div class="reference-events" id="home-motion-events" aria-live="polite"></div></article>
           <article class="card home-panel"><div class="home-panel-head"><h2>Digital Twin</h2><button class="home-panel-link" data-open-view="digital-twin">Open Twin ↗</button></div><div class="home-twin-canvas" id="home-twin"><div class="chart-empty visible">Loading local 3D preview…</div></div><div class="twin-status-row"><span class="twin-status-chip" id="home-twin-state">Printer · waiting</span><span class="twin-status-chip" id="home-twin-nozzle">Nozzle · —</span><span class="twin-status-chip" id="home-twin-bed">Bed · —</span><span class="twin-status-chip" id="home-twin-position">Toolhead · illustrative</span><span class="twin-status-chip" id="home-twin-progress">Progress unavailable</span></div><div class="note">Schematic Neptune 2 kinematics · operator-observed references are distinguished from measured position</div><div class="note" id="home-twin-action">Last machine action · none recorded</div></article>
@@ -549,7 +610,7 @@
 
       <section class="view" id="view-sdcard" aria-label="SD card root listing">
         <div class="view-heading"><div><h1>SD Card</h1><p>Read-only root directory listing from the printer.</p></div><button class="btn" id="refresh-sd"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3"/></svg>Refresh listing</button></div>
-        <article class="card sd-card"><div class="sd-top"><h2 class="card-title">Root directory</h2><span id="sd-count" class="muted" style="font-size:11px">Not requested</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Size</th></tr></thead><tbody id="sd-rows"><tr><td colspan="3" class="empty-row">Select refresh to request a read-only M20 listing.</td></tr></tbody></table></div><div id="sd-note" class="note">The listing cannot retrieve file contents. Refreshing sends one fixed, read-only M20 command.</div><div class="preview-actions sd-control-actions"><label>Selected file <strong id="sd-selected-file">None</strong></label><button class="btn" data-sd-macro="start_sd_print" type="button" disabled>Preview print start</button><button class="btn" data-sd-macro="pause_print" type="button">Preview pause</button><button class="btn" data-sd-macro="resume_print" type="button">Preview resume</button><button class="btn" data-sd-macro="cancel_print" type="button">Preview cancel</button></div><div class="note">These open the same guarded command previews and confirmation path as Machine Control. No SD operation is sent from this page without the separate armed-session and exact confirmation checks.</div><div class="sd-upload"><h3>Wireless G-code upload</h3><p id="sd-upload-status" class="note">Makerbase source documents a raw /upload route; this printer’s installed firmware has not been verified. Upload stays disabled by default.</p><input id="sd-upload-file" type="file" accept=".gcode,.gco,.gc"><button class="btn" id="sd-upload-start" type="button" disabled>Upload unavailable · server gate off</button><progress id="sd-upload-progress" max="100" value="0" hidden></progress></div></article>
+        <article class="card sd-card"><div class="sd-top"><h2 class="card-title">Root directory</h2><span id="sd-count" class="muted" style="font-size:11px">Not requested</span></div><div class="sd-list-tools"><input id="sd-search" type="search" placeholder="Search listed files…" aria-label="Search SD card files"><span class="muted" id="sd-search-count"></span></div><div class="table-scroll"><table><thead><tr><th>Preview</th><th>Name</th><th>Type</th><th>Size</th></tr></thead><tbody id="sd-rows"><tr><td colspan="4" class="empty-row">Select refresh to request a read-only M20 listing.</td></tr></tbody></table></div><div id="sd-note" class="note">M20 reports printer filenames. Local thumbnail and G-code metadata are shown separately from printer listing status.</div><details class="sd-local-index"><summary id="sd-local-index-summary">OrcaSlicer export folder · cached previews</summary><p id="sd-local-index-status" class="note">Point Observatory at a fixed OrcaSlicer export folder to keep the printer SD card installed.</p><button class="btn" id="sd-local-index-pick" type="button">Choose an Orca export to cache its preview</button><div id="sd-local-index-files" class="sd-local-index-files"></div></details><div class="preview-actions sd-control-actions"><label>Selected file <strong id="sd-selected-file">None</strong></label><button class="btn" data-sd-macro="start_sd_print" type="button" disabled>Preview print start</button><button class="btn" data-sd-macro="print_first_layer_sd" type="button" disabled>Preview first-layer-only print</button><button class="btn" data-sd-macro="pause_print" type="button">Preview pause</button><button class="btn" data-sd-macro="resume_print" type="button">Preview resume</button><button class="btn" data-sd-macro="cancel_print" type="button">Preview cancel</button></div><div class="note">The first-layer action can select any live-listed file, but requires explicit confirmation that the exact file contains only the intended first layer. M20 cannot inspect G-code contents, and Observatory cannot stop a full multi-layer file at layer one.</div><div class="sd-upload"><h3>Orca export preview / wireless upload</h3><p id="sd-upload-status" class="note">Choose an OrcaSlicer export below to cache its preview. Printer upload is a separate function and stays disabled until enabled in server configuration.</p><input id="sd-upload-file" type="file" accept=".gcode,.gco,.gc" aria-label="Choose an OrcaSlicer G-code export for preview or upload"><div class="sd-selected-preview" id="sd-selected-preview"><span id="sd-selected-preview-note">Selecting a file caches only its embedded thumbnail; it does not send the G-code to the printer.</span></div><button class="btn" id="sd-upload-start" type="button" disabled>Upload unavailable · server gate off</button><progress id="sd-upload-progress" max="100" value="0" hidden></progress></div></article>
       </section>
 
       <section class="view" id="view-diagnostics" aria-label="Connection diagnostics">
@@ -572,7 +633,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <dialog id="auth-dialog"><form id="auth-form"><h2>Local access token</h2><p>This dashboard is in LAN mode. Enter the token configured on the Mac to open a temporary local session.</p><label for="auth-token">Access token</label><input id="auth-token" type="password" autocomplete="current-password" required><div class="dialog-actions"><button class="btn" type="submit">Connect dashboard</button></div></form></dialog>
   <dialog id="macro-dialog"><form id="macro-form"><h2 id="macro-dialog-title">Review operation</h2><p id="macro-dialog-description"></p><div id="macro-parameters" class="preview-form"></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-macro">Cancel</button><button class="btn" type="submit">Review exact commands</button></div></form></dialog>
-  <dialog id="execute-dialog"><form id="execute-form"><h2 id="execute-title">Confirm machine operation</h2><p id="execute-description">Review the exact operation before continuing.</p><div class="execute-command-box"><strong>Exact command sequence</strong><pre id="execute-commands"></pre></div><p id="execute-readiness" class="disabled-note"></p><ul id="execute-requirements" class="workflow-list"></ul><label id="execute-clear-path-label" style="display:flex;gap:8px;align-items:flex-start"><input id="execute-clear-path" type="checkbox" style="width:auto;margin:0">The axis travel path is clear.</label><label id="execute-axis-home-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-axis-home" type="checkbox" style="width:auto;margin:0"><span id="execute-axis-home-text"></span></label><label id="execute-gantry-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-gantry-supported" type="checkbox" style="width:auto;margin:0">The gantry is mechanically supported before motor release.</label><div id="execute-guided-workflow" class="guided-session" hidden></div><div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong>Physical completion is reported only when evidence exists</strong>A transport acknowledgment is a controller reply, not a position measurement. Cancellation is not an emergency stop.</div></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-execute">Back</button><button class="btn" type="button" id="execute-start-guided" hidden>Open guided steps</button><button class="btn" type="button" id="execute-arm-inline" hidden>Arm Operator Mode</button><button class="btn primary" type="submit" id="confirm-execute">Run action</button></div></form></dialog>
+  <dialog id="execute-dialog"><form id="execute-form"><h2 id="execute-title">Confirm machine operation</h2><p id="execute-description">Review the exact operation before continuing.</p><div class="execute-command-box"><strong>Exact command sequence</strong><pre id="execute-commands"></pre></div><p id="execute-readiness" class="disabled-note"></p><ul id="execute-requirements" class="workflow-list"></ul><label id="execute-clear-path-label" style="display:flex;gap:8px;align-items:flex-start"><input id="execute-clear-path" type="checkbox" style="width:auto;margin:0">The axis travel path is clear.</label><label id="execute-first-layer-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-first-layer-confirmed" type="checkbox" style="width:auto;margin:0">I reviewed this exact G-code file and confirm it contains only the intended first layer. The M20 listing cannot verify its contents.</label><label id="execute-axis-home-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-axis-home" type="checkbox" style="width:auto;margin:0"><span id="execute-axis-home-text"></span></label><label id="execute-gantry-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-gantry-supported" type="checkbox" style="width:auto;margin:0">The gantry is mechanically supported before motor release.</label><div id="execute-guided-workflow" class="guided-session" hidden></div><div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong>Physical completion is reported only when evidence exists</strong>A transport acknowledgment is a controller reply, not a position measurement. Cancellation is not an emergency stop.</div></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-execute">Back</button><button class="btn" type="button" id="execute-start-guided" hidden>Open guided steps</button><button class="btn" type="button" id="execute-arm-inline" hidden>Arm Operator Mode</button><button class="btn primary" type="submit" id="confirm-execute">Run action</button></div></form></dialog>
   <dialog id="arm-dialog"><form id="arm-form"><h2>Arm Operator Mode</h2><p>Uses your existing dashboard sign-in; no separate control credential is needed. Operator Mode stays armed until you disarm it or the service restarts. Each action still requires an explicit confirmation and fresh safety checks.</p><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-attended" type="checkbox" required style="width:auto;margin:0">I am physically beside and monitoring the printer.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-power-switch" type="checkbox" required style="width:auto;margin:0">The printer power switch is within reach.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-no-clients" type="checkbox" required style="width:auto;margin:0">Other printer clients are disconnected.</label><div class="dialog-actions"><button class="btn" type="button" id="cancel-arm">Cancel</button><button class="btn primary" type="submit" id="confirm-arm">Arm Operator Mode</button></div></form></dialog>
   <dialog id="motion-query-dialog"><form id="motion-query-form"><h2>Read-only position query</h2><p>This sends exactly one <code>M114</code> and reads the firmware's reported position. It does not move or home axes, but support on this firmware is still unverified.</p><label for="motion-query-confirmation">Type M114 exactly</label><input id="motion-query-confirmation" autocomplete="off" required><div class="dialog-actions"><button class="btn" type="button" id="cancel-motion-query">Cancel</button><button class="btn primary" type="submit" id="submit-motion-query">Request position sample</button></div></form></dialog>
   <dialog id="sd-upload-dialog"><form id="sd-upload-form"><h2>Upload G-code to printer SD</h2><p>This writes one file to the printer over its MKS WiFi HTTP endpoint. The installed firmware’s upload support is not verified. Do not upload while printing. After an HTTP response, refresh M20 and verify the file; do not assume transfer completion.</p><label for="sd-upload-confirmation">Type the exact phrase shown</label><input id="sd-upload-confirmation" autocomplete="off" required><label><input type="checkbox" id="sd-upload-attended" required> I am beside the printer.</label><label><input type="checkbox" id="sd-upload-switch" required> The power switch is reachable.</label><label><input type="checkbox" id="sd-upload-clients" required> Other printer clients are disconnected.</label><div class="dialog-actions"><button class="btn" type="button" id="sd-upload-cancel">Cancel</button><button class="btn primary" type="submit" id="sd-upload-submit">Confirm upload</button></div></form></dialog>
@@ -582,6 +643,10 @@
       const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null };
       let twinModulePromise = null;
       const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+      const commandSummary = (commands, limit = 2) => {
+        const list = Array.isArray(commands) ? commands : [];
+        return list.slice(0, limit).join(" → ") + (list.length > limit ? ` · +${list.length - limit} more` : "");
+      };
       const fmtTemp = (reading) => reading && reading.status === "available" && Number.isFinite(reading.value) ? `${Number(reading.value).toFixed(1)} °C` : "—";
       const fmtTarget = (reading) => reading && reading.status === "available" && Number.isFinite(reading.target_c) ? `Target ${Number(reading.target_c).toFixed(1)} °C` : "Target —";
       const timeText = (value) => value ? new Date(value).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "—";
@@ -640,6 +705,7 @@
         if (button.dataset.view === "diagnostics") loadDiagnostics();
         if (button.dataset.view === "machine") loadCatalog();
         if (button.dataset.view === "motion") loadMotion();
+        if (button.dataset.view === "sdcard") loadSdCard();
         if (button.dataset.view === "digital-twin") loadDigitalTwin();
         if (button.dataset.view === "overview") maybeLoadTwinPreview();
         drawCharts();
@@ -771,6 +837,7 @@
               clear_travel_path: $("execute-clear-path").checked,
               axis_at_home: $("execute-axis-home").checked,
               retreat_from_home: Boolean(pending.retreat_from_home),
+              first_layer_contents_confirmed: $("execute-first-layer-confirmed").checked,
               mode: pending.commissioning ? "commissioning" : "operator",
               commissioning: Boolean(pending.commissioning),
               gantry_supported: $("execute-gantry-supported").checked,
@@ -829,6 +896,10 @@
             showToast(error.message);
           }
         };
+        const needsFirstLayerConfirmation = macro.id === "print_first_layer_sd";
+        $("execute-first-layer-label").hidden = !needsFirstLayerConfirmation;
+        $("execute-first-layer-confirmed").required = needsFirstLayerConfirmation;
+        $("execute-first-layer-confirmed").checked = false;
         const needsGantrySupport = macro.id === "motors_disable";
         $("execute-gantry-label").hidden = !needsGantrySupport;
         $("execute-gantry-supported").required = needsGantrySupport;
@@ -857,9 +928,18 @@
         const card = [...document.querySelectorAll(".operation-card[data-macro-id]")].find((item) => item.dataset.macroId === operation.macro_id);
         const host = card?.querySelector("[data-operation-status]");
         if (!host) return;
+        const detailsWereOpen = Boolean(host.querySelector("details")?.open);
         host.hidden = false;
-        const results = (operation.command_results || []).map((result) => `<div><strong>${esc(result.command)}</strong> · ${esc(result.state.replaceAll("_", " "))}${result.acknowledgment ? ` · ${esc(result.acknowledgment)}` : ""}${result.error ? ` · ${esc(result.error)}` : ""}</div>`).join("");
-        const commandText = (operation.commands || []).map(esc).join("\n");
+        const commands = operation.commands || [];
+        const commandResults = operation.command_results || [];
+        const acknowledged = commandResults.filter((result) => result.state === "transport_acknowledged").length;
+        const failed = commandResults.filter((result) => ["failed", "rejected", "transport_error"].includes(result.state)).length;
+        const commandPreview = commandSummary(commands);
+        const resultSummary = commandResults.length
+          ? `${commandResults.length} step${commandResults.length === 1 ? "" : "s"} · ${acknowledged} acknowledged${failed ? ` · ${failed} failed` : ""}`
+          : "Command details available below";
+        const commandText = commands.map(esc).join("\n");
+        const results = commandResults.map((result) => `<div><strong>${esc(result.command)}</strong> · ${esc(result.state.replaceAll("_", " "))}${result.acknowledgment ? ` · ${esc(result.acknowledgment)}` : ""}${result.error ? ` · ${esc(result.error)}` : ""}</div>`).join("");
         const evidence = operation.physical_completion_confirmed
           ? "Physical result observed"
           : operation.state === "transport_acknowledged"
@@ -868,7 +948,11 @@
         const temps=(sample)=>{const nozzle=sample?.nozzle_temperature?.value,bed=sample?.bed_temperature?.value;return Number.isFinite(nozzle)||Number.isFinite(bed)?`Nozzle ${Number.isFinite(nozzle)?`${Number(nozzle).toFixed(1)} °C`:"—"} · bed ${Number.isFinite(bed)?`${Number(bed).toFixed(1)} °C`:"—"}`:"";};
         const temperatureLine=operation.telemetry_after?`<p>Latest temperatures after reply · ${esc(temps(operation.telemetry_after))}</p>`:"";
         const estimateLine=Number.isFinite(operation.proposed_position_mm)?`<p>${esc(operation.planned_axis.toUpperCase())} position estimate · ${Number(operation.proposed_position_mm).toFixed(1)} mm · command-derived</p>`:"";
-        host.innerHTML = `<strong>${esc(operation.state.replaceAll("_", " "))}</strong><pre>${commandText}</pre>${results}<p>${evidence}</p>${temperatureLine}${estimateLine}`;
+        const details = commands.length || results
+          ? `<details><summary>View command details · ${commands.length} command${commands.length === 1 ? "" : "s"} · ${esc(resultSummary)}</summary>${commands.length ? `<pre>${commandText}</pre>` : ""}${results ? `<div class="operation-result-lines">${results}</div>` : ""}</details>`
+          : "";
+        host.innerHTML = `<strong>${esc(operation.state.replaceAll("_", " "))}${commands.length ? ` · ${commands.length} commands` : ""}</strong>${commandPreview ? `<p>${esc(commandPreview)}</p>` : ""}<p>${esc(evidence)}</p>${temperatureLine}${estimateLine}${details}`;
+        if (detailsWereOpen) host.querySelector("details")?.setAttribute("open", "");
       }
       function renderOperation(operation) { renderOperationInline(operation); }
       async function pollOperation(operationId) {
@@ -921,8 +1005,40 @@
         document.querySelectorAll("[data-motion-range]").forEach((button)=>button.classList.toggle("active",Number(button.dataset.motionRange)===minutes));
         $("overview-range-label").textContent=`· last ${minutes} min`;drawCharts();
       }
+      function renderPrintJob(snapshot) {
+        const job=snapshot?.print_job||{};
+        const fresh=job.status!=="stale"&&job.status!=="unavailable";
+        const stateLabels={printing:"Printing · firmware reported",paused:"Paused · firmware reported",idle:"No active print",stale:"Printer status stale",unavailable:"Printer status unavailable",unknown:"Print state not reported"};
+        const stateNode=$("overview-job-state");
+        stateNode.textContent=stateLabels[job.status]||stateLabels.unknown;
+        stateNode.dataset.state=job.status||"unknown";
+        const file=job.filename||{};
+        const name=file.value&&file.status!=="unavailable"?String(file.value):null;
+        $("overview-job-filename").textContent=name||(job.status==="printing"||job.status==="paused"?"Active file name not reported":"No active file reported");
+        const progress=job.progress_percent||{};
+        const progressValue=Number(progress.value);
+        const progressKnown=progress.status==="available"||progress.status==="stale";
+        const showProgress=(job.status==="printing"||job.status==="paused"||job.status==="stale")&&progressKnown&&Number.isFinite(progressValue)&&progressValue>=0&&progressValue<=100;
+        $("overview-job-progress-wrap").hidden=!showProgress;
+        if(showProgress){$("overview-job-progress").value=progressValue;$("overview-job-progress-label").textContent=`${progressValue.toFixed(1)}%${progress.status==="stale"?" · last report":""}`;}
+        const elapsed=job.elapsed_seconds||{};
+        const details=[];
+        if(elapsed.status==="available"||elapsed.status==="stale")details.push(`Elapsed ${duration(Number(elapsed.value))}${elapsed.status==="stale"?" · last report":""}`);
+        details.push(fresh?(job.source||"MKS read-only telemetry"):"Last telemetry is retained for display only; it does not establish the current printer state.");
+        $("overview-job-meta").textContent=details.join(" · ");
+        const sessions=job.recent_sessions||[];
+        const rows=$("overview-job-history");
+        if(!sessions.length){rows.innerHTML='<span class="muted">No print sessions recorded yet. Recording follows the backend telemetry poll.</span>';return;}
+        rows.innerHTML=sessions.slice(0,4).map((session)=>{
+          const label=session.filename||"Filename unavailable";
+          const state=String(session.state||"unknown").replaceAll("_"," ");
+          const date=session.started_at?new Date(session.started_at).toLocaleDateString([], {month:"short",day:"numeric"}):"—";
+          return `<div class="print-job-history-row" title="${esc(label)} · ${esc(state)} · ${esc(session.started_at||"")}"><strong>${esc(label)}</strong><span>${esc(state)} · ${esc(date)}</span></div>`;
+        }).join("");
+      }
       function connectionView(snapshot) {
         state.snapshot = snapshot;
+        renderPrintJob(snapshot);
         renderFeedSessionOptions();
         renderCommandActivity(snapshot.command_activity);
         renderMotion(snapshot.motion || {enabled:false,status:"disabled",history:[]});
@@ -940,7 +1056,7 @@
         for (const id of ["home-twin-bed", "full-twin-bed"]) if ($(id)) $(id).textContent = bedText;
         const lastAction=(snapshot.command_activity?.operations||[]).slice().sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0))[0];
         const latestStateEvent=snapshot.timeline?.machine_state_events?.[0];
-        const actionText=latestStateEvent?`Latest observed state change · ${latestStateEvent.kind.replaceAll("_"," ")} · ${latestStateEvent.data_class==="external_state_change_inferred"?"unmatched source · may be TFT or another path":"MKS telemetry"} · ${timeText(latestStateEvent.observed_at)}`:lastAction?`Last machine action · ${lastAction.macro_id.replaceAll("_"," ")} · ${(lastAction.commands||[]).join(" → ")} · ${lastAction.operator_observation==="operator_reported_external_tft_homing"?"TFT home separately reported":lastAction.physical_completion_confirmed?"operator observed":"transport result only"} · position is displayed separately`:`Last machine action · none recorded`;
+        const actionText=latestStateEvent?`Latest observed state change · ${latestStateEvent.kind.replaceAll("_"," ")} · ${latestStateEvent.data_class==="external_state_change_inferred"?"unmatched source · may be TFT or another path":"MKS telemetry"} · ${timeText(latestStateEvent.observed_at)}`:lastAction?`Last machine action · ${lastAction.macro_id.replaceAll("_"," ")} · ${commandSummary(lastAction.commands)} · ${lastAction.operator_observation==="operator_reported_external_tft_homing"?"TFT home separately reported":lastAction.physical_completion_confirmed?"operator observed":"transport result only"} · position is displayed separately`:`Last machine action · none recorded`;
         for(const id of ["home-twin-action","full-twin-action"])if($(id))$(id).textContent=actionText;
         const position = snapshot.motion?.latest?.axes;
         const hasPosition = Boolean(snapshot.motion?.latest?.fresh && position?.x?.status === "available" && position?.y?.status === "available" && position?.z?.status === "available");
@@ -1094,7 +1210,7 @@
         if(planned.length&&!latest?.fresh)$("home-motion-note").textContent="Dashed command/G-code paths are planned estimates and do not confirm actual movement.";
         // Chart renderers own the range-aware empty state. Discrete references
         // and acknowledgments are not coordinate samples.
-        const referenceMarkup=[...observedReferences.map(([axis,reference])=>`<span class="reference-event">${axis.toUpperCase()} home · operator recorded<small>${reference.reference_observation.kind==="operator_reported_external_homing_reference"?"Stock touchscreen · ":"Dashboard operation · "}${reference.reference_observation.observed_at?esc(timeText(reference.reference_observation.observed_at)):"time unavailable"} · reference only, no path samples</small></span>`),...operationEvents.map((event)=>`<span class="reference-event">${esc((event.macro_id||"motion").replaceAll("_"," "))} · ${esc((event.state||"unknown").replaceAll("_"," "))}<small>${esc((event.commands||[]).join(" → "))} · ${event.operator_observation==="operator_reported_external_tft_homing"?"separate TFT home reported":event.physical_completion_confirmed?"operator observed":"acknowledgment only"} · ${event.timestamp_precision==="approximate"?"approx. ":""}${esc(timeText(event.updated_at||event.created_at))}</small></span>`)].join("");
+        const referenceMarkup=[...observedReferences.map(([axis,reference])=>`<span class="reference-event">${axis.toUpperCase()} home · operator recorded<small>${reference.reference_observation.kind==="operator_reported_external_homing_reference"?"Stock touchscreen · ":"Dashboard operation · "}${reference.reference_observation.observed_at?esc(timeText(reference.reference_observation.observed_at)):"time unavailable"} · reference only, no path samples</small></span>`),...operationEvents.map((event)=>`<span class="reference-event">${esc((event.macro_id||"motion").replaceAll("_"," "))} · ${esc((event.state||"unknown").replaceAll("_"," "))}<small>${esc(commandSummary(event.commands))} · ${event.operator_observation==="operator_reported_external_tft_homing"?"separate TFT home reported":event.physical_completion_confirmed?"operator observed":"acknowledgment only"} · ${event.timestamp_precision==="approximate"?"approx. ":""}${esc(timeText(event.updated_at||event.created_at))}</small></span>`)].join("");
         for(const id of ["home-motion-events","motion-reference-events"]){const target=$(id);if(target)target.innerHTML=referenceMarkup;}
         const hasGcodePlan=planned.some((row)=>row.source==="uploaded_gcode_plan"),hasCommandPath=planned.some((row)=>row.source==="commanded_operation"),hasProgress=Boolean(progressPosition);
         $("motion-connection").textContent=state.snapshot?.connection?.connected ? (state.snapshot.stale?"Connected · stale":"Connected · live") : "Printer disconnected";
@@ -1200,7 +1316,7 @@
         const events=[...operationEvents.map((event)=>({observed_at:event.updated_at||event.created_at,axis:(event.planned_axis||event.macro_id?.match(/(?:jog|home)_([xyz])/i)?.[1]||"—").toUpperCase(),label:(event.macro_id||"Machine action").replaceAll("_"," "),distance:Number.isFinite(event.distance_mm)?`${Number(event.distance_mm).toFixed(2)} mm`:"distance unavailable",feed:Number.isFinite(event.feed_mm_min)?`${Number(event.feed_mm_min)} mm/min`:"feedrate unavailable",source:"Dashboard",evidence:event.physical_completion_confirmed?"operator observed":event.transport_acknowledged?"transport acknowledged":"requested",commands:event.commands||[]})),...stateEvents.map((event)=>({observed_at:event.observed_at,axis:event.kind.includes("nozzle")?"T":event.kind.includes("bed")?"B":"—",label:event.kind.replaceAll("_"," "),distance:event.details?.previous!==undefined?`${event.details.previous} → ${event.details.value}`:"—",feed:event.details?.field||"—",source:event.source==="unmatched_telemetry_change"?"Unmatched telemetry":"MKS telemetry",evidence:event.data_class==="external_state_change_inferred"?"external change inferred":"firmware state observed",commands:[]})),...refs];
         events.sort((a,b)=>Date.parse(b.observed_at||0)-Date.parse(a.observed_at||0));
         if(!events.length){target.innerHTML='<div class="disabled-note">No motion or observed state changes in the retained timeline. This firmware does not report TFT-originated axis moves or extrusion commands.</div>';return;}
-        target.innerHTML=events.slice(0,30).map((event)=>{const commands=event.commands?.length?` · ${event.commands.map((command)=>String(command).slice(0,48)).join(" → ")}`:"";return `<div class="activity-row"><span class="activity-axis">${esc(event.axis)}</span><div class="activity-detail">${esc(event.label)}${esc(commands)}<small>${esc(event.distance)} · ${esc(event.feed)} · ${esc(event.source)} · ${esc(timeText(event.observed_at))}</small></div><span class="activity-evidence">${esc(event.evidence)}</span></div>`;}).join("");
+        target.innerHTML=events.slice(0,30).map((event)=>{const commands=event.commands?.length?` · ${commandSummary(event.commands)}`:"";return `<div class="activity-row"><span class="activity-axis">${esc(event.axis)}</span><div class="activity-detail">${esc(event.label)}${esc(commands)}<small>${esc(event.distance)} · ${esc(event.feed)} · ${esc(event.source)} · ${esc(timeText(event.observed_at))}</small></div><span class="activity-evidence">${esc(event.evidence)}</span></div>`;}).join("");
       }
       function drawMotionCharts() { drawMotionPosition();drawMotionPosition("chart-home-motion","empty-home-motion");drawMotionFeedrate("chart-motion-feedrate","empty-motion-feedrate");drawMotionFeedrate("chart-home-feedrate","empty-home-feedrate",true);renderMotionActivity(); }
       function drawCharts() { drawChart($("chart-overview"),"empty-overview"); drawChart($("chart-temperature"),"empty-temperature"); drawMotionCharts(); }
@@ -1304,7 +1420,14 @@
         renderCapabilityList(latest.capabilities);
         await refreshSdUploadStatus();
       }
-      function openMacroDialog(macro, commissioning = false, originCard = null) {
+      async function openMacroDialog(macro, commissioning = false, originCard = null) {
+        if (macro.parameters?.some((parameter) => parameter.kind === "file")) {
+          try {
+            const listing=await api("/api/printer/sdcard?refresh=true");
+            renderSd(listing);
+            if(listing.status!=="available") throw new Error(listing.error||"The printer did not return a complete M20 listing.");
+          } catch(error) { showToast(`Could not refresh SD files: ${error.message}`); return; }
+        }
         state.pendingMacro = macro;
         state.pendingCommissioning = commissioning;
         state.pendingOriginCard = originCard || null;
@@ -1317,6 +1440,11 @@
           $("macro-dialog").showModal(); return;
         }
         for (const parameter of macro.parameters) {
+          if(parameter.kind==="file"){
+            const picker=document.createElement("div");picker.className="sd-picker";
+            const label=document.createElement("label");label.textContent=`${parameter.label} · exact name from current M20 listing`;
+            picker.append(label);renderSdPicker(picker,state.selectedSdFile);fields.append(picker);continue;
+          }
           const label = document.createElement("label"); label.textContent = parameter.label;
           const input = document.createElement(parameter.kind === "select" || parameter.kind === "file" ? "select" : "input");
           input.id = `parameter-${parameter.name}`;
@@ -1389,7 +1517,7 @@
           const data = await api("/api/control/audit"); const target = $("command-audit");
           if (!target) return;
           const operationRows = (data.operations || []).slice().reverse().slice(0, 12).map((item) =>
-            `<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc((item.commands||[]).join(" → "))}</span><strong>${esc(item.state.replaceAll("_", " "))}${item.transport_acknowledged?" · transport acknowledged":""}${item.physical_completion_confirmed?" · operator observed":""}${item.operator_observation==="operator_reported_external_tft_homing"?" · separate TFT homing reported":""}${item.error ? ` · ${esc(item.error)}` : ""}</strong></div>`
+            `<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc(commandSummary(item.commands))}</span><strong>${esc(item.state.replaceAll("_", " "))}${item.transport_acknowledged?" · transport acknowledged":""}${item.physical_completion_confirmed?" · operator observed":""}${item.operator_observation==="operator_reported_external_tft_homing"?" · separate TFT homing reported":""}${item.error ? ` · ${esc(item.error)}` : ""}</strong></div>`
           );
           const eventRows = (data.entries || []).slice().reverse().slice(0, 12).map((item) =>
             `<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)}</span><strong>${esc(item.result.replaceAll("_", " "))}${item.error ? ` · ${esc(item.error)}` : ""}</strong></div>`
@@ -1400,27 +1528,115 @@
       }
       function renderCommandActivity(activity) {
         const target=$("command-audit"); if(!target||!activity)return;
-        const operations=(activity.operations||[]).slice().reverse().slice(0,8).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc((item.commands||[]).join(" → "))}</span><strong>${esc((item.state||"unknown").replaceAll("_"," "))}${item.transport_acknowledged?" · ack":""}${item.physical_completion_confirmed?" · observed":""}${item.error?` · ${esc(item.error)}`:""}</strong></div>`);
+        const operations=(activity.operations||[]).slice().reverse().slice(0,8).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)} · ${esc(commandSummary(item.commands))}</span><strong>${esc((item.state||"unknown").replaceAll("_"," "))}${item.transport_acknowledged?" · ack":""}${item.physical_completion_confirmed?" · observed":""}${item.error?` · ${esc(item.error)}`:""}</strong></div>`);
         const events=(activity.events||[]).slice().reverse().slice(0,5).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.created_at))} · ${esc(item.macro_id)}</span><strong>${esc(item.result.replaceAll("_"," "))}${item.error?` · ${esc(item.error)}`:""}</strong></div>`);
         const observed=(state.snapshot?.timeline?.machine_state_events||[]).slice(0,6).map((item)=>`<div class="diag-item"><span>${esc(timeText(item.observed_at))} · ${esc(item.kind.replaceAll("_"," "))}</span><strong>${esc(item.data_class.replaceAll("_"," "))}${item.data_class==="external_state_change_inferred"?" · source unknown":" · MKS telemetry"}</strong></div>`);
         target.innerHTML=[...operations,...observed,...events].join("")||'<div class="disabled-note">No machine actions or observed state changes recorded.</div>';
       }
       async function loadDiagnostics() { try { state.diagnostics=await api("/api/diagnostics"); const d=state.diagnostics; $("metric-latency").textContent=d.latency_last_ms==null?"—":`${Math.round(d.latency_last_ms)} ms`; $("diag-worker").textContent=d.worker_running?"Running":"Stopped"; $("diag-interval").textContent=`${Number(d.poll_interval_seconds).toFixed(1)} s`; $("diag-latency").textContent=d.latency_last_ms==null?"—":`${Math.round(d.latency_last_ms)} ms`; $("diag-success-count").textContent=d.successful_polls; $("diag-failed-count").textContent=d.failed_polls; $("diag-uptime").textContent=duration(d.uptime_seconds); } catch (e) { if (e.message !== "Authentication required") showToast(e.message); } }
+      function syncSdSelection(){
+        const files=(state.sd?.entries||[]).filter((entry)=>entry.kind==="file"&&!entry.ambiguous);
+        if(state.selectedSdFile&&!files.some((entry)=>entry.name===state.selectedSdFile))state.selectedSdFile=null;
+        $("sd-selected-file").textContent=state.selectedSdFile||"None";
+        document.querySelector('[data-sd-macro="start_sd_print"]').disabled=!state.selectedSdFile;
+        document.querySelector('[data-sd-macro="print_first_layer_sd"]').disabled=!state.selectedSdFile;
+        $("sd-rows").querySelectorAll("[data-sd-entry]").forEach((row)=>row.classList.toggle("selected",row.dataset.sdEntry===state.selectedSdFile));
+      }
+      function applySdSearch(){
+        const query=$("sd-search")?.value.trim().toLocaleLowerCase()||"";
+        const rows=[...$("sd-rows").querySelectorAll("[data-sd-entry]")];let visible=0;
+        for(const row of rows){const match=row.dataset.sdEntry.toLocaleLowerCase().includes(query);row.hidden=!match;if(match)visible++;}
+        $("sd-search-count").textContent=query?`${visible} matches`:"";
+      }
+      $("sd-search").addEventListener("input",applySdSearch);
+      function renderSdPicker(container,initialValue){
+        const search=document.createElement("input");search.type="search";search.placeholder="Search listed files…";search.setAttribute("aria-label","Search SD card files");
+        const select=document.createElement("select");select.id="parameter-filename";select.setAttribute("aria-label","Select exact SD card filename");
+        const preview=document.createElement("div");preview.className="sd-picker-preview";
+        const refresh=document.createElement("button");refresh.type="button";refresh.className="btn";refresh.textContent="Refresh printer file list";
+        let selected=initialValue;
+        function update(){
+          const candidates=(state.sd?.entries||[]).filter((entry)=>entry.kind==="file");
+          const eligible=candidates;
+          const matches=eligible.filter((entry)=>entry.name.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()));
+          select.replaceChildren();
+          if(!matches.length){const option=document.createElement("option");option.value="";option.textContent=eligible.length?"No matching files":"No eligible files in the latest M20 listing";select.append(option);select.disabled=true;selected="";}
+          else{
+            select.disabled=false;
+            for(const entry of matches){const option=document.createElement("option");option.value=entry.name;option.textContent=entry.ambiguous?`${entry.name} · duplicate name, unavailable`:entry.name;option.disabled=Boolean(entry.ambiguous);select.append(option);}
+            if(matches.some((entry)=>entry.name===selected&&!entry.ambiguous))select.value=selected;
+            else{const first=matches.find((entry)=>!entry.ambiguous);selected=first?.name||"";select.value=selected;}
+          }
+          state.selectedSdFile=selected||null;
+          const chosen=candidates.find((entry)=>entry.name===selected);
+          preview.replaceChildren();
+          if(chosen?.preview_available){const img=document.createElement("img");img.src=`/api/printer/sdcard/preview/${encodeURIComponent(chosen.name)}`;img.alt=`Cached print preview for ${chosen.name}`;preview.append(img);}
+          const text=document.createElement("span");text.textContent=chosen?`${chosen.name} · exact M20 filename${chosen.preview_available?" · thumbnail cached by filename":" · no cached thumbnail"}`:"No file selected. Refresh the live M20 listing.";preview.append(text);
+          syncSdSelection();
+        }
+        search.addEventListener("input",update);select.addEventListener("change",()=>{selected=select.value;update();});
+        refresh.addEventListener("click",async()=>{refresh.disabled=true;refresh.textContent="Refreshing…";try{const listing=await api("/api/printer/sdcard?refresh=true");renderSd(listing);update();}catch(error){showToast(`Could not refresh SD files: ${error.message}`);}finally{refresh.disabled=false;refresh.textContent="Refresh printer file list";}});
+        container.append(search,select,preview,refresh);update();
+      }
       function renderSd(data) {
         state.sd=data; const rows=$("sd-rows");
-        if (!data.entries?.length) rows.innerHTML=`<tr><td colspan="3" class="empty-row">${esc(data.status === "not_requested" ? "Select refresh to request a read-only M20 listing." : data.error || (data.status === "available" ? "The root listing is empty." : "No complete listing received."))}</td></tr>`;
-        else rows.innerHTML=data.entries.map((entry)=>`<tr data-sd-entry="${esc(entry.name)}" data-sd-kind="${esc(entry.kind)}"><td><div class="file-name"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/><path d="M3 8h18"/></svg><span>${esc(entry.name)}</span></div></td><td>${entry.kind === "directory" ? "Directory" : "File"}</td><td class="muted">${entry.size_bytes == null ? "—" : `${Number(entry.size_bytes).toLocaleString()} B`}</td></tr>`).join("");
-        rows.querySelectorAll("[data-sd-entry]").forEach((row)=>row.addEventListener("click",()=>{if(row.dataset.sdKind!=="file")return;state.selectedSdFile=row.dataset.sdEntry;$("sd-selected-file").textContent=state.selectedSdFile;$("sd-rows").querySelectorAll("tr").forEach((item)=>item.classList.toggle("selected",item===row));document.querySelector('[data-sd-macro="start_sd_print"]').disabled=false;}));
+        if (!data.entries?.length) rows.innerHTML=`<tr><td colspan="4" class="empty-row">${esc(data.status === "not_requested" ? "Select refresh to request a read-only M20 listing." : data.error || (data.status === "available" ? "The root listing is empty." : "No complete listing received."))}</td></tr>`;
+        else rows.innerHTML=data.entries.map((entry)=>{
+          const preview=entry.kind==="file"&&entry.preview_available
+            ? `<img class="sd-preview" loading="lazy" src="/api/printer/sdcard/preview/${encodeURIComponent(entry.name)}" alt="Print preview for ${esc(entry.name)}">`
+            : '<span class="sd-preview-empty" aria-label="No print preview available"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 12h8M8 15h5"/></svg></span>';
+          const listedFrom=data.printer_listing_source==="firmware_m20"?"Printer SD · fresh M20":"Printer SD · cached listing";
+          const localSource=entry.preview_source==="cached_local_gcode"?` · ${entry.preview_stale?"offline cached":"local cached"} thumbnail`:"";
+          const previewLabel=!entry.preview_available?"No preview":entry.preview_source==="cached_local_gcode"?(entry.preview_stale?"Offline cache":"Local cache"):"Observatory cache";
+          const localMeta=entry.local_metadata?.metadata||{};
+          const detail=[localMeta.estimated_print_time,localMeta.filament_used_mm?`${localMeta.filament_used_mm} mm filament`:null,localMeta.layer_height_mm?`${localMeta.layer_height_mm} mm layers`:null].filter(Boolean).join(" · ");
+          return `<tr class="sd-file-row" data-sd-entry="${esc(entry.name)}" data-sd-kind="${esc(entry.kind)}" data-sd-ambiguous="${Boolean(entry.ambiguous)}"><td class="sd-preview-cell">${preview}<small class="sd-source-label">${esc(previewLabel)}</small></td><td><div class="file-name"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/><path d="M3 8h18"/></svg><span>${esc(entry.name)}</span></div><small class="sd-source-label">${esc(listedFrom)}${esc(localSource)}${detail?`<br>${esc(detail)}`:""}</small></td><td>${entry.kind === "directory" ? "Directory" : "File"}${entry.ambiguous?" · duplicate":""}${entry.local_match==="ambiguous"?" · local name collision":""}</td><td class="muted">${entry.size_bytes == null ? "—" : `${Number(entry.size_bytes).toLocaleString()} B`}</td></tr>`;
+        }).join("");
+        rows.querySelectorAll("[data-sd-entry]").forEach((row)=>row.addEventListener("click",()=>{if(row.dataset.sdKind!=="file"||row.dataset.sdAmbiguous==="true")return;state.selectedSdFile=row.dataset.sdEntry;syncSdSelection();}));
         $("sd-count").textContent=data.status === "available"?`${data.entries.length} entries${data.refreshed_at?` · ${timeText(data.refreshed_at)}`:""}`:data.status.replaceAll("_"," ");
-        $("sd-note").textContent=data.error?`${data.error} · The display may retain only a complete listing.`:"Read-only root listing. File contents cannot be downloaded through this dashboard.";
+        $("sd-note").textContent=data.error?`${data.error} · The display may retain only a complete listing.`:data.printer_listing_source==="firmware_m20"?`Printer names come from fresh M20. Thumbnail and slicer metadata come from the local cache and a filename match; M20 cannot confirm file contents.`:"No fresh M20 listing is available. Cached SD rows are historical; local cached G-code previews below do not prove a file is on the printer.";
+        renderLocalGcodeIndex(data.local_index||{});
+        applySdSearch();syncSdSelection();
+      }
+      async function loadSdCard(){try{renderSd(await api("/api/printer/sdcard"));}catch(error){if(error.message!=="Authentication required")showToast(error.message);}}
+      function renderLocalGcodeIndex(index){
+        const summary=$("sd-local-index-summary"),status=$("sd-local-index-status"),host=$("sd-local-index-files"),files=index.files||[];
+        summary.textContent=`Orca export folder · ${Number(index.files_with_previews||0)} cached previews`;
+        const volume=index.volume_available?"Local G-code source scanned read-only":index.status==="disabled"?"Local G-code source is not configured":"Source unavailable; cached thumbnails are retained";
+        let setupHint="";
+        if(!index.volume_available&&!files.length){
+          setupHint=index.status==="disabled"
+            ?" Configure NEPTUNE_GCODE_SOURCE_PATH to an existing OrcaSlicer export folder and start with compose.neptune-volume.yaml."
+            :" The printer's current MKS interface exposes filenames, not G-code contents or embedded thumbnails. Configure NEPTUNE_GCODE_SOURCE_PATH for a stable Orca export folder, or choose an export here to cache its preview.";
+        }
+        status.textContent=`${volume}. ${files.length} indexed file(s); ${Number(index.collisions||0)} filename collision(s). Orca exports can be indexed from a fixed Mac folder while the SD card stays in the printer. Matching uses unique filenames; cached metadata does not prove file contents on the printer.${setupHint} ${index.indexed_at?`Last index: ${timeText(index.indexed_at)}.`:""} ${index.error||""}`;
+        if(!files.length){host.innerHTML='<p class="muted">No local G-code files have been indexed yet.</p>';return;}
+        host.innerHTML=files.map((file)=>{
+          const preview=file.preview_available?`<img loading="lazy" src="/api/printer/sdcard/local-preview?path=${encodeURIComponent(file.relative_path)}" alt="Cached local preview for ${esc(file.filename)}">`:'<span class="sd-preview-empty" aria-label="No thumbnail in this G-code"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 12h8M8 15h5"/></svg></span>';
+          const metadata=file.metadata||{};const facts=[`${Number(file.source_size_bytes||0).toLocaleString()} B`,metadata.estimated_print_time,metadata.filament_used_mm?`${metadata.filament_used_mm} mm filament`:null,metadata.layer_height_mm?`${metadata.layer_height_mm} mm layer`:null].filter(Boolean).join(" · ");
+          const match=file.local_collision?"Name collision · never matched to M20":!index.volume_available&&file.source_present?"Last seen before disconnect · preview remains cached":file.source_present?"Local file indexed · M20 match requires exact unique name":"Cached local source is no longer present";
+          return `<article class="sd-local-file">${preview}<div><strong>${esc(file.filename)}</strong><small>${esc(file.relative_path)}</small><small>${esc(match)}</small><small>${esc(facts)}</small></div></article>`;
+        }).join("");
       }
       $("refresh-sd").addEventListener("click", async (event) => { const button=event.currentTarget; button.disabled=true; button.innerHTML="<span>Requesting M20…</span>"; try { renderSd(await api("/api/printer/sdcard?refresh=true")); } catch(e) { if(e.message!=="Authentication required") showToast(e.message); } finally { button.disabled=false; button.innerHTML='<svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.5 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.5-3"/></svg>Refresh listing'; } });
       async function refreshSdUploadStatus(){try{state.sdUpload=await api("/api/printer/sdcard/upload");const available=Boolean(state.sdUpload.available&&state.selectedUploadFile);$("sd-upload-start").disabled=!available;$("sd-upload-start").textContent=available?"Review and upload selected file":state.sdUpload.configured?"Upload · arm machine controls first":"Upload unavailable · server gate off";$("sd-upload-status").textContent=state.sdUpload.note||state.sdUpload.status;}catch(error){$("sd-upload-status").textContent=error.message;}}
-      $("sd-upload-file").addEventListener("change",async(event)=>{state.selectedUploadFile=event.currentTarget.files?.[0]||null;await refreshSdUploadStatus();});
+      async function cacheSelectedSdPreview(file){
+        const target=$("sd-selected-preview"), note=$("sd-selected-preview-note");
+        target.querySelector("img")?.remove();
+        if(!file){note.textContent="Choose an OrcaSlicer export to cache its embedded thumbnail in Observatory. This does not send the G-code to the printer.";return;}
+        note.textContent=`Reading embedded preview from ${file.name}…`;
+        try{
+          const result=await api(`/api/printer/sdcard/preview?filename=${encodeURIComponent(file.name)}`,{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:file});
+          if(result.preview_available){const image=document.createElement("img");image.src=`/api/printer/sdcard/preview/${encodeURIComponent(file.name)}`;image.alt=`Print preview for ${file.name}`;target.prepend(image);note.textContent=`Preview saved for ${file.name}. G-code was not retained or sent to the printer.`;if(state.sd)renderSd(state.sd);}
+          else note.textContent=`${file.name}: ${result.note}`;
+        }catch(error){note.textContent=`Preview could not be cached: ${error.message}`;}
+      }
+      $("sd-upload-file").addEventListener("change",async(event)=>{state.selectedUploadFile=event.currentTarget.files?.[0]||null;await Promise.all([refreshSdUploadStatus(),cacheSelectedSdPreview(state.selectedUploadFile)]);});
+      $("sd-local-index-pick").addEventListener("click",()=>$("sd-upload-file").click());
       $("sd-upload-start").addEventListener("click",()=>{if(!state.selectedUploadFile)return;$("sd-upload-confirmation").placeholder=`UPLOAD ${state.selectedUploadFile.name}`;$("sd-upload-dialog").showModal();});
       $("sd-upload-cancel").addEventListener("click",()=>$("sd-upload-dialog").close());
       $("sd-upload-form").addEventListener("submit",async(event)=>{event.preventDefault();const file=state.selectedUploadFile;if(!file)return;const button=$("sd-upload-submit"),progress=$("sd-upload-progress");button.disabled=true;progress.hidden=false;progress.value=0;$("sd-upload-status").textContent=`Transferring ${file.name} to the printer. Do not repeat if the response is ambiguous.`;try{const response=await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open("POST",`/api/printer/sdcard/upload?filename=${encodeURIComponent(file.name)}`);xhr.setRequestHeader("Content-Type","application/octet-stream");xhr.setRequestHeader("X-Upload-Confirmation",$("sd-upload-confirmation").value);xhr.setRequestHeader("X-Operator-Attended",String($("sd-upload-attended").checked));xhr.setRequestHeader("X-Power-Switch-Reachable",String($("sd-upload-switch").checked));xhr.setRequestHeader("X-No-Competing-Clients",String($("sd-upload-clients").checked));xhr.upload.onprogress=(item)=>{if(item.lengthComputable)progress.value=item.loaded/item.total*100;};xhr.onload=()=>{let body;try{body=JSON.parse(xhr.responseText);}catch{body={detail:xhr.responseText};}if(xhr.status>=200&&xhr.status<300)resolve(body);else reject(new Error(body.detail||`Upload rejected (${xhr.status})`));};xhr.onerror=()=>reject(new Error("Upload connection failed; do not retry until the SD listing has been refreshed."));xhr.ontimeout=()=>reject(new Error("Upload response timed out; outcome may be unknown. Do not retry until you refresh M20."));xhr.timeout=35000;xhr.send(file);});$("sd-upload-dialog").close();$("sd-upload-status").textContent=`${response.filename}: HTTP response ${response.http_status}; transfer completion is unconfirmed. Refresh M20 to verify the file.`;await loadCommandAudit();}catch(error){$("sd-upload-status").textContent=error.message;showToast(error.message);}finally{button.disabled=false;await refreshSdUploadStatus();}});
-      document.querySelectorAll("[data-sd-macro]").forEach((button)=>button.addEventListener("click",async()=>{document.querySelector('.nav button[data-view="machine"]')?.click();await loadCatalog();const macro=state.catalog?.macros.find((item)=>item.id===button.dataset.sdMacro);if(!macro){showToast("Machine control catalog is unavailable.");return;}if(macro.id==="start_sd_print"&&!state.selectedSdFile){showToast("Select a listed G-code file first.");return;}showMachinePanel("control");openMacroDialog(macro);if(macro.id==="start_sd_print")setTimeout(()=>{const select=$("parameter-filename");if(select)select.value=state.selectedSdFile;},0);}));
+      document.querySelectorAll("[data-sd-macro]").forEach((button)=>button.addEventListener("click",async()=>{document.querySelector('.nav button[data-view="machine"]')?.click();await loadCatalog();const macro=state.catalog?.macros.find((item)=>item.id===button.dataset.sdMacro);if(!macro){showToast("Machine control catalog is unavailable.");return;}showMachinePanel("control");openMacroDialog(macro);}));
       async function bootstrap() {
         try {
           const [snapshot, temps, sd] = await Promise.all([api("/api/printer/status"),api("/api/printer/temperatures"),api("/api/printer/sdcard")]);

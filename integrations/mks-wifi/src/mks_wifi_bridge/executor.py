@@ -55,7 +55,7 @@ _COMMAND_PATTERN = re.compile(
     r"M104 S\d+(?:\.\d+)?|M109 S\d+(?:\.\d+)?|"
     r"M106 S\d{1,3}|"
     r"M140 S\d+(?:\.\d+)?|M190 S\d+(?:\.\d+)?|"
-    r"M23 [A-Za-z0-9_./-]+)$"
+    r"M23 [A-Za-z0-9_./ -]+)$"
 )
 MAX_RESPONSE_BYTES = 16_384
 

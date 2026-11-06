@@ -19,7 +19,7 @@ from importlib.resources import files
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from mkswifi import MksWifiClient, MksWifiConnectionError
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,6 +37,9 @@ from .executor import (
     _require_fresh_state,
     _required_printer_state,
 )
+from .gcode_thumbnail import extract_gcode_thumbnail
+from .jobs import print_job_summary
+from .local_gcode_index import LocalGcodeIndexer
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
@@ -86,6 +89,7 @@ class StatusResponse(BaseModel):
     motion: dict[str, Any]
     command_activity: dict[str, Any] = Field(default_factory=dict)
     timeline: dict[str, Any] = Field(default_factory=dict)
+    print_job: dict[str, Any] = Field(default_factory=dict)
 
 
 class TemperatureResponse(BaseModel):
@@ -108,6 +112,12 @@ class SdEntry(BaseModel):
     name: str
     kind: str
     size_bytes: int | None = None
+    preview_available: bool = False
+    ambiguous: bool = False
+    preview_source: str = "none"
+    local_preview: bool = False
+    local_match: str = "unmatched"
+    local_metadata: dict[str, Any] | None = None
 
 
 class SdCardResponse(BaseModel):
@@ -116,6 +126,8 @@ class SdCardResponse(BaseModel):
     entries: list[SdEntry]
     refreshed_at: str | None
     error: str | None = None
+    local_index: dict[str, Any] = Field(default_factory=dict)
+    printer_listing_source: str = "cached_or_unavailable"
     note: str = "Read-only root listing. File contents are not available through this endpoint."
 
 
@@ -127,6 +139,7 @@ class PreviewRequest(BaseModel):
     macro_id: str
     parameters: dict[str, Any] = Field(default_factory=dict)
     retreat_from_home: bool = False
+    first_layer_contents_confirmed: bool = False
     mode: Literal["operator", "commissioning"] = "operator"
     # Backward-compatible alias for clients from the prior preview API.
     commissioning: bool = False
@@ -144,6 +157,7 @@ class ExecutionRequest(BaseModel):
     clear_travel_path: bool = False
     axis_at_home: bool = False
     retreat_from_home: bool = False
+    first_layer_contents_confirmed: bool = False
     mode: Literal["operator", "commissioning"] = "operator"
     # Backward-compatible alias for clients from the prior execute API.
     commissioning: bool = False
@@ -633,6 +647,7 @@ def create_app(
     commissioning_executor: CooldownCommissioningExecutor | None = None,
     timeline: MotionTimeline | None = None,
     capability_registry: CapabilityRegistry | None = None,
+    local_gcode_indexer: LocalGcodeIndexer | None = None,
 ) -> FastAPI:
     bind_host = bind_host or os.getenv("NEPTUNE_OBSERVATORY_BIND_HOST", "127.0.0.1")
     auth_token = auth_token if auth_token is not None else os.getenv("NEPTUNE_OBSERVATORY_TOKEN")
@@ -665,6 +680,9 @@ def create_app(
     )
     motion_timeline = timeline or MotionTimeline(
         os.getenv("NEPTUNE_TIMELINE_DB_PATH", "/data/neptune-observatory.db")
+    )
+    local_gcode_indexer = local_gcode_indexer or LocalGcodeIndexer(
+        os.getenv("NEPTUNE_GCODE_SOURCE_DIR", "/mnt/neptune-source"), motion_timeline
     )
     hub = BroadcastHub()
     commands = DryRunCommandService()
@@ -789,6 +807,7 @@ def create_app(
                 "note": f"Timeline storage unavailable: {str(exc) or type(exc).__name__}",
             }
         payload["timeline"] = timeline_data
+        payload["print_job"] = print_job_summary(payload)
         motion["planned_history"] = timeline_data.get("planned_history", [])
         return payload
 
@@ -1098,11 +1117,117 @@ def create_app(
             if origin and not _origin_matches(host_header, origin):
                 raise HTTPException(status_code=403, detail="Request origin is not allowed")
             result = await printer.refresh_sd()
-            commands.allowed_sd_files = {
-                entry["name"] for entry in result.get("entries", []) if entry.get("kind") == "file"
+            commands.update_sd_listing(result.get("entries", []))
+            payload = result
+        else:
+            payload = printer.sd_payload()
+        commands.update_sd_listing(payload.get("entries", []))
+        local_index = await asyncio.to_thread(local_gcode_indexer.scan)
+        entries = [
+            {
+                **entry,
+                "ambiguous": entry.get("kind") == "file"
+                and commands.is_sd_file_ambiguous(entry.get("name", "")),
+                "preview_available": entry.get("kind") == "file"
+                and motion_timeline.has_sd_thumbnail(entry.get("name", "")),
             }
-            return result
-        return printer.sd_payload()
+            for entry in payload.get("entries", [])
+        ]
+        payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
+        payload["local_index"] = local_index
+        payload["printer_listing_source"] = (
+            "firmware_m20"
+            if payload.get("status") == "available"
+            and payload.get("refreshed_at")
+            and (utc_now() - datetime.fromisoformat(payload["refreshed_at"])).total_seconds() <= 60
+            else "cached_or_unavailable"
+        )
+        return payload
+
+    @app.get(
+        "/api/printer/sdcard/preview/{filename}",
+        dependencies=[Depends(require_auth)],
+    )
+    async def sdcard_preview(filename: str) -> Response:
+        preview = motion_timeline.get_unique_local_gcode_preview(filename)
+        if preview is None:
+            preview = motion_timeline.get_sd_thumbnail(filename)
+        if preview is None:
+            raise HTTPException(status_code=404, detail="No saved print thumbnail is available.")
+        mime_type, image_data = preview
+        return Response(
+            content=image_data,
+            media_type=mime_type,
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.get("/api/printer/sdcard/local-preview", dependencies=[Depends(require_auth)])
+    async def local_sdcard_preview(path: str) -> Response:
+        if not path or path.startswith("/") or ".." in path.split("/"):
+            raise HTTPException(status_code=400, detail="Invalid local G-code index path.")
+        preview = motion_timeline.get_local_gcode_preview_by_path(path)
+        if preview is None:
+            raise HTTPException(status_code=404, detail="No cached local preview is available.")
+        mime_type, image_data = preview
+        return Response(
+            content=image_data,
+            media_type=mime_type,
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.post(
+        "/api/printer/sdcard/preview",
+        dependencies=[Depends(require_auth)],
+    )
+    async def cache_sdcard_preview(request: Request, filename: str) -> dict[str, Any]:
+        """Read only the embedded thumbnail from a local G-code file.
+
+        The G-code is never retained or sent to the printer by this endpoint.
+        """
+        origin = request.headers.get("origin")
+        if origin and not _origin_matches(request.headers.get("host", ""), origin):
+            raise HTTPException(status_code=403, detail="Request origin is not allowed")
+        declared_size = request.headers.get("content-length")
+        if declared_size is not None:
+            try:
+                if int(declared_size) > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="G-code file exceeds 50 MB.")
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="Invalid Content-Length header."
+                ) from exc
+        chunks: list[bytes] = []
+        content_size = 0
+        async for chunk in request.stream():
+            content_size += len(chunk)
+            if content_size > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="G-code file exceeds 50 MB.")
+            chunks.append(chunk)
+        content = b"".join(chunks)
+        try:
+            validate_upload(filename, content)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        thumbnail = extract_gcode_thumbnail(content)
+        if thumbnail is None:
+            return {
+                "filename": filename,
+                "preview_available": False,
+                "note": (
+                    "No supported embedded PNG/JPEG thumbnail was found; "
+                    "the G-code was not retained."
+                ),
+            }
+        saved = motion_timeline.save_sd_thumbnail(filename, *thumbnail)
+        if not saved:
+            raise HTTPException(
+                status_code=507, detail="Could not save the print preview to Observatory storage."
+            )
+        return {
+            "filename": filename,
+            "preview_available": True,
+            "note": "Embedded preview saved. G-code was not retained or sent to the printer.",
+        }
 
     @app.get("/api/printer/sdcard/upload", dependencies=[Depends(require_auth)])
     async def sd_upload_status() -> dict[str, Any]:
@@ -1226,6 +1351,10 @@ def create_app(
             app.state.sd_upload_in_progress = False
         digest = hashlib.sha256(content).hexdigest()
         commands.record_event("sd_upload", "transport_accepted_file_transfer")
+        thumbnail = extract_gcode_thumbnail(content)
+        preview_saved = False
+        if thumbnail is not None:
+            preview_saved = motion_timeline.save_sd_thumbnail(filename, *thumbnail)
         return {
             "filename": filename,
             "size_bytes": len(content),
@@ -1233,6 +1362,7 @@ def create_app(
             "state": "http_accepted_transfer_completion_unconfirmed",
             "http_status": result["http_status"],
             "response": result["response"],
+            "preview_saved": preview_saved,
             "next_step": "Refresh M20 and verify the exact filename before using it.",
         }
 
@@ -1635,16 +1765,14 @@ def create_app(
     @app.post("/api/control/preview", dependencies=[Depends(require_auth)])
     async def control_preview(payload: PreviewRequest) -> dict[str, Any]:
         try:
-            if payload.macro_id == "start_sd_print":
+            if payload.macro_id in {"start_sd_print", "print_first_layer_sd"}:
                 if (
                     printer.sd_refreshed_at is None
                     or (utc_now() - printer.sd_refreshed_at).total_seconds() > 30
                 ):
-                    commands.allowed_sd_files.clear()
+                    commands.update_sd_listing([])
                 else:
-                    commands.allowed_sd_files = {
-                        entry["name"] for entry in printer.sd_entries if entry.get("kind") == "file"
-                    }
+                    commands.update_sd_listing(printer.sd_entries)
             preview = commands.preview(
                 payload.macro_id,
                 payload.parameters,
@@ -1746,7 +1874,19 @@ def create_app(
                 status_code=422,
                 detail="Confirm the gantry is mechanically supported before disabling motors.",
             )
-        if payload.macro_id == "start_sd_print":
+        if (
+            payload.macro_id == "print_first_layer_sd"
+            and not payload.first_layer_contents_confirmed
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Confirm that the selected G-code contains only the intended first layer. "
+                    "The M20 listing cannot verify file contents."
+                ),
+            )
+        if payload.macro_id in {"start_sd_print", "print_first_layer_sd"}:
+            commands.update_sd_listing(printer.sd_entries)
             filename = payload.parameters.get("filename")
             listed_files = {
                 entry["name"] for entry in printer.sd_entries if entry.get("kind") == "file"
@@ -1759,6 +1899,14 @@ def create_app(
                 raise HTTPException(
                     status_code=409,
                     detail="Refresh the read-only SD listing and choose a currently listed file.",
+                )
+            if commands.is_sd_file_ambiguous(filename):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "M20 returned duplicate file names; refresh the card or resolve "
+                        "the duplicate before printing."
+                    ),
                 )
         try:
             operation = await command_executor.start(

@@ -1,6 +1,6 @@
 # Neptune Observatory feature status
 
-Updated 2026-11-02. Routine controls use Operator Mode and do not depend on a
+Updated 2026-11-05. Routine controls use Operator Mode and do not depend on a
 commissioning record. Every service start is disarmed. An MKS acknowledgment is
 recorded separately from physical completion; no position or physical result is
 invented.
@@ -8,6 +8,7 @@ invented.
 | Area | Status | Evidence / remaining limitation |
 | --- | --- | --- |
 | Overview and temperatures | Working | Shared two-second telemetry poller, current/target cards, bounded history, freshness and connection diagnostics. |
+| Print-job overview | Implemented | Active/paused/idle state, MKS-reported filename/progress/elapsed time, stale labeling, and recent server-recorded sessions are shown in one compact Overview panel. Stale/disconnected polls do not extend or close a session, and an unknown active-state field does not imply the print stopped. Historical sessions are polled and persisted by FastAPI; path reconstruction remains estimated when matching G-code is available. |
 | Motion telemetry | Partial by protocol | M114 parser, read-only query path, and chart exist. The observed response contained only `ok`, so no firmware coordinates or measured movement trace are available. |
 | Motion feedrate timeline | Working with estimates | Fixed-height time graph, zero baseline, rolling ranges, pan/zoom/scrub, compact event markers, backend print history, and offline G-code demo. Estimated/planned speed is distinct from measured motion. |
 | Digital Twin simulation | Working offline | Shared G-code interpreter handles homing references, positioning modes, offsets, XYZ/E moves, and feedrate; Three.js model uses bed-slinger kinematics. G-code simulation does not report physical homing. |
@@ -24,8 +25,10 @@ invented.
 | Wireless upload | Gated off | Makerbase source documents an upload route, but this printer's installed firmware and end-to-end file integrity are not validated. No upload is enabled by this change. |
 | OrcaSlicer/calibration | Partial | Dashboard offers calibration workflows and offline G-code analysis. This app does not modify slicer profiles or claim to generate/start calibration files. |
 | Diagnostics/console | Working | Cached API queries, firmware reference, operation history, and command responses. Console remains read-only and accepts named queries only. |
-| Deployment | Healthy Compose service | Rebuilt and running at `http://localhost:8000`; authenticated `/health` reports `status: ok`, poller running, and printer connected. |
-| Responsive UI | Desktop visually checked | Machine controls and one-action confirmation render correctly on desktop. Responsive CSS is in place; iPhone viewport was not separately captured in this turn. |
+| Deployment | Healthy Compose service; MKS connection live | Authenticated `/health` returns 200, container health is healthy, and SQLite `integrity_check` passes. On 2026-11-05 fresh telemetry reported idle and a fresh read-only M20 returned 17 entries. |
+| Local G-code source | Unavailable in current deployment | The optional Compose read-only source overlay exists, but no host export path is configured and the running container reports its source unavailable. The inspected OrcaSlicer executable is 2.5.0-rc; no export directory was found at the conventional volume/export locations checked. Therefore current M20 entries have no matched local thumbnail metadata. |
+| Responsive UI | Responsive styles present; authenticated visual review pending | The deployed dashboard currently opens to its token sign-in screen in Chrome. No credential was entered for the screenshot pass, so authenticated layout and browser-console checks could not be completed in this run. |
+| Future Klipper/Moonraker | Architecture documented only | Adapter boundary and official Moonraker API mappings are documented in `development.md`; no Klipper firmware, Moonraker service, or second runtime backend was installed. |
 
 ## Runtime states shown to the operator
 

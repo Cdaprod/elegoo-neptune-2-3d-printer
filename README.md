@@ -15,6 +15,7 @@ Neptune Observatory brings printer status, temperatures, SD-card listing, motion
 - **Live monitoring:** printer state, nozzle and bed temperatures, firmware identifier, connection freshness, and temperature history.
 - **Machine controls:** fixed, validated operations for homing, bounded jogging, heaters, fans, extrusion, motors, and supported SD-print actions. Operator Mode starts disarmed and requires dashboard authentication and a deliberate action confirmation.
 - **Motion observability:** persisted command and print-session timeline, axis-colored planned feedrate estimates, event markers, and a position page that clearly reports when firmware positions are unavailable.
+- **Print-job tracking:** a compact Overview panel connects current MKS-reported file/progress/elapsed values with server-recorded recent print sessions; stale telemetry is explicitly labeled.
 - **Digital Twin:** interactive Neptune 2 bed-slinger view and offline G-code simulation. Planned paths and estimated progress are labeled separately from firmware-reported state.
 - **SD card:** refresh and browse the printer's root directory and use guarded print lifecycle controls. File downloads are unavailable; wireless upload is off by default and has not been validated on the target firmware.
 - **Private by design:** local Docker deployment, persistent Docker volume, no external account or hosted service required.
