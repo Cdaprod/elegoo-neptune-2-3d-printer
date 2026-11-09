@@ -8,6 +8,7 @@ import pathlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "integrations/octoprint/90-install-octoprint-plugins"
@@ -89,13 +90,15 @@ class OctoprintPluginStartupTests(unittest.TestCase):
             (["remote_connection", "themeify"], False),
             (["remote_connection"], True),
         ]:
-            namespace = {"entry_points": lambda group, names=names: [EntryPoint(n) for n in names]}
-            with self.subTest(names=names):
+            fake_entry_points = [EntryPoint(name) for name in names]
+            with self.subTest(names=names), mock.patch(
+                "importlib.metadata.entry_points", return_value=fake_entry_points
+            ):
                 if should_fail:
                     with self.assertRaises(SystemExit):
-                        exec(compile(heredoc, str(SCRIPT), "exec"), namespace)
+                        exec(compile(heredoc, str(SCRIPT), "exec"), {})
                 else:
-                    exec(compile(heredoc, str(SCRIPT), "exec"), namespace)
+                    exec(compile(heredoc, str(SCRIPT), "exec"), {})
 
 
 if __name__ == "__main__":
