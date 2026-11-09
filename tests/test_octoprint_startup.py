@@ -8,14 +8,13 @@ import pathlib
 import subprocess
 import tempfile
 import unittest
-from unittest import mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "integrations/octoprint/90-install-octoprint-plugins"
 
 
 class OctoprintPluginStartupTests(unittest.TestCase):
-    def run_initializer(self, missing: bool = False) -> subprocess.CompletedProcess[str]:
+    def run_initializer(self, missing: bool = False) -> tuple[subprocess.CompletedProcess[str], str]:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             python = root / "python3"
