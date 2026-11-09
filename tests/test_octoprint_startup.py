@@ -80,7 +80,7 @@ class OctoprintPluginStartupTests(unittest.TestCase):
 
     def test_plugin_entry_points_are_enforced(self) -> None:
         body = SCRIPT.read_text(encoding="utf-8")
-        heredoc = body.split("<<'PY'\\n", 1)[1].split("\\nPY\\n", 1)[0]
+        heredoc = body.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
         class EntryPoint:
             def __init__(self, name: str) -> None:
                 self.name = name
