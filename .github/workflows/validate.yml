@@ -41,6 +41,9 @@ jobs:
           uv run --no-sync ruff format --check src tests
       - name: Run frontend logic tests
         run: node --test tests/*.mjs
+      - name: Test OctoPrint plugin startup (hardware-free)
+        working-directory: .
+        run: python -m unittest discover -s tests -p 'test_octoprint_startup.py' -v
       - name: Validate Compose configuration
         env:
           MKS_WIFI_HOST: printer.example.invalid
