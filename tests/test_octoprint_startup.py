@@ -78,6 +78,25 @@ class OctoprintPluginStartupTests(unittest.TestCase):
         self.assertIn('required = {"remote_connection", "themeify"}', body)
         self.assertIn("raise SystemExit", body)
 
+    def test_plugin_entry_points_are_enforced(self) -> None:
+        body = SCRIPT.read_text(encoding="utf-8")
+        heredoc = body.split("<<'PY'\\n", 1)[1].split("\\nPY\\n", 1)[0]
+        class EntryPoint:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        for names, should_fail in [
+            (["remote_connection", "themeify"], False),
+            (["remote_connection"], True),
+        ]:
+            namespace = {"entry_points": lambda group, names=names: [EntryPoint(n) for n in names]}
+            with self.subTest(names=names):
+                if should_fail:
+                    with self.assertRaises(SystemExit):
+                        exec(compile(heredoc, str(SCRIPT), "exec"), namespace)
+                else:
+                    exec(compile(heredoc, str(SCRIPT), "exec"), namespace)
+
 
 if __name__ == "__main__":
     unittest.main()
