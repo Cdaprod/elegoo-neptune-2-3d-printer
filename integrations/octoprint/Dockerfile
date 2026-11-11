@@ -13,3 +13,6 @@ RUN set -eux; \
 
 COPY 90-install-octoprint-plugins /etc/cont-init.d/90-install-octoprint-plugins
 RUN chmod 755 /etc/cont-init.d/90-install-octoprint-plugins
+
+COPY 91-configure-mks-remote /etc/cont-init.d/91-configure-mks-remote
+RUN chmod 755 /etc/cont-init.d/91-configure-mks-remote
