@@ -193,10 +193,7 @@ def test_octoprint_controls_are_opt_in_and_never_use_mks(
             "/api/octoprint/control", json=payload, headers=headers
         ).status_code == 423
         monkeypatch.setenv("NEPTUNE_OCTOPRINT_CONTROLS_ENABLED", "true")
-        assert client.post(
-            "/api/octoprint/control", json=payload, headers=headers
-        ).status_code == 409
-        asyncio.run(service.poll_once())
+        # TestClient startup polls the stub, so telemetry is already fresh.
         response = client.post("/api/octoprint/control", json=payload, headers=headers)
         assert response.status_code == 200
         assert response.json()["verified_complete"] is False
