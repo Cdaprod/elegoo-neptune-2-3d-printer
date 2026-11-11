@@ -1037,6 +1037,17 @@ def create_app(
             raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
         return await asyncio.to_thread(motion_timeline.list_print_history, limit)
 
+    @app.get("/api/print/history/octoprint", dependencies=[Depends(require_auth)])
+    async def octoprint_print_history(limit: int = 200) -> dict[str, Any]:
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
+        if not octoprint_mode or printer.backend is None:
+            raise HTTPException(status_code=404, detail="OctoPrint backend is not active.")
+        try:
+            return await printer.backend.print_job_history(limit)
+        except OctoPrintError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     @app.get("/api/timeline", dependencies=[Depends(require_auth)])
     async def timeline_snapshot() -> dict[str, Any]:
         return dashboard_snapshot()["timeline"]
