@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from discover_mks import discover, mks_http_identity
 import getpass
 import os
 import re
@@ -63,7 +64,6 @@ def save(content: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--printer-ip", default="")
     parser.add_argument("--show-token", action="store_true")
     parser.add_argument("--rotate-token", action="store_true")
     args = parser.parse_args()
@@ -88,11 +88,13 @@ def main() -> int:
         print("Generated and saved a new Observatory token (run make token to display).")
         return 0
 
-    host = args.printer_ip.strip() or values.get("OCTOPRINT_MKS_WIFI_HOST", "")
-    if not host or host == "printer.local":
-        host = input("Printer MKS WiFi IP/hostname: ").strip()
-    if not HOST_PATTERN.fullmatch(host):
-        parser.error("printer address must be an IPv4 address or hostname without URL/port")
+    host = values.get("OCTOPRINT_MKS_WIFI_HOST", "")
+    if not host or host == "printer.local" or not mks_http_identity(host):
+        try:
+            host = discover()
+        except RuntimeError as exc:
+            parser.error(str(exc))
+    print(f"Discovered MKS WiFi management interface at {host}")
     updates["OCTOPRINT_MKS_WIFI_HOST"] = host
 
     key = values.get("OCTOPRINT_API_KEY", "")
