@@ -11,9 +11,9 @@ fi
 echo "[neptune-plugins] Installing bundled plugins into active OctoPrint Python..."
 "$PYTHON" -m pip install --no-index --find-links=/opt/octoprint-plugin-wheels \
   'OctoPrint-Remote_connection==0.1.1' 'Themeify==1.2.2' 'Print-Job-History==1.17.5' \
-  'OctoPrint-Preheat==0.9.0' 'OctoPrint-SpoolManager==1.7.8' \
-  'OctoPrint-FilamentManager==1.9.1' 'OctoPrint-DisplayLayerProgress==1.28.0' \
-  'OctoPrint-UltimakerFormatPackage==1.2.0' 'OctoPrint-PrusaSlicerThumbnails==1.2.3' \
+  'Preheat==0.9.0' 'OctoPrint-SpoolManager==1.7.8' \
+  'OctoPrint-FilamentManager==1.9.1' 'DisplayLayerProgress==1.28.0' \
+  'OctoPrint-UltimakerFormatPackage==1.2.0' 'Slicer-Thumbnails==1.2.3' \
   'OctoPrint-CostEstimation==3.6.0'
 
 echo "[neptune-plugins] Checking OctoPrint plugin entry points..."
