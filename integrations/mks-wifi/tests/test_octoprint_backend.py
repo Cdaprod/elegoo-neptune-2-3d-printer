@@ -255,9 +255,7 @@ def test_octoprint_print_job_history_normalizes_plugin_records() -> None:
                     "printStartDateTimeFormatted": "11.11.2026 12:30",
                     "printEndDateTimeFormatted": "11.11.2026 13:45",
                     "duration": 4500,
-                    "filamentModels": {
-                        "total": {"material": "PLA", "usedWeight": "15.50"}
-                    },
+                    "filamentModels": {"total": {"material": "PLA", "usedWeight": "15.50"}},
                 },
                 {
                     "databaseId": 43,
@@ -301,6 +299,6 @@ def test_octoprint_history_endpoint_is_authenticated_and_read_only(tmp_path: Any
         result = client.get("/api/print/history/octoprint", headers=headers)
         assert result.status_code == 200
         assert result.json()["total"] == 0
-        assert client.get(
-            "/api/print/history/octoprint?limit=501", headers=headers
-        ).status_code == 422
+        assert (
+            client.get("/api/print/history/octoprint?limit=501", headers=headers).status_code == 422
+        )
