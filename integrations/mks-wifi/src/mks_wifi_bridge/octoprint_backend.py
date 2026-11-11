@@ -87,6 +87,75 @@ class OctoPrintBackend:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
 
+    async def print_job_history(self, limit: int = 200) -> dict[str, Any]:
+        """Read-only, bounded PrintJobHistory plugin API, never direct printer I/O."""
+        if isinstance(limit, bool) or not 1 <= limit <= 500:
+            raise ValueError("History limit must be between 1 and 500")
+        from urllib.parse import urlencode
+
+        query = urlencode(
+            {
+                "from": 0,
+                "to": limit,
+                "sortColumn": "printStartDateTime",
+                "sortOrder": "desc",
+                "filterName": "all",
+                "searchQuery": "",
+            }
+        )
+        payload = await asyncio.to_thread(
+            self._get_sync,
+            "/plugin/PrintJobHistory/loadPrintJobHistoryByQuery?" + query,
+        )
+        records = payload.get("allPrintJobs")
+        total = payload.get("totalItemCount")
+        if not isinstance(records, list) or not isinstance(total, int):
+            raise OctoPrintError("PrintJobHistory returned an unexpected response")
+        result = []
+        for entry in records[:limit]:
+            if not isinstance(entry, dict):
+                continue
+            status = str(entry.get("printStatusResult") or "unknown").lower()
+            outcome = {
+                "success": "reported_completed",
+                "failed": "reported_failed",
+                "fail": "reported_failed",
+                "cancel": "reported_cancelled",
+                "cancelled": "reported_cancelled",
+                "canceled": "reported_cancelled",
+            }.get(status, "ended_unverified")
+            result.append(
+                {
+                    "id": "octoprint-" + str(entry.get("databaseId", "unknown")),
+                    "filename": entry.get("fileName"),
+                    "started_at": entry.get("printStartDateTimeFormatted"),
+                    "ended_at": entry.get("printEndDateTimeFormatted"),
+                    "duration_seconds": entry.get("duration"),
+                    "progress": None,
+                    "state": status,
+                    "outcome": outcome,
+                    "outcome_verified": False,
+                    "source": "OctoPrint PrintJobHistory plugin",
+                    "material": (entry.get("filamentModels") or {}).get("total", {}).get(
+                        "material"
+                    ),
+                    "filament_weight_g": (entry.get("filamentModels") or {}).get(
+                        "total", {}
+                    ).get("usedWeight"),
+                }
+            )
+        return {
+            "sessions": result,
+            "total": total,
+            "returned": len(result),
+            "limit": limit,
+            "source": "OctoPrint PrintJobHistory plugin",
+            "note": (
+                "Historical print outcomes reported by the OctoPrint PrintJobHistory "
+                "plugin. No physical inspection or independent verification is implied."
+            ),
+        }
+
     def _post_sync(self, endpoint: str, command: str) -> dict[str, Any]:
         allowed = {
             ("/api/job", "pause"): {"command": "pause", "action": "pause"},
