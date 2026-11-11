@@ -984,10 +984,14 @@ class MotionTimeline:
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
             if active is True:
-                if current is None or current["source"] != source or (
-                    filename
-                    and current["filename"]
-                    and filename.casefold() != current["filename"].casefold()
+                if (
+                    current is None
+                    or current["source"] != source
+                    or (
+                        filename
+                        and current["filename"]
+                        and filename.casefold() != current["filename"].casefold()
+                    )
                 ):
                     if current is not None:
                         db.execute(
