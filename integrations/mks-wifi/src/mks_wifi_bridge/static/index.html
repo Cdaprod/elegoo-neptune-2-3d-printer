@@ -534,6 +534,10 @@
         </div>
         <article class="card home-panel">
           <div class="sd-list-tools" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <select id="history-source" aria-label="Print history source">
+              <option value="observatory">Observatory recorded sessions</option>
+              <option value="octoprint">OctoPrint PrintJobHistory</option>
+            </select>
             <input type="search" id="history-search" placeholder="Search filenames…" aria-label="Search print history filenames">
             <select id="history-filter" aria-label="Filter print history outcome">
               <option value="all">All recorded outcomes</option>
@@ -1109,7 +1113,7 @@
         $("history-total").textContent = Number(payload.total || 0).toLocaleString();
         $("history-unverified").textContent = sessions.filter((s) => s.outcome === "ended_unverified").length.toLocaleString();
         $("history-interrupted").textContent = sessions.filter((s) => ["inferred_interrupted", "reported_failed"].includes(s.outcome)).length.toLocaleString();
-        $("history-note").textContent = `Showing ${matched.length} of ${sessions.length} loaded sessions · ${payload.total} total recorded. Results describe observed data, not guaranteed physical outcomes.`;
+        $("history-note").textContent = `Showing ${matched.length} of ${sessions.length} loaded sessions · ${payload.total} total recorded. Source: ${payload.source} · Results are reported outcomes, not independent physical verification.`;
         const container = $("history-results");
         container.replaceChildren();
         if (!matched.length) {
@@ -1125,8 +1129,8 @@
           const filename = session.filename || "Filename unavailable";
           heading.textContent = `${filename} · ${historyLabels[session.outcome] || "Unknown outcome"}`;
           const details = document.createElement("div");
-          const started = session.started_at ? new Date(session.started_at).toLocaleString() : "Unknown";
-          const ended = session.ended_at ? new Date(session.ended_at).toLocaleString() : "Not recorded";
+          const started = session.started_at ? (session.source === "OctoPrint PrintJobHistory plugin" ? session.started_at : new Date(session.started_at).toLocaleString()) : "Unknown";
+          const ended = session.ended_at ? (session.source === "OctoPrint PrintJobHistory plugin" ? session.ended_at : new Date(session.ended_at).toLocaleString()) : "Not recorded";
           const elapsed = session.duration_seconds == null ? "Unavailable" : duration(session.duration_seconds);
           const progress = Number.isFinite(session.progress) ? `${Number(session.progress).toFixed(1)}%` : "Not reported";
           details.textContent = `Started: ${started} · Ended: ${ended} · Recorded duration: ${elapsed} · Last progress: ${progress} · Last state: ${session.state || "unknown"} · Source: ${session.source || "unknown"} · Session ID: ${session.id}`;
@@ -1138,19 +1142,20 @@
       async function loadPrintHistory() {
         $("history-note").textContent = "Loading recorded print history…";
         try {
-          state.printHistory = await api("/api/print/history?limit=500");
+          state.printHistory = await api($("history-source").value === "octoprint" ? "/api/print/history/octoprint?limit=500" : "/api/print/history?limit=500");
           renderPrintHistory();
         } catch (error) {
           $("history-note").textContent = `Could not load print history: ${error.message}`;
         }
       }
       $("history-refresh").addEventListener("click", loadPrintHistory);
+      $("history-source").addEventListener("change", loadPrintHistory);
       $("history-search").addEventListener("input", renderPrintHistory);
       $("history-filter").addEventListener("change", renderPrintHistory);
       $("history-export").addEventListener("click", () => {
         const data = state.printHistory?.sessions || [];
         if (!data.length) return;
-        const cols = ["id", "filename", "outcome", "state", "started_at", "ended_at", "duration_seconds", "progress", "source"];
+        const cols = ["id", "filename", "outcome", "state", "started_at", "ended_at", "duration_seconds", "progress", "source", "material", "filament_weight_g"];
         const quote = (value) => `"${String(value == null ? "" : value).replaceAll('"', '""')}"`;
         const csv = [cols.join(","), ...data.map((item) => cols.map((key) => quote(item[key])).join(","))].join("\r\n");
         const link = document.createElement("a");
