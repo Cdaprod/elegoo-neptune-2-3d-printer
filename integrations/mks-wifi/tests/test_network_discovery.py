@@ -1,4 +1,5 @@
 """Unit tests for safe network discovery; never contact a real printer."""
+
 from __future__ import annotations
 
 import importlib.util
