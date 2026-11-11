@@ -1564,9 +1564,16 @@ def create_app(
                 or age > 5
             ):
                 raise HTTPException(status_code=409, detail="Fresh printer telemetry is required.")
-            required = "idle" if operation.startswith("home_") else (
-                "paused" if operation == "resume" else "printing"
-                if operation == "pause" else None
+            required = (
+                "idle"
+                if operation.startswith("home_")
+                else (
+                    "paused"
+                    if operation == "resume"
+                    else "printing"
+                    if operation == "pause"
+                    else None
+                )
             )
             if required is not None and state != required:
                 raise HTTPException(
