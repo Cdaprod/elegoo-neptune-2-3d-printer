@@ -361,10 +361,13 @@ class PrinterService:
                             else:
                                 self.motion_status = "skipped_non_idle_or_unknown"
                                 self.motion_continuity_valid = False
-        except (MksWifiConnectionError, OSError, TimeoutError) as exc:
+        except (MksWifiConnectionError, OctoPrintError, OSError, TimeoutError) as exc:
             self.motion_continuity_valid = False
             self.connected = False
-            self.last_error = str(exc) or type(exc).__name__
+            error = str(exc) or type(exc).__name__
+            if error != self.last_error:
+                logger.warning("Printer polling unavailable: %s", error)
+            self.last_error = error
             self.failure_count += 1
             self.failed_polls += 1
             self.latencies_ms.append((time.monotonic() - started) * 1000)
