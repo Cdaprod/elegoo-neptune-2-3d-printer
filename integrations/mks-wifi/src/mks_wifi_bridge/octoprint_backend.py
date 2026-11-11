@@ -24,7 +24,7 @@ class _NoRedirects(HTTPRedirectHandler):
 
 
 def _field(value: Any, **extra: Any) -> dict[str, Any]:
-    if value is None or isinstance(value, bool):
+    if value is None:
         return {"status": "unsupported_or_not_reported", "value": None, **extra}
     return {"status": "available", "value": value, "source": "octoprint_api", **extra}
 
