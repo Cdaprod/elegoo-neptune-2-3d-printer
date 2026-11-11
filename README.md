@@ -67,7 +67,7 @@ flowchart LR
 
 ### One-command credential setup with Make
 
-From the repository root, run `make setup`. The setup script creates a private `.env` (mode 0600), discovers the printer MKS WiFi IP from the host's local IPv4 network using its read-only HTTP management interface, then prompts only for your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs. Discovery does not open the single-client raw TCP 8080 port; if no unique MKS device is detected, setup fails without guessing.
+From the repository root, run `make setup`. The setup script creates a private `.env` (mode 0600), discovers the printer MKS WiFi IP from the host's local IPv4 network using its read-only HTTP management interface, then prompts only for your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs. Discovery does not open the single-client raw TCP 8080 port; if no unique MKS device is detected, setup fails without guessing. **Static printer IP:** when discovery is unavailable, set the host in the shell once: `OCTOPRINT_MKS_WIFI_HOST=192.168.0.95 make setup`. This saves it into the root `.env` for future `make up` runs. An explicitly configured host is authoritative and does not require the printer's HTTP management UI to respond; discovery is used only when no host is configured.
 
 `/elegoo-neptune-2-3d-printer`
 
