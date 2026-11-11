@@ -45,6 +45,7 @@ def safe_plugin_url(base: str, value: str) -> str:
         or not parsed.path.startswith("/plugin/appkeys/")
         or parsed.username
         or parsed.password
+        or parsed.fragment
     ):
         raise ValueError("OctoPrint returned an unexpected application-key URL")
     return url
@@ -72,7 +73,10 @@ def request(opener, url: str, *, method: str = "GET", payload=None, key=None):
         exc.close()
     if len(raw) > 16384:
         raise ValueError("OctoPrint returned an oversized authorization response")
-    body = json.loads(raw) if raw else {}
+    try:
+        body = json.loads(raw) if raw else {}
+    except (UnicodeError, ValueError):
+        body = {}
     if not isinstance(body, dict):
         raise ValueError("OctoPrint returned an invalid authorization object")
     return status, location, body
