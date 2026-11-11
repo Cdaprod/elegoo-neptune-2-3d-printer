@@ -105,7 +105,7 @@ jobs:
           NEPTUNE_CONTROL_EXECUTION_ENABLED: "false"
           NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: "false"
         run: |
-          uv run --no-sync neptune-observatory --host 127.0.0.1 --port 8000 > /tmp/observatory-browser.log 2>&1 &
+          .venv/bin/neptune-observatory --host 127.0.0.1 --port 8000 > /tmp/observatory-browser.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/ >/dev/null; then exit 0; fi
             sleep 1

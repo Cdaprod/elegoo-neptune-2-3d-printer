@@ -673,7 +673,7 @@
     </main>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <dialog id="auth-dialog"><form id="auth-form"><h2>Local access token</h2><p>This dashboard is in LAN mode. Enter the token configured on the Mac to open a temporary local session.</p><label for="auth-token">Access token</label><input id="auth-token" type="password" autocomplete="current-password" required><div class="dialog-actions"><button class="btn" type="submit">Connect dashboard</button></div></form></dialog>
+  <dialog id="auth-dialog"><form id="auth-form"><h2>Local access token</h2><p>This dashboard is in LAN mode. Enter the token configured on the Mac to open a temporary local session.</p><label for="auth-token">Access token</label><input id="auth-token" type="password" autocomplete="current-password" required><p id="auth-feedback" role="alert" aria-live="polite"></p><div class="dialog-actions"><button class="btn" type="submit">Connect dashboard</button></div></form></dialog>
   <dialog id="macro-dialog"><form id="macro-form"><h2 id="macro-dialog-title">Review operation</h2><p id="macro-dialog-description"></p><div id="macro-parameters" class="preview-form"></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-macro">Cancel</button><button class="btn" type="submit">Review exact commands</button></div></form></dialog>
   <dialog id="execute-dialog"><form id="execute-form"><h2 id="execute-title">Confirm machine operation</h2><p id="execute-description">Review the exact operation before continuing.</p><div class="execute-command-box"><strong>Exact command sequence</strong><pre id="execute-commands"></pre></div><p id="execute-readiness" class="disabled-note"></p><ul id="execute-requirements" class="workflow-list"></ul><label id="execute-clear-path-label" style="display:flex;gap:8px;align-items:flex-start"><input id="execute-clear-path" type="checkbox" style="width:auto;margin:0">The axis travel path is clear.</label><label id="execute-first-layer-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-first-layer-confirmed" type="checkbox" style="width:auto;margin:0">I reviewed this exact G-code file and confirm it contains only the intended first layer. The M20 listing cannot verify its contents.</label><label id="execute-axis-home-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-axis-home" type="checkbox" style="width:auto;margin:0"><span id="execute-axis-home-text"></span></label><label id="execute-gantry-label" style="display:flex;gap:8px;align-items:flex-start" hidden><input id="execute-gantry-supported" type="checkbox" style="width:auto;margin:0">The gantry is mechanically supported before motor release.</label><div id="execute-guided-workflow" class="guided-session" hidden></div><div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong>Physical completion is reported only when evidence exists</strong>A transport acknowledgment is a controller reply, not a position measurement. Cancellation is not an emergency stop.</div></div><div class="dialog-actions"><button class="btn" type="button" id="cancel-execute">Back</button><button class="btn" type="button" id="execute-start-guided" hidden>Open guided steps</button><button class="btn" type="button" id="execute-arm-inline" hidden>Arm Operator Mode</button><button class="btn primary" type="submit" id="confirm-execute">Run action</button></div></form></dialog>
   <dialog id="arm-dialog"><form id="arm-form"><h2>Arm Operator Mode</h2><p>Uses your existing dashboard sign-in; no separate control credential is needed. Operator Mode stays armed until you disarm it or the service restarts. Each action still requires an explicit confirmation and fresh safety checks.</p><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-attended" type="checkbox" required style="width:auto;margin:0">I am physically beside and monitoring the printer.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-power-switch" type="checkbox" required style="width:auto;margin:0">The printer power switch is within reach.</label><label style="display:flex;gap:8px;align-items:flex-start"><input id="arm-no-clients" type="checkbox" required style="width:auto;margin:0">Other printer clients are disconnected.</label><div class="dialog-actions"><button class="btn" type="button" id="cancel-arm">Cancel</button><button class="btn primary" type="submit" id="confirm-arm">Arm Operator Mode</button></div></form></dialog>
@@ -734,12 +734,21 @@
         });
       });
       $("auth-form").addEventListener("submit", async (event) => {
-        event.preventDefault(); const button = event.submitter; button.disabled = true;
+        event.preventDefault();
+        // Some mobile browsers/keyboard submissions omit SubmitEvent.submitter.
+        // Never throw before the request, and display errors inside the modal.
+        const button = event.submitter || $("auth-form").querySelector('button[type="submit"]');
+        const feedback = $("auth-feedback");
+        if (button?.disabled) return;
+        if (button) button.disabled = true;
+        feedback.textContent = "Connecting…";
         try {
           await api("/api/auth/session", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({token:$("auth-token").value})});
-          $("auth-token").value = ""; $("auth-dialog").close(); await bootstrap(); connectSocket();
-        } catch (error) { showToast(error.message); }
-        finally { button.disabled = false; }
+          $("auth-token").value = ""; feedback.textContent = ""; $("auth-dialog").close(); await bootstrap(); connectSocket();
+        } catch (error) {
+          feedback.textContent = error.message || "Unable to connect. Please try again.";
+          showToast(feedback.textContent);
+        } finally { if (button) button.disabled = false; }
       });
       document.querySelectorAll(".nav button[data-view]").forEach((button) => button.addEventListener("click", () => {
         document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("active", b === button));
