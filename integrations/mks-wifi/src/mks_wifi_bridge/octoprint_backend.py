@@ -262,7 +262,7 @@ class OctoPrintBackend:
                 raise OctoPrintError("OctoPrint SD refresh unauthorized") from None
             if exc.code in {404, 409}:
                 raise OctoPrintError(
-                    "OctoPrint SD refresh unavailable; check printer connection and SD initialization"
+                    "SD refresh unavailable; check printer connection and SD initialization"
                 ) from None
             raise OctoPrintError(f"OctoPrint SD refresh returned HTTP {exc.code}") from None
         except (OSError, URLError, TimeoutError):
