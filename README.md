@@ -67,12 +67,12 @@ flowchart LR
 
 ### One-command credential setup with Make
 
-From the repository root, run `make setup PRINTER_IP=<your-printer-IP>`. The setup script creates a private `.env` (mode 0600), prompts for your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs.
+From the repository root, run `make setup`. The setup script creates a private `.env` (mode 0600), prompts in the shell for the **printer MKS WiFi IP/hostname** and your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs.
 
 `/elegoo-neptune-2-3d-printer`
 
 ```bash
-make setup PRINTER_IP=192.168.0.50
+make setup
 make up
 make token         # Display saved Observatory token locally when needed
 # make rotate-token # Optional: rotate token, invalidates existing Observatory sessions
