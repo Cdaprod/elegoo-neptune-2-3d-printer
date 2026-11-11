@@ -1,0 +1,62 @@
+name: Capture Observatory Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      viewport:
+        description: "Capture desktop and mobile views"
+        required: true
+        default: "both"
+        type: choice
+        options: [both, desktop, mobile]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Observatory
+        working-directory: integrations/mks-wifi
+        run: uv sync --locked --extra web --no-editable
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Start isolated read-only Observatory
+        working-directory: integrations/mks-wifi
+        env:
+          NEPTUNE_PRINTER_BACKEND: mks
+          MKS_WIFI_HOST: printer.example.invalid
+          NEPTUNE_CONTROL_EXECUTION_ENABLED: "false"
+          NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: "false"
+        run: |
+          uv run --no-sync neptune-observatory --host 127.0.0.1 --port 8000 > /tmp/observatory.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/observatory.log
+          exit 1
+      - name: Capture actual dashboard with clearly labeled demo history
+        env:
+          CAPTURE_VIEWPORT: ${{ inputs.viewport }}
+        run: node scripts/capture-observatory-screenshots.cjs
+      - name: Upload dashboard PNG artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: neptune-observatory-screenshots-${{ github.run_number }}
+          path: artifacts/observatory-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 14
