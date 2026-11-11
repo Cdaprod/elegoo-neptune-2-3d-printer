@@ -162,6 +162,61 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
         assert workflow.status_code == 423
 
 
+def test_octoprint_controls_are_opt_in_and_never_use_mks(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = StubBackend()
+    operations: list[str] = []
+
+    async def fake_execute(operation: str) -> dict[str, Any]:
+        operations.append(operation)
+        return {"accepted": True, "operation": operation}
+
+    backend.execute_control = fake_execute  # type: ignore[method-assign]
+    service = make_service(backend)
+    app = create_app(
+        service,
+        bind_host="0.0.0.0",
+        auth_token="test-only-observatory-secret",
+        control_enabled=True,
+        timeline=MotionTimeline(tmp_path / "controls.sqlite3"),
+    )
+    headers = {"Authorization": "Bearer test-only-observatory-secret"}
+    payload = {
+        "operation": "home_x",
+        "confirmation": "CONFIRM HOME_X",
+        "attended": True,
+        "power_switch_reachable": True,
+    }
+    with TestClient(app) as client:
+        assert (
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 423
+        )
+        monkeypatch.setenv("NEPTUNE_OCTOPRINT_CONTROLS_ENABLED", "true")
+        # TestClient startup polls the stub, so telemetry is already fresh.
+        response = client.post("/api/octoprint/control", json=payload, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["verified_complete"] is False
+        assert operations == ["home_x"]
+        payload["confirmation"] = "wrong"
+        assert (
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 422
+        )
+        payload["confirmation"] = "CONFIRM HOME_X"
+        payload["operation"] = "cancel"
+        payload["confirmation"] = "CONFIRM CANCEL"
+        assert (
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 409
+        )
+        assert operations == ["home_x"]
+
+
+def test_octoprint_command_adapter_rejects_unknown_commands() -> None:
+    backend = OctoPrintBackend("http://octoprint", "fixture")
+    with pytest.raises(ValueError):
+        backend._post_sync("/api/printer/command", "M112")
+
+
 @pytest.mark.parametrize(
     ("url", "key"),
     [

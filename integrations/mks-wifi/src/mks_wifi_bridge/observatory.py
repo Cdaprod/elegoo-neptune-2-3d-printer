@@ -43,7 +43,7 @@ from .local_gcode_index import LocalGcodeIndexer
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
-from .octoprint_backend import OctoPrintBackend
+from .octoprint_backend import OctoPrintBackend, OctoPrintError
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
 from .workflows import GuidedWorkflowManager, WorkflowError
 
@@ -937,6 +937,7 @@ def create_app(
         not octoprint_mode and os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
     )
     app.state.sd_upload_in_progress = False
+    app.state.octoprint_control_lock = asyncio.Lock()
 
     app.mount(
         "/static",
@@ -1521,6 +1522,72 @@ def create_app(
                 "Commissioning is optional and records physical verification separately."
             ),
         }
+
+    @app.post("/api/octoprint/control", dependencies=[Depends(require_auth)])
+    async def octoprint_control(request: Request) -> dict[str, Any]:
+        """Explicit, attended commands through OctoPrint only; never native MKS."""
+        await require_control_token(request)
+        if not octoprint_mode or printer.backend is None:
+            raise HTTPException(status_code=404, detail="OctoPrint backend is not active.")
+        if os.getenv("NEPTUNE_OCTOPRINT_CONTROLS_ENABLED", "false").lower() != "true":
+            raise HTTPException(status_code=423, detail="OctoPrint controls are disabled.")
+        origin = request.headers.get("origin")
+        if origin and not _origin_matches(request.headers.get("host", ""), origin):
+            raise HTTPException(status_code=403, detail="Request origin is not allowed")
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid request JSON.") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="Expected a JSON object.")
+        operation = body.get("operation")
+        allowed = {"pause", "resume", "cancel", "home_x", "home_y", "home_z"}
+        if not isinstance(operation, str) or operation not in allowed:
+            raise HTTPException(status_code=422, detail="Unsupported control operation.")
+        if (
+            body.get("confirmation") != f"CONFIRM {operation.upper()}"
+            or body.get("attended") is not True
+            or body.get("power_switch_reachable") is not True
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Exact confirmation, attendance, and accessible power switch required.",
+            )
+        async with app.state.octoprint_control_lock:
+            snapshot = printer.status_payload()
+            state = (snapshot.get("telemetry") or {}).get("printer_state", {}).get("value")
+            age = snapshot.get("data_age_seconds")
+            if (
+                snapshot.get("stale")
+                or not snapshot.get("connection", {}).get("connected")
+                or age is None
+                or age > 5
+            ):
+                raise HTTPException(status_code=409, detail="Fresh printer telemetry is required.")
+            required = (
+                "idle"
+                if operation.startswith("home_")
+                else (
+                    "paused"
+                    if operation == "resume"
+                    else "printing"
+                    if operation == "pause"
+                    else None
+                )
+            )
+            if required is not None and state != required:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Operation requires printer state: {required}.",
+                )
+            if operation == "cancel" and state not in {"printing", "paused"}:
+                raise HTTPException(status_code=409, detail="No active print to cancel.")
+            try:
+                result = await printer.backend.execute_control(operation)
+            except OctoPrintError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            commands.record_event(operation, "octoprint_command_accepted")
+            return {**result, "backend": "octoprint", "verified_complete": False}
 
     @app.post("/api/control/arm", dependencies=[Depends(require_auth)])
     async def arm_control_session(payload: ControlArmRequest, request: Request) -> dict[str, Any]:
