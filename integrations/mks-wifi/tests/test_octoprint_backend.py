@@ -18,6 +18,10 @@ class StubBackend(OctoPrintBackend):
         super().__init__("http://octoprint:80", "test-secret")
         self.calls: list[str] = []
         self.disconnected = False
+        self.refreshes = 0
+
+    def _refresh_sd_sync(self) -> None:
+        self.refreshes += 1
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         self.calls.append(endpoint)
@@ -83,15 +87,16 @@ def test_octoprint_file_catalog_has_correct_provenance() -> None:
     backend = StubBackend()
     service = make_service(backend)
     result = asyncio.run(service.refresh_sd())
-    assert result["source"] == "octoprint_local"
+    assert result["source"] == "octoprint_sdcard"
     assert result["entries"] == [
         {
-            "name": "part.gcode",
+            "name": "sd.gco",
             "kind": "file",
-            "size_bytes": 1234,
-            "source": "octoprint_local",
+            "size_bytes": None,
+            "source": "octoprint_sdcard",
         }
     ]
+    assert backend.refreshes == 1
     assert backend.calls == ["/api/files"]
 
 
@@ -134,7 +139,7 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
         listing = client.get(
             "/api/printer/sdcard", params={"refresh": "true"}, headers=headers
         ).json()
-        assert listing["printer_listing_source"] == "octoprint_local"
+        assert listing["printer_listing_source"] == "octoprint_sdcard"
         arm = client.post(
             "/api/control/arm",
             json={

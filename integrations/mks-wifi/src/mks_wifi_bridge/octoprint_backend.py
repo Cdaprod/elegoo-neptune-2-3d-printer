@@ -241,7 +241,36 @@ class OctoPrintBackend:
             "remaining_seconds": _field(progress.get("printTimeLeft")),
         }
 
-    async def list_files(self) -> list[dict[str, Any]]:
+    def _refresh_sd_sync(self) -> None:
+        """Ask OctoPrint to refresh firmware SD files; never open MKS TCP."""
+        request = Request(
+            self.base_url + "/api/files/sdcard",
+            data=b'{"command":"refresh"}',
+            headers={
+                "X-Api-Key": self.api_key,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with self._opener.open(request, timeout=self.timeout) as response:
+                if response.status not in {200, 202, 204}:
+                    raise OctoPrintError("OctoPrint rejected the SD refresh request")
+        except HTTPError as exc:
+            if exc.code in {401, 403}:
+                raise OctoPrintError("OctoPrint SD refresh unauthorized") from None
+            if exc.code in {404, 409}:
+                raise OctoPrintError(
+                    "SD refresh unavailable; check printer connection and SD initialization"
+                ) from None
+            raise OctoPrintError(f"OctoPrint SD refresh returned HTTP {exc.code}") from None
+        except (OSError, URLError, TimeoutError):
+            raise OctoPrintError("OctoPrint SD refresh is unreachable or timed out") from None
+
+    async def list_files(self, *, refresh: bool = False) -> list[dict[str, Any]]:
+        if refresh:
+            await asyncio.to_thread(self._refresh_sd_sync)
         payload = await self.get("/api/files")
         entries: list[dict[str, Any]] = []
         for item in payload.get("files") or []:
@@ -250,9 +279,8 @@ class OctoPrintBackend:
             name = item.get("name")
             if not isinstance(name, str) or not name:
                 continue
-            # Only OctoPrint's local storage is represented here. Never
-            # label uploaded files as firmware SD contents.
-            if item.get("origin") != "local":
+            # Physical SD files only; OctoPrint uploads are a separate origin.
+            if item.get("origin") != "sdcard":
                 continue
             kind = "directory" if item.get("type") == "folder" else "file"
             entries.append(
@@ -260,7 +288,7 @@ class OctoPrintBackend:
                     "name": name,
                     "kind": kind,
                     "size_bytes": item.get("size"),
-                    "source": "octoprint_local",
+                    "source": "octoprint_sdcard",
                 }
             )
         return entries

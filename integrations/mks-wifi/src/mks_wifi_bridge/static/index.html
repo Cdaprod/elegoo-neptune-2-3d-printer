@@ -1775,7 +1775,7 @@
           const preview=entry.kind==="file"&&entry.preview_available
             ? `<img class="sd-preview" loading="lazy" src="/api/printer/sdcard/preview/${encodeURIComponent(entry.name)}" alt="Print preview for ${esc(entry.name)}">`
             : '<span class="sd-preview-empty" aria-label="No print preview available"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 12h8M8 15h5"/></svg></span>';
-          const listedFrom=data.printer_listing_source==="octoprint_local"?"OctoPrint local files":data.printer_listing_source==="firmware_m20"?"Printer SD · fresh M20":"Printer SD · cached listing";
+          const listedFrom=data.printer_listing_source==="octoprint_sdcard"?"Printer SD · OctoPrint":data.printer_listing_source==="firmware_m20"?"Printer SD · fresh M20":"Printer SD · cached listing";
           const localSource=entry.preview_source==="cached_local_gcode"?` · ${entry.preview_stale?"offline cached":"local cached"} thumbnail`:"";
           const previewLabel=!entry.preview_available?"No preview":entry.preview_source==="cached_local_gcode"?(entry.preview_stale?"Offline cache":"Local cache"):"Observatory cache";
           const localMeta=entry.local_metadata?.metadata||{};
