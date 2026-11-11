@@ -1551,9 +1551,7 @@ def create_app(
             "backend": "octoprint" if octoprint_mode else "mks",
             "enabled": enabled,
             "operations": (
-                ["home_x", "home_y", "home_z", "pause", "resume", "cancel"]
-                if enabled
-                else []
+                ["home_x", "home_y", "home_z", "pause", "resume", "cancel"] if enabled else []
             ),
             "notice": (
                 "OctoPrint exclusively owns the MKS link. Every action requires "
