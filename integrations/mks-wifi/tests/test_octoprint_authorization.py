@@ -90,7 +90,7 @@ def test_authorization_rejects_cross_origin_urls():
         auth.safe_plugin_url(BASE, "http://example.invalid/plugin/appkeys/auth/abc123")
 
 
-def test_invalid_stored_key_triggers_reauthorization(tmp_path):
+def test_existing_key_is_never_rotated_on_validation_failure(tmp_path):
     local_env = tmp_path / ".env"
     local_env.write_text("OCTOPRINT_API_KEY=invalid-key\nOCTOPRINT_HOST_PORT=5001\n")
 
@@ -105,10 +105,9 @@ def test_invalid_stored_key_triggers_reauthorization(tmp_path):
         patch.object(auth, "authorize", return_value=KEY) as approve,
         patch.object(sys, "argv", ["authorize_octoprint.py"]),
     ):
-        assert auth.main() == 0
-    assert approve.call_count == 1
-    assert auth.parse_env(local_env.read_text())["OCTOPRINT_API_KEY"] == KEY
-    assert local_env.stat().st_mode & 0o077 == 0
+        assert auth.main() == 1
+    assert approve.call_count == 0
+    assert auth.parse_env(local_env.read_text())["OCTOPRINT_API_KEY"] == "invalid-key"
 
 
 def test_check_config_rejects_placeholder(tmp_path):
@@ -121,3 +120,36 @@ def test_check_config_rejects_placeholder(tmp_path):
         with pytest.raises(SystemExit) as error:
             auth.main()
     assert error.value.code == 2
+
+
+def test_explicit_reauthorization_replaces_revoked_key(tmp_path):
+    local_env = tmp_path / ".env"
+    local_env.write_text("OCTOPRINT_API_KEY=old-revoked-key-12345\nOCTOPRINT_HOST_PORT=5001\n")
+
+    def save_test(value):
+        local_env.write_text(value)
+        local_env.chmod(0o600)
+
+    with (
+        patch.object(auth, "ENV", local_env),
+        patch.object(auth, "save", side_effect=save_test),
+        patch.object(auth, "authorize", return_value=KEY) as approve,
+        patch.object(sys, "argv", ["authorize_octoprint.py", "--reauthorize"]),
+    ):
+        assert auth.main() == 0
+    assert approve.call_count == 1
+    assert auth.parse_env(local_env.read_text())["OCTOPRINT_API_KEY"] == KEY
+
+
+def test_saved_key_http_403_never_triggers_approval(tmp_path):
+    local_env = tmp_path / ".env"
+    local_env.write_text(f"OCTOPRINT_API_KEY={KEY}\nOCTOPRINT_HOST_PORT=5001\n")
+    with (
+        patch.object(auth, "ENV", local_env),
+        patch.object(auth, "request", return_value=(403, "", {})),
+        patch.object(auth, "authorize") as approve,
+        patch.object(sys, "argv", ["authorize_octoprint.py"]),
+    ):
+        assert auth.main() == 1
+    approve.assert_not_called()
+    assert auth.parse_env(local_env.read_text())["OCTOPRINT_API_KEY"] == KEY
