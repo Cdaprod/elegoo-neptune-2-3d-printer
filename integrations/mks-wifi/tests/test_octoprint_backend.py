@@ -237,3 +237,70 @@ def test_octoprint_rejects_arbitrary_api_paths() -> None:
     backend = OctoPrintBackend("http://octoprint", "fixture")
     with pytest.raises(ValueError):
         asyncio.run(backend.get("/api/printer/command"))
+
+
+def test_octoprint_print_job_history_normalizes_plugin_records() -> None:
+    backend = OctoPrintBackend("http://octoprint", "fixture")
+    calls: list[str] = []
+
+    def fake_get(endpoint: str) -> dict[str, Any]:
+        calls.append(endpoint)
+        return {
+            "totalItemCount": 2,
+            "allPrintJobs": [
+                {
+                    "databaseId": 42,
+                    "fileName": "benchy.gcode",
+                    "printStatusResult": "success",
+                    "printStartDateTimeFormatted": "11.11.2026 12:30",
+                    "printEndDateTimeFormatted": "11.11.2026 13:45",
+                    "duration": 4500,
+                    "filamentModels": {
+                        "total": {"material": "PLA", "usedWeight": "15.50"}
+                    },
+                },
+                {
+                    "databaseId": 43,
+                    "fileName": "bracket.gcode",
+                    "printStatusResult": "cancel",
+                    "printStartDateTimeFormatted": "10.11.2026 09:00",
+                    "duration": 180,
+                },
+            ],
+        }
+
+    backend._get_sync = fake_get  # type: ignore[method-assign]
+    result = asyncio.run(backend.print_job_history(100))
+    assert len(calls) == 1
+    assert calls[0].startswith("/plugin/PrintJobHistory/loadPrintJobHistoryByQuery?")
+    assert result["total"] == 2
+    assert result["sessions"][0]["outcome"] == "reported_completed"
+    assert result["sessions"][0]["outcome_verified"] is False
+    assert result["sessions"][0]["material"] == "PLA"
+    assert result["sessions"][1]["outcome"] == "reported_cancelled"
+    with pytest.raises(ValueError):
+        asyncio.run(backend.print_job_history(501))
+
+
+def test_octoprint_history_endpoint_is_authenticated_and_read_only(tmp_path: Any) -> None:
+    backend = StubBackend()
+
+    async def fake_history(limit: int) -> dict[str, Any]:
+        return {"sessions": [], "total": 0, "returned": 0, "limit": limit}
+
+    backend.print_job_history = fake_history  # type: ignore[method-assign]
+    app = create_app(
+        make_service(backend),
+        bind_host="0.0.0.0",
+        auth_token="test-only-observatory-secret",
+        timeline=MotionTimeline(tmp_path / "history.sqlite3"),
+    )
+    with TestClient(app) as client:
+        assert client.get("/api/print/history/octoprint").status_code == 401
+        headers = {"Authorization": "Bearer test-only-observatory-secret"}
+        result = client.get("/api/print/history/octoprint", headers=headers)
+        assert result.status_code == 200
+        assert result.json()["total"] == 0
+        assert client.get(
+            "/api/print/history/octoprint?limit=501", headers=headers
+        ).status_code == 422
