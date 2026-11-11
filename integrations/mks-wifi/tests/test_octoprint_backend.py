@@ -190,8 +190,7 @@ def test_octoprint_controls_are_opt_in_and_never_use_mks(
     }
     with TestClient(app) as client:
         assert (
-            client.post("/api/octoprint/control", json=payload, headers=headers).status_code
-            == 423
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 423
         )
         monkeypatch.setenv("NEPTUNE_OCTOPRINT_CONTROLS_ENABLED", "true")
         # TestClient startup polls the stub, so telemetry is already fresh.
@@ -201,15 +200,13 @@ def test_octoprint_controls_are_opt_in_and_never_use_mks(
         assert operations == ["home_x"]
         payload["confirmation"] = "wrong"
         assert (
-            client.post("/api/octoprint/control", json=payload, headers=headers).status_code
-            == 422
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 422
         )
         payload["confirmation"] = "CONFIRM HOME_X"
         payload["operation"] = "cancel"
         payload["confirmation"] = "CONFIRM CANCEL"
         assert (
-            client.post("/api/octoprint/control", json=payload, headers=headers).status_code
-            == 409
+            client.post("/api/octoprint/control", json=payload, headers=headers).status_code == 409
         )
         assert operations == ["home_x"]
 
