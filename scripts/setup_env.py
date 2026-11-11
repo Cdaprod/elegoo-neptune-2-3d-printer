@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from discover_mks import discover, mks_http_identity
+from discover_mks import discover
 import getpass
 import os
 import re
@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENV = ROOT / ".env"
 EXAMPLE = ROOT / ".env.example"
-FIELDS = {"NEPTUNE_OBSERVATORY_TOKEN", "OCTOPRINT_API_KEY", "OCTOPRINT_MKS_WIFI_HOST"}
+DEFAULT_PRINTER_IP = "192.168.0.95"  # Known static MKS WiFi endpoint for this deployment.
 HOST_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -88,14 +88,22 @@ def main() -> int:
         print("Generated and saved a new Observatory token (run make token to display).")
         return 0
 
-    host = values.get("OCTOPRINT_MKS_WIFI_HOST", "")
-    if not host or host == "printer.local" or not mks_http_identity(host):
+    # Precedence: explicit shell override > saved non-placeholder value > known
+    # static printer IP. Network discovery is opt-in, never a setup prerequisite.
+    host = os.environ.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+    if not host:
+        host = values.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+    if host in ("", "printer.local"):
+        host = DEFAULT_PRINTER_IP
+    if host.lower() == "discover":
         try:
             host = discover()
         except RuntimeError as exc:
             parser.error(str(exc))
-    print(f"Discovered MKS WiFi management interface at {host}")
+    if not HOST_PATTERN.fullmatch(host):
+        parser.error("printer address must be a hostname or IPv4 address without URL/port")
     updates["OCTOPRINT_MKS_WIFI_HOST"] = host
+    print(f"Using configured MKS WiFi endpoint: {host}")
 
     key = values.get("OCTOPRINT_API_KEY", "")
     if not key or key == "replace-with-octoprint-application-api-key":
