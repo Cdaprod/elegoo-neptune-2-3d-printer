@@ -8,7 +8,7 @@ help:
 	@printf '%s\n' 'make setup PRINTER_IP=192.168.0.50  # securely prompt for existing OctoPrint API key' 'make up                              # validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
 
 setup:
-	@$(PYTHON) scripts/setup_env.py --printer-ip "$(PRINTER_IP)" $(if $(TOKEN_PHRASE),--token-phrase "$(TOKEN_PHRASE)",)
+	@$(PYTHON) scripts/setup_env.py --printer-ip "$(PRINTER_IP)"
 
 up: check
 	@docker compose up -d --build
