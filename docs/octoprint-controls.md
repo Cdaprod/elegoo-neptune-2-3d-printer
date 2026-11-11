@@ -30,3 +30,11 @@ The OctoPrint API key needs appropriate OctoPrint permissions for the selected a
 ## Validation
 
 Run `uv run --no-sync ruff check .`, `uv run --no-sync ruff format --check .`, and `uv run --no-sync pytest` from `integrations/mks-wifi`. Automated tests use stubbed OctoPrint endpoints; no live printer commands are issued by CI. Bench validation is still required before relying on controls during real printing.
+
+## Observatory UI and recorded print history
+
+The **Machine** view now presents the guarded OctoPrint controls when the OctoPrint backend is active. The browser retrieves `GET /api/octoprint/control/capabilities` before enabling buttons, requires the operator to acknowledge physical attendance and clear homing travel, and prompts for the exact operation confirmation. The server independently enforces these conditions, fresh state, and a short duplicate-command cooldown. The native MKS executor stays disabled in OctoPrint mode.
+
+The **Print History** view uses `GET /api/print/history?limit=500` and Observatory's SQLite `print_sessions` table. It supports filename search, outcome filters, recorded timestamps, duration, progress and CSV export. This history reflects sessions observed while Observatory was running, not historical jobs that OctoPrint recorded before Observatory started. The session metadata retention is 365 days; the feedrate samples retain their separate shorter retention period. Session outcomes are explicitly marked unverified when the available evidence does not establish successful completion. The browser shows up to 500 latest records per request and reports the total separately; it does not yet implement pagination.
+
+Do not enable machine controls without bench validation. Deploying these changes does not automatically enable them. Keep `NEPTUNE_OCTOPRINT_CONTROLS_ENABLED=false` for history-only monitoring.
