@@ -625,7 +625,17 @@
         </div>
         <div class="machine-notice"><span aria-hidden="true">⚠</span><div><strong id="control-notice-title">Controls locked · no command sent</strong><span id="control-notice-text">Arm Operator Mode to use fixed controls directly. Commissioning is optional; fresh telemetry, safety checks, and confirmation remain required.</span></div></div>
         <div class="machine-panel active" id="machine-panel-control" role="tabpanel">
-          <div id="control-cards" class="catalog-grid"></div>
+          <article id="octoprint-control-panel" class="card" hidden>
+<h3>OctoPrint guarded controls</h3><p id="octoprint-control-status" role="status">Controls disabled until server opt-in.</p>
+<div class="preview-actions">
+<button class="btn" data-octoprint-operation="home_x" disabled>Home X</button>
+<button class="btn" data-octoprint-operation="home_y" disabled>Home Y</button>
+<button class="btn" data-octoprint-operation="home_z" disabled>Home Z</button>
+<button class="btn" data-octoprint-operation="pause" disabled>Pause</button>
+<button class="btn" data-octoprint-operation="resume" disabled>Resume</button>
+<button class="btn" data-octoprint-operation="cancel" disabled>Cancel print</button>
+</div><p class="muted">Requires physical attendance, clear travel path for homing, and exact confirmation. Acceptance does not prove completion. Use physical power isolation in emergencies.</p>
+</article><div id="control-cards" class="catalog-grid"></div>
         </div>
         <div class="machine-panel" id="machine-panel-macros" role="tabpanel">
           <div id="macro-cards" class="catalog-grid"></div>
@@ -668,7 +678,7 @@
   <script>
     (() => {
       const $ = (id) => document.getElementById(id);
-      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null, printHistory: null };
+      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null, printHistory: null, octoprintCapabilities: null };
       let twinModulePromise = null;
       const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
       const commandSummary = (commands, limit = 2) => {
@@ -732,7 +742,7 @@
         document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${button.dataset.view}`));
         if (button.dataset.view === "diagnostics") loadDiagnostics();
         if (button.dataset.view === "history") loadPrintHistory();
-        if (button.dataset.view === "machine") loadCatalog();
+        if (button.dataset.view === "machine") { loadCatalog(); loadOctoprintCapabilities(); }
         if (button.dataset.view === "motion") loadMotion();
         if (button.dataset.view === "sdcard") loadSdCard();
         if (button.dataset.view === "digital-twin") loadDigitalTwin();
@@ -784,6 +794,51 @@
       document.querySelectorAll("[data-machine-panel]").forEach((button) => button.addEventListener("click", () => {
         document.querySelectorAll("[data-machine-panel]").forEach((b) => { const active = b === button; b.classList.toggle("active", active); b.setAttribute("aria-selected", String(active)); });
         document.querySelectorAll(".machine-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `machine-panel-${button.dataset.machinePanel}`));
+      }));
+      function octoprintEligible(op) {
+        const s = state.snapshot, v = s?.telemetry?.printer_state?.value;
+        if (s?.printer_backend !== "octoprint" || state.octoprintCapabilities?.enabled !== true ||
+            !s?.connection?.connected || s.stale || s.data_age_seconds == null || s.data_age_seconds > 5) return false;
+        return op.startsWith("home_") ? v === "idle" : op === "pause" ? v === "printing" :
+          op === "resume" ? v === "paused" : op === "cancel" && ["printing","paused"].includes(v);
+      }
+      function renderOctoprintControls() {
+        const mode = state.snapshot?.printer_backend === "octoprint";
+        $("octoprint-control-panel").hidden = !mode;
+        $("control-cards").hidden = mode;
+        if (!mode) return;
+        for (const button of document.querySelectorAll("[data-octoprint-operation]"))
+          button.disabled = !octoprintEligible(button.dataset.octoprintOperation);
+        if (state.octoprintCapabilities?.enabled === false)
+          $("octoprint-control-status").textContent = "Server controls disabled: NEPTUNE_OCTOPRINT_CONTROLS_ENABLED=false.";
+      }
+      async function loadOctoprintCapabilities() {
+        if (state.snapshot?.printer_backend !== "octoprint") return;
+        try { state.octoprintCapabilities = await api("/api/octoprint/control/capabilities"); }
+        catch (error) {
+          state.octoprintCapabilities = {enabled:false};
+          $("octoprint-control-status").textContent = `Capabilities unavailable: ${error.message}`;
+        }
+        renderOctoprintControls();
+      }
+      document.querySelectorAll("[data-octoprint-operation]").forEach(button => button.addEventListener("click", async () => {
+        const operation = button.dataset.octoprintOperation;
+        if (!octoprintEligible(operation)) { showToast("Printer state does not permit this operation."); return; }
+        if (!window.confirm("Are you physically beside the printer with the power switch reachable? Cancel if not.")) return;
+        if (operation.startsWith("home_") && !window.confirm("Is the entire homing travel path clear? Cancel if not.")) return;
+        const confirmation = window.prompt(`Type CONFIRM ${operation.toUpperCase()} to authorize the action:`, "");
+        if (confirmation !== `CONFIRM ${operation.toUpperCase()}`) { showToast("Exact confirmation not matched. No command sent."); return; }
+        button.disabled = true;
+        try {
+          const result = await api("/api/octoprint/control", {method:"POST", headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({operation,confirmation,attended:true,power_switch_reachable:true,travel_path_clear:operation.startsWith("home_")})});
+          $("octoprint-control-status").textContent = result.accepted
+            ? `OctoPrint accepted ${operation}; physical completion not verified. Observe the printer.`
+            : `OctoPrint did not confirm acceptance of ${operation}.`;
+        } catch(error) {
+          $("octoprint-control-status").textContent = `Command rejected: ${error.message}`;
+          showToast(error.message);
+        } finally { renderOctoprintControls(); }
       }));
       $("cancel-macro").addEventListener("click", () => $("macro-dialog").close());
       $("motion-query-button").addEventListener("click", () => $("motion-query-dialog").showModal());
@@ -1162,6 +1217,7 @@
         const connection = snapshot.connection || {};
         const connected = Boolean(connection.connected) && !snapshot.stale;
         const status = telemetry.printer_state?.value || "unknown";
+        renderOctoprintControls();
         const twinStateText = `Printer · ${status.replaceAll("_", " ")}`;
         const nozzleText = `Nozzle · ${fmtTemp(nozzle)}`;
         const bedText = `Bed · ${fmtTemp(bed)}`;
@@ -1471,6 +1527,7 @@
         try {
           state.catalog = await api("/api/control/catalog");
           renderControlAuthorization(state.catalog.control);
+          renderOctoprintControls();
           const controls = state.catalog.macros.filter((item) => item.category === "control");
           const macros = state.catalog.macros.filter((item) => item.category === "macro");
           controls.forEach((item) => renderOperationCard(item, $("control-cards")));
