@@ -515,7 +515,7 @@
             <div id="overview-job-progress-wrap" class="print-job-progress" hidden><progress id="overview-job-progress" max="100" value="0" aria-label="Firmware-reported print progress"></progress><strong id="overview-job-progress-label">—</strong></div>
             <div id="overview-job-meta" class="print-job-meta">Job state and progress appear here when reported by MKS telemetry.</div>
           </div>
-          <div class="print-job-history"><h3>Recent server-recorded jobs</h3><div id="overview-job-history" class="print-job-history-list" aria-live="polite"><span class="muted">No print sessions recorded yet.</span></div></div>
+          <div class="print-job-history"><h3>Server-recorded print history</h3><p class="muted">Observed by Observatory while its backend was running; not a complete OctoPrint historical database.</p><div id="overview-job-history" class="print-job-history-list" aria-live="polite"><span class="muted">No print sessions recorded yet.</span></div></div>
         </article>
         <div class="grid home-tools-grid">
           <article class="card home-panel"><div class="home-panel-head"><h2>Motion Telemetry</h2><button class="home-panel-link" data-open-view="motion">Open Motion ↗</button></div><div id="home-motion-values" class="home-motion-values"><span>X <strong>—</strong></span><span>Y <strong>—</strong></span><span>Z <strong>—</strong></span><span>E <strong>—</strong></span></div><div class="home-motion-chart"><canvas id="chart-home-motion" aria-label="Firmware-reported or planned coordinate history; sources are labeled separately"></canvas><div class="chart-empty visible" id="empty-home-motion">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note" id="home-motion-note">M114 coordinates are unavailable from the current printer response.</div><div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span></div><div class="home-feedrate-chart"><canvas id="chart-home-feedrate" aria-label="Shared axis-specific planned feedrate over time; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-home-feedrate">Waiting for motion timeline</div></div><div class="note">Feedrate is planned or estimated from G-code and acknowledged dashboard moves; motor speed is not reported by this firmware.</div><div class="reference-events" id="home-motion-events" aria-live="polite"></div></article>
@@ -1029,12 +1029,24 @@
         const sessions=job.recent_sessions||[];
         const rows=$("overview-job-history");
         if(!sessions.length){rows.innerHTML='<span class="muted">No print sessions recorded yet. Recording follows the backend telemetry poll.</span>';return;}
-        rows.innerHTML=sessions.slice(0,4).map((session)=>{
-          const label=session.filename||"Filename unavailable";
-          const state=String(session.state||"unknown").replaceAll("_"," ");
-          const date=session.started_at?new Date(session.started_at).toLocaleDateString([], {month:"short",day:"numeric"}):"—";
-          return `<div class="print-job-history-row" title="${esc(label)} · ${esc(state)} · ${esc(session.started_at||"")}"><strong>${esc(label)}</strong><span>${esc(state)} · ${esc(date)}</span></div>`;
-        }).join("");
+        rows.replaceChildren();
+        for (const session of sessions) {
+          const label = session.filename || "Filename unavailable";
+          const result = String(session.state || "unknown").replaceAll("_", " ");
+          const started = session.started_at ? new Date(session.started_at) : null;
+          const ended = session.ended_at ? new Date(session.ended_at) : null;
+          const startText = started && !Number.isNaN(started.getTime()) ? started.toLocaleString() : "Start unknown";
+          const endText = ended && !Number.isNaN(ended.getTime()) ? ended.toLocaleString() : "End not recorded";
+          const row = document.createElement("div");
+          row.className = "print-job-history-row";
+          const title = document.createElement("strong");
+          title.textContent = label;
+          const detail = document.createElement("span");
+          detail.textContent = `${result} · ${startText} · ${endText}`;
+          row.title = `${label} · ${result} · ${startText} · ${endText}`;
+          row.append(title, detail);
+          rows.append(row);
+        }
       }
       function connectionView(snapshot) {
         state.snapshot = snapshot;
