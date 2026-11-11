@@ -473,6 +473,7 @@
         <button class="active" data-view="overview"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1V10Z"/></svg>Overview</button>
         <button data-view="temperatures"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z"/><path d="M11 11v7"/></svg>Temperatures</button>
         <button data-view="motion"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 16l4-5 3 2 5-7"/><circle cx="7" cy="16" r="1"/><circle cx="11" cy="11" r="1"/><circle cx="14" cy="13" r="1"/><circle cx="19" cy="6" r="1"/></svg>Motion</button>
+        <button data-view="history"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l4 2"/></svg>Print History</button>
         <button data-view="machine"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h3m5 0h.01M8 19v2m8-2v2"/></svg>Machine</button>
         <button data-view="sdcard"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 4v5h8V4M8 20v-6h8v6"/></svg>SD Card</button>
         <button data-view="diagnostics"><svg viewBox="0 0 24 24"><path d="M4 19V5h10l6 6v8H4Z"/><path d="M14 5v6h6M8 15h8"/></svg>Diagnostics</button>
@@ -515,13 +516,40 @@
             <div id="overview-job-progress-wrap" class="print-job-progress" hidden><progress id="overview-job-progress" max="100" value="0" aria-label="Firmware-reported print progress"></progress><strong id="overview-job-progress-label">—</strong></div>
             <div id="overview-job-meta" class="print-job-meta">Job state and progress appear here when reported by MKS telemetry.</div>
           </div>
-          <div class="print-job-history"><h3>Server-recorded print history</h3><p class="muted">Observed by Observatory while its backend was running; not a complete OctoPrint historical database.</p><div id="overview-job-history" class="print-job-history-list" aria-live="polite"><span class="muted">No print sessions recorded yet.</span></div></div>
+          <div class="print-job-history"><h3>Recent print history <button class="home-panel-link" data-open-view="history" type="button">All records ↗</button></h3><p class="muted">Observed by Observatory while its backend was running; not a complete OctoPrint historical database.</p><div id="overview-job-history" class="print-job-history-list" aria-live="polite"><span class="muted">No print sessions recorded yet.</span></div></div>
         </article>
         <div class="grid home-tools-grid">
           <article class="card home-panel"><div class="home-panel-head"><h2>Motion Telemetry</h2><button class="home-panel-link" data-open-view="motion">Open Motion ↗</button></div><div id="home-motion-values" class="home-motion-values"><span>X <strong>—</strong></span><span>Y <strong>—</strong></span><span>Z <strong>—</strong></span><span>E <strong>—</strong></span></div><div class="home-motion-chart"><canvas id="chart-home-motion" aria-label="Firmware-reported or planned coordinate history; sources are labeled separately"></canvas><div class="chart-empty visible" id="empty-home-motion">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note" id="home-motion-note">M114 coordinates are unavailable from the current printer response.</div><div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span></div><div class="home-feedrate-chart"><canvas id="chart-home-feedrate" aria-label="Shared axis-specific planned feedrate over time; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-home-feedrate">Waiting for motion timeline</div></div><div class="note">Feedrate is planned or estimated from G-code and acknowledged dashboard moves; motor speed is not reported by this firmware.</div><div class="reference-events" id="home-motion-events" aria-live="polite"></div></article>
           <article class="card home-panel"><div class="home-panel-head"><h2>Digital Twin</h2><button class="home-panel-link" data-open-view="digital-twin">Open Twin ↗</button></div><div class="home-twin-canvas" id="home-twin"><div class="chart-empty visible">Loading local 3D preview…</div></div><div class="twin-status-row"><span class="twin-status-chip" id="home-twin-state">Printer · waiting</span><span class="twin-status-chip" id="home-twin-nozzle">Nozzle · —</span><span class="twin-status-chip" id="home-twin-bed">Bed · —</span><span class="twin-status-chip" id="home-twin-position">Toolhead · illustrative</span><span class="twin-status-chip" id="home-twin-progress">Progress unavailable</span></div><div class="note">Schematic Neptune 2 kinematics · operator-observed references are distinguished from measured position</div><div class="note" id="home-twin-action">Last machine action · none recorded</div></article>
         </div>
         <article class="card home-panel"><div class="home-panel-head"><h2>Observatory Console · read only</h2><button class="home-panel-link" data-open-view="console">Full console ↗</button></div><div class="console-panel" data-console><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Neptune Observatory read-only console. Type help to list supported queries. Arbitrary code and G-code are not accepted.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div></article>
+      </section>
+
+      <section class="view" id="view-history" aria-label="Print history results">
+        <div class="view-heading"><div><h1>Print History</h1><p>Persisted Observatory print sessions with timestamps, duration, last progress, and evidence-aware outcomes.</p></div><button class="btn" id="history-refresh" type="button">Refresh history</button></div>
+        <div class="grid metric-grid">
+          <article class="card metric"><div><span>Recorded sessions</span><strong id="history-total">—</strong></div></article>
+          <article class="card metric"><div><span>Outcomes unverified</span><strong id="history-unverified">—</strong></div></article>
+          <article class="card metric"><div><span>Interrupted / failed</span><strong id="history-interrupted">—</strong></div></article>
+        </div>
+        <article class="card home-panel">
+          <div class="sd-list-tools" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <input type="search" id="history-search" placeholder="Search filenames…" aria-label="Search print history filenames">
+            <select id="history-filter" aria-label="Filter print history outcome">
+              <option value="all">All recorded outcomes</option>
+              <option value="active_or_unfinished">Active / unfinished</option>
+              <option value="ended_unverified">Ended · outcome unknown</option>
+              <option value="reported_completed">Completion reported</option>
+              <option value="reported_cancelled">Cancellation reported</option>
+              <option value="reported_failed">Failure reported</option>
+              <option value="inferred_interrupted">Interrupted (inferred)</option>
+            </select>
+            <button class="btn" id="history-export" type="button" disabled>Export CSV</button>
+          </div>
+          <p id="history-note" class="note" role="status" aria-live="polite">Select Print History to load server-recorded sessions.</p>
+          <div id="history-results" class="print-job-history-list" aria-live="polite"></div>
+          <p class="muted">History is preserved in Observatory SQLite (up to 365 days for print-session metadata). It cannot reconstruct jobs completed before Observatory recorded them. An idle transition does not prove successful completion.</p>
+        </article>
       </section>
 
       <section class="view" id="view-temperatures" aria-label="Temperature monitoring">
@@ -640,7 +668,7 @@
   <script>
     (() => {
       const $ = (id) => document.getElementById(id);
-      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null };
+      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null, printHistory: null };
       let twinModulePromise = null;
       const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
       const commandSummary = (commands, limit = 2) => {
@@ -703,6 +731,7 @@
         document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("active", b === button));
         document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${button.dataset.view}`));
         if (button.dataset.view === "diagnostics") loadDiagnostics();
+        if (button.dataset.view === "history") loadPrintHistory();
         if (button.dataset.view === "machine") loadCatalog();
         if (button.dataset.view === "motion") loadMotion();
         if (button.dataset.view === "sdcard") loadSdCard();
@@ -1005,10 +1034,83 @@
         document.querySelectorAll("[data-motion-range]").forEach((button)=>button.classList.toggle("active",Number(button.dataset.motionRange)===minutes));
         $("overview-range-label").textContent=`· last ${minutes} min`;drawCharts();
       }
+      const historyLabels = {
+        active_or_unfinished: "Active or unfinished",
+        ended_unverified: "Ended · outcome unverified",
+        reported_completed: "Reported completed · not physically verified",
+        reported_cancelled: "Reported cancelled",
+        reported_failed: "Reported failed",
+        inferred_interrupted: "Interrupted · inferred",
+      };
+      function renderPrintHistory() {
+        const payload = state.printHistory;
+        if (!payload) return;
+        const sessions = payload.sessions || [];
+        const search = $("history-search").value.trim().toLocaleLowerCase();
+        const outcome = $("history-filter").value;
+        const matched = sessions.filter((item) =>
+          (outcome === "all" || item.outcome === outcome) &&
+          String(item.filename || "").toLocaleLowerCase().includes(search));
+        $("history-total").textContent = Number(payload.total || 0).toLocaleString();
+        $("history-unverified").textContent = sessions.filter((s) => s.outcome === "ended_unverified").length.toLocaleString();
+        $("history-interrupted").textContent = sessions.filter((s) => ["inferred_interrupted", "reported_failed"].includes(s.outcome)).length.toLocaleString();
+        $("history-note").textContent = `Showing ${matched.length} of ${sessions.length} loaded sessions · ${payload.total} total recorded. Results describe observed data, not guaranteed physical outcomes.`;
+        const container = $("history-results");
+        container.replaceChildren();
+        if (!matched.length) {
+          const message = document.createElement("p");
+          message.className = "muted";
+          message.textContent = sessions.length ? "No records match this filter." : "No print sessions recorded yet. Start Observatory before a print to begin collecting history.";
+          container.append(message);
+        }
+        for (const session of matched) {
+          const row = document.createElement("details");
+          row.className = "print-job-history-row";
+          const heading = document.createElement("summary");
+          const filename = session.filename || "Filename unavailable";
+          heading.textContent = `${filename} · ${historyLabels[session.outcome] || "Unknown outcome"}`;
+          const details = document.createElement("div");
+          const started = session.started_at ? new Date(session.started_at).toLocaleString() : "Unknown";
+          const ended = session.ended_at ? new Date(session.ended_at).toLocaleString() : "Not recorded";
+          const elapsed = session.duration_seconds == null ? "Unavailable" : duration(session.duration_seconds);
+          const progress = Number.isFinite(session.progress) ? `${Number(session.progress).toFixed(1)}%` : "Not reported";
+          details.textContent = `Started: ${started} · Ended: ${ended} · Recorded duration: ${elapsed} · Last progress: ${progress} · Last state: ${session.state || "unknown"} · Source: ${session.source || "unknown"} · Session ID: ${session.id}`;
+          row.append(heading, details);
+          container.append(row);
+        }
+        $("history-export").disabled = !sessions.length;
+      }
+      async function loadPrintHistory() {
+        $("history-note").textContent = "Loading recorded print history…";
+        try {
+          state.printHistory = await api("/api/print/history?limit=500");
+          renderPrintHistory();
+        } catch (error) {
+          $("history-note").textContent = `Could not load print history: ${error.message}`;
+        }
+      }
+      $("history-refresh").addEventListener("click", loadPrintHistory);
+      $("history-search").addEventListener("input", renderPrintHistory);
+      $("history-filter").addEventListener("change", renderPrintHistory);
+      $("history-export").addEventListener("click", () => {
+        const data = state.printHistory?.sessions || [];
+        if (!data.length) return;
+        const cols = ["id", "filename", "outcome", "state", "started_at", "ended_at", "duration_seconds", "progress", "source"];
+        const quote = (value) => `"${String(value == null ? "" : value).replaceAll('"', '""')}"`;
+        const csv = [cols.join(","), ...data.map((item) => cols.map((key) => quote(item[key])).join(","))].join("\r\n");
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
+        link.href = url;
+        link.download = "neptune-observatory-print-history.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
       function renderPrintJob(snapshot) {
         const job=snapshot?.print_job||{};
         const fresh=job.status!=="stale"&&job.status!=="unavailable";
-        const stateLabels={printing:"Printing · firmware reported",paused:"Paused · firmware reported",idle:"No active print",stale:"Printer status stale",unavailable:"Printer status unavailable",unknown:"Print state not reported"};
+        const origin = snapshot?.printer_backend === "octoprint" ? "OctoPrint reported" : "firmware reported";
+        const stateLabels={printing:`Printing · ${origin}`,paused:`Paused · ${origin}`,idle:"No active print",stale:"Printer status stale",unavailable:"Printer status unavailable",unknown:"Print state not reported"};
         const stateNode=$("overview-job-state");
         stateNode.textContent=stateLabels[job.status]||stateLabels.unknown;
         stateNode.dataset.state=job.status||"unknown";
@@ -1030,7 +1132,7 @@
         const rows=$("overview-job-history");
         if(!sessions.length){rows.innerHTML='<span class="muted">No print sessions recorded yet. Recording follows the backend telemetry poll.</span>';return;}
         rows.replaceChildren();
-        for (const session of sessions) {
+        for (const session of sessions.slice(0, 6)) {
           const label = session.filename || "Filename unavailable";
           const result = String(session.state || "unknown").replaceAll("_", " ");
           const started = session.started_at ? new Date(session.started_at) : null;
