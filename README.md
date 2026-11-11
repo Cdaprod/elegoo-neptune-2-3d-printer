@@ -67,30 +67,32 @@ flowchart LR
 
 ### One-command credential setup with Make
 
-From the repository root, run `make setup`. The setup script creates a private `.env` (mode 0600), uses the known static printer address `192.168.0.95` by default (or `OCTOPRINT_MKS_WIFI_HOST` from the shell), then prompts only for your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs. Discovery is optional: set `OCTOPRINT_MKS_WIFI_HOST=discover` only when you explicitly want a network scan. Normal setup does not probe or require printer availability. `make up` runs setup before Compose validation.
+From the repository root, run `make up`. The initializer writes a private `.env` (mode 0600), uses the verified static MKS address `192.168.0.95` unless you override it in the shell or .env, and automatically generates an Observatory login token. It **does not attempt to create or ask you to invent an OctoPrint API key**.
+
+OctoPrint itself generates the application-specific key using its supported Application Keys plugin. `make up` starts OctoPrint first, requests authorization, opens or prints the OctoPrint authorization dialog, then waits while **you approve access in the OctoPrint browser window**. The approved key is verified through the read-only `GET /api/connection` endpoint and written automatically to the private root `.env`. Observatory is started only *after* authorization succeeds. An existing working key is reused; a revoked or invalid key triggers a fresh authorization request. The key and OctoPrint password are never printed or passed as process arguments. You can rerun `make up` safely.
 
 `/elegoo-neptune-2-3d-printer`
 
 ```bash
-make setup
-make up
-make token         # Display saved Observatory token locally when needed
-# make rotate-token # Optional: rotate token, invalidates existing Observatory sessions
+make up                   # OctoPrint startup -> browser approval -> Observatory startup
+make check                # Verify a key exists and Compose is valid (no network calls)
+make token                # Display Observatory login token locally
+make authorize-octoprint  # Explicitly request/revalidate the OctoPrint key
+make ps
+make logs
 ```
 
-`make up` runs Compose validation then builds and starts both services. `make logs`, `make ps`, `make down`, and `make restart` are also available. Do not put the OctoPrint key or your Observatory token phrase into Make variables: interactive hidden prompts protect them from process listings and shell history. The API key must first exist in OctoPrint.
+If OctoPrint asks to grant **Neptune Observatory** access, log in as your existing OctoPrint user and choose **Allow**. This is the only human authorization step; you do not copy/paste any keys. If the browser did not open, visit the local approval URL printed by `make up`. If authorization is denied or interrupted, Observatory remains stopped; rerun `make up` to request a fresh approval. An interactive terminal is only needed if you choose a custom Observatory token phrase instead of accepting the generated random default.
+
+The printer can be powered off during authorization. OctoPrint is the only component that will connect to MKS WiFi TCP port 8080 when you explicitly choose Connect in OctoPrint. Discovery is optional: `OCTOPRINT_MKS_WIFI_HOST=discover make setup` performs an HTTP-only LAN scan; the default static address never scans.
 
 ### Configure and deploy from the repository root
 
-Copy [`.env.example`](.env.example) into a private root `.env`; set the *printer's* MKS WiFi hostname/IP, your existing OctoPrint application API key, and a strong Observatory token. The OctoPrint UI remains at `http://<docker-host>:5001`, Observatory at `http://<docker-host>:8000`. The application API key is only used server-side and must not be committed.
+The preferred supported deployment is `make up` above. You do not need to copy `.env.example`, manually make an API key, or enter credentials in a terminal. OctoPrint UI is `http://localhost:5001` on the Docker host; Observatory UI is `http://localhost:8000`. You can inspect the services afterward:
 
 `/elegoo-neptune-2-3d-printer`
 
 ```bash
-cp .env.example .env
-# Edit .env: OCTOPRINT_MKS_WIFI_HOST, OCTOPRINT_API_KEY, NEPTUNE_OBSERVATORY_TOKEN
-docker compose config --quiet
-docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 octoprint neptune-observatory
 ```
