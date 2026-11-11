@@ -1542,7 +1542,7 @@ def create_app(
             raise HTTPException(status_code=422, detail="Expected a JSON object.")
         operation = body.get("operation")
         allowed = {"pause", "resume", "cancel", "home_x", "home_y", "home_z"}
-        if operation not in allowed:
+        if not isinstance(operation, str) or operation not in allowed:
             raise HTTPException(status_code=422, detail="Unsupported control operation.")
         if (
             body.get("confirmation") != f"CONFIRM {operation.upper()}"
