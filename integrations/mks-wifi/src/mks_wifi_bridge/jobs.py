@@ -85,6 +85,6 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         "progress_percent": progress,
         "elapsed_seconds": elapsed,
         "active_session": active_session,
-        "recent_sessions": [session for session in sessions if session.get("id") != active_id][:5],
+        "recent_sessions": [session for session in sessions if session.get("id") != active_id],
         "history_source": "FastAPI server recording",
     }
