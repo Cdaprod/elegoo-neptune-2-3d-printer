@@ -30,9 +30,10 @@ def test_shell_override_skips_discovery(tmp_path):
         patch.object(sys, "argv", ["setup_env.py"]),
     ):
         assert setup.main() == 0
-    assert setup.parse_env((tmp_path / ".env").read_text())[
-        "OCTOPRINT_MKS_WIFI_HOST"
-    ] == "192.168.0.95"
+    assert (
+        setup.parse_env((tmp_path / ".env").read_text())["OCTOPRINT_MKS_WIFI_HOST"]
+        == "192.168.0.95"
+    )
 
 
 def test_static_default_skips_discovery(tmp_path):
@@ -52,6 +53,7 @@ def test_static_default_skips_discovery(tmp_path):
         patch.object(sys, "argv", ["setup_env.py"]),
     ):
         assert setup.main() == 0
-    assert setup.parse_env((tmp_path / ".env").read_text())[
-        "OCTOPRINT_MKS_WIFI_HOST"
-    ] == "192.168.0.95"
+    assert (
+        setup.parse_env((tmp_path / ".env").read_text())["OCTOPRINT_MKS_WIFI_HOST"]
+        == "192.168.0.95"
+    )
