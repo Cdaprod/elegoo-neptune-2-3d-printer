@@ -82,14 +82,22 @@ def request(opener, url: str, *, method: str = "GET", payload=None, key=None):
     return status, location, body
 
 
-def valid_key(opener, base: str, key: str) -> bool:
+def key_status(opener, base: str, key: str) -> int:
+    """Return the HTTP status without silently rotating a persisted key."""
     if not API_KEY_PATTERN.fullmatch(key) or key == PLACEHOLDER:
-        return False
+        return 0
     try:
         status, _, _ = request(opener, base + "/api/connection", key=key)
-        return status == 200
-    except (OSError, URLError, ValueError, TimeoutError):
-        return False
+        return status
+    except (OSError, URLError, ValueError, TimeoutError) as exc:
+        raise RuntimeError(
+            "Cannot verify saved OctoPrint key while the API is unreachable; "
+            "keeping the existing key. Check OctoPrint readiness and retry."
+        ) from exc
+
+
+def valid_key(opener, base: str, key: str) -> bool:
+    return key_status(opener, base, key) == 200
 
 
 def authorize(opener, base: str, *, sleep=time.sleep, open_browser=webbrowser.open) -> str:
@@ -155,6 +163,7 @@ def authorize(opener, base: str, *, sleep=time.sleep, open_browser=webbrowser.op
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check-config", action="store_true")
+    parser.add_argument("--reauthorize", action="store_true")
     args = parser.parse_args()
     if not ENV.exists():
         parser.error("root .env is missing; run make setup")
@@ -169,10 +178,17 @@ def main() -> int:
     try:
         base = local_url(os.environ.get("OCTOPRINT_HOST_PORT") or settings.get("OCTOPRINT_HOST_PORT", "5001"))
         opener = build_opener(NoRedirects())
-        if valid_key(opener, base, key):
-            print("Existing Neptune Observatory application key validated with OctoPrint.")
-            return 0
-        print("No valid OctoPrint application key; requesting a new one.")
+        if key and key != PLACEHOLDER and not args.reauthorize:
+            status = key_status(opener, base, key)
+            if status == 200:
+                print("Existing Neptune Observatory application key validated with OctoPrint.")
+                return 0
+            raise RuntimeError(
+                f"Saved OctoPrint key returned HTTP {status}; it has NOT been replaced. "
+                "Check OctoPrint permissions, persistence and startup readiness. "
+                "Run 'make reauthorize-octoprint' only if the key was revoked."
+            )
+        print("Requesting OctoPrint application key (missing or explicitly reset).")
         key = authorize(opener, base)
         save(replace_values(content, {"OCTOPRINT_API_KEY": key}))
         print("OctoPrint-issued application key verified and saved to private root .env.")
