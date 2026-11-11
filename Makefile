@@ -16,6 +16,7 @@ authorize-octoprint: setup
 	@$(PYTHON) scripts/authorize_octoprint.py
 
 up: setup
+	@docker volume inspect mks-wifi_commissioning-data >/dev/null 2>&1 || docker volume create mks-wifi_commissioning-data >/dev/null
 	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d --build octoprint
 	@$(PYTHON) scripts/authorize_octoprint.py
 	@$(MAKE) check
