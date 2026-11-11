@@ -58,7 +58,7 @@ jobs:
         run: |
           docker run --rm --entrypoint /bin/sh neptune-octoprint-ci -c '
             set -eu
-            ls /opt/octoprint-plugin-wheels/*PrintJobHistory* >/dev/null
+            ls /opt/octoprint-plugin-wheels | grep -qi printjobhistory
             test -x /etc/cont-init.d/90-install-octoprint-plugins
             /etc/cont-init.d/90-install-octoprint-plugins
           '
