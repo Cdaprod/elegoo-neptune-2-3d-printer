@@ -22,9 +22,11 @@ def test_discover_unique_mks_from_local_candidates():
 
 
 def test_discover_refuses_ambiguous_printers():
-    with patch.object(module, "neighbor_ips", return_value={"192.168.1.2", "192.168.1.3"}), patch.object(
-        module, "local_subnets", return_value=set()
-    ), patch.object(module, "mks_http_identity", return_value=True):
+    with (
+        patch.object(module, "neighbor_ips", return_value={"192.168.1.2", "192.168.1.3"}),
+        patch.object(module, "local_subnets", return_value=set()),
+        patch.object(module, "mks_http_identity", return_value=True),
+    ):
         try:
             module.discover()
         except RuntimeError as exc:
