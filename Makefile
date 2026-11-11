@@ -5,7 +5,7 @@ SHELL := /bin/sh
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # request browser-approved OctoPrint application key' 'make up                              # provision API key, validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
+	@printf '%s\n' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # request browser-approved OctoPrint application key' 'make up                              # reuse valid API key and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
 
 setup:
 	@$(PYTHON) scripts/setup_env.py
@@ -15,8 +15,12 @@ authorize-octoprint: setup
 	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d --build octoprint
 	@$(PYTHON) scripts/authorize_octoprint.py
 
-up: authorize-octoprint check
-	@docker compose up -d --build --no-deps --force-recreate neptune-observatory
+up: setup
+	@docker volume inspect mks-wifi_commissioning-data >/dev/null 2>&1 || docker volume create mks-wifi_commissioning-data >/dev/null
+	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d --build octoprint
+	@$(PYTHON) scripts/authorize_octoprint.py
+	@$(MAKE) check
+	@docker compose up -d --build
 
 check:
 	@$(PYTHON) scripts/authorize_octoprint.py --check-config
