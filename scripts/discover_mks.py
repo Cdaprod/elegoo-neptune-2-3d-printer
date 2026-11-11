@@ -8,7 +8,6 @@ from __future__ import annotations
 import concurrent.futures
 import ipaddress
 import re
-import socket
 import subprocess
 import urllib.request
 
@@ -41,6 +40,21 @@ def local_subnets() -> set[str]:
             if network.is_private and network.num_addresses <= 256:
                 found.update(str(ip) for ip in network.hosts())
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    # macOS: ifconfig reports each interface address and its hexadecimal netmask.
+    try:
+        result = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3)
+        for match in re.finditer(
+            r"inet\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+netmask\\s+(0x[0-9a-fA-F]+|\\d+\\.\\d+\\.\\d+\\.\\d+)",
+            result.stdout,
+        ):
+            address, mask = match.groups()
+            if mask.startswith("0x"):
+                mask = str(ipaddress.IPv4Address(int(mask, 16)))
+            network = ipaddress.ip_interface(f"{address}/{mask}").network
+            if network.is_private and network.num_addresses <= 256:
+                found.update(str(ip) for ip in network.hosts())
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
         pass
     return found
 
