@@ -187,6 +187,7 @@ def test_octoprint_controls_are_opt_in_and_never_use_mks(
         "confirmation": "CONFIRM HOME_X",
         "attended": True,
         "power_switch_reachable": True,
+        "travel_path_clear": True,
     }
     with TestClient(app) as client:
         assert (
