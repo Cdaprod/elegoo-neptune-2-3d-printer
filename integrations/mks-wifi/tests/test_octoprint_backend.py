@@ -146,9 +146,7 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
             headers=headers,
         )
         assert arm.status_code == 423
-        execute = client.post(
-            "/api/control/execute", json={"macro_id": "home_x"}, headers=headers
-        )
+        execute = client.post("/api/control/execute", json={"macro_id": "home_x"}, headers=headers)
         assert execute.status_code == 423
         upload = client.post(
             "/api/printer/sdcard/upload",
