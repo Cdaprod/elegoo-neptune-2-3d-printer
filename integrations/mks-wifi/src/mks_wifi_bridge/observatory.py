@@ -1314,7 +1314,9 @@ def create_app(
     @app.post("/api/printer/sdcard/upload", dependencies=[Depends(require_auth)])
     async def upload_sd_file(request: Request, filename: str) -> dict[str, Any]:
         if octoprint_mode:
-            raise HTTPException(status_code=423, detail="MKS SD uploads disabled in OctoPrint mode.")
+            raise HTTPException(
+                status_code=423, detail="MKS SD uploads disabled in OctoPrint mode."
+            )
         if not app.state.sd_upload_enabled:
             raise HTTPException(
                 status_code=423,
@@ -1525,7 +1527,9 @@ def create_app(
     async def arm_control_session(payload: ControlArmRequest, request: Request) -> dict[str, Any]:
         await require_control_token(request)
         if octoprint_mode:
-            raise HTTPException(status_code=423, detail="Machine controls are locked in OctoPrint mode.")
+            raise HTTPException(
+                status_code=423, detail="Machine controls are locked in OctoPrint mode."
+            )
         if payload.confirmation != "ENABLE OPERATOR MODE":
             raise HTTPException(status_code=422, detail="Type ENABLE OPERATOR MODE exactly.")
         if (
@@ -1835,7 +1839,9 @@ def create_app(
     @app.post("/api/control/preview", dependencies=[Depends(require_auth)])
     async def control_preview(payload: PreviewRequest) -> dict[str, Any]:
         if octoprint_mode:
-            raise HTTPException(status_code=423, detail="Direct MKS controls disabled in OctoPrint mode.")
+            raise HTTPException(
+                status_code=423, detail="Direct MKS controls disabled in OctoPrint mode."
+            )
         try:
             if payload.macro_id in {"start_sd_print", "print_first_layer_sd"}:
                 if (
@@ -1882,7 +1888,9 @@ def create_app(
     @app.post("/api/control/execute", status_code=202, dependencies=[Depends(require_auth)])
     async def control_execute(payload: ExecutionRequest, request: Request) -> dict[str, Any]:
         if octoprint_mode:
-            raise HTTPException(status_code=423, detail="Direct MKS controls disabled in OctoPrint mode.")
+            raise HTTPException(
+                status_code=423, detail="Direct MKS controls disabled in OctoPrint mode."
+            )
         if workflows.active is not None and not workflows.allows_operation(payload.macro_id):
             raise HTTPException(
                 status_code=409,
