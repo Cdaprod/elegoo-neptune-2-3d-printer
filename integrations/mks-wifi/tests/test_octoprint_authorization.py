@@ -91,8 +91,13 @@ def test_authorization_rejects_cross_origin_urls():
 def test_invalid_stored_key_triggers_reauthorization(tmp_path):
     local_env = tmp_path / ".env"
     local_env.write_text("OCTOPRINT_API_KEY=invalid-key\\nOCTOPRINT_HOST_PORT=5001\\n")
+    def save_test(value):
+        local_env.write_text(value)
+        local_env.chmod(0o600)
+
     with (
         patch.object(auth, "ENV", local_env),
+        patch.object(auth, "save", side_effect=save_test),
         patch.object(auth, "valid_key", return_value=False),
         patch.object(auth, "authorize", return_value=KEY) as approve,
         patch.object(sys, "argv", ["authorize_octoprint.py"]),
