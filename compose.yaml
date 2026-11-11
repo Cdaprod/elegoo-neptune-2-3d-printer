@@ -4,4 +4,6 @@
 # Configure a private .env at the repository root; see .env.example.
 include:
   - path: ./integrations/octoprint/compose.yaml
-  - path: ./integrations/mks-wifi/compose.yaml
+  - path:
+      - ./integrations/mks-wifi/compose.yaml
+      - ./integrations/mks-wifi/compose.octoprint.yaml
