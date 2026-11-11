@@ -80,7 +80,9 @@ def test_authorization_rejects_denial_and_does_not_invent_key():
     )
     with patch.object(auth, "request", side_effect=lambda *args, **kwargs: next(replies)):
         with pytest.raises(RuntimeError, match="denied or expired"):
-            auth.authorize(FakeOpener(), BASE, sleep=lambda _delay: None, open_browser=lambda _: None)
+            auth.authorize(
+                FakeOpener(), BASE, sleep=lambda _delay: None, open_browser=lambda _: None
+            )
 
 
 def test_authorization_rejects_cross_origin_urls():
