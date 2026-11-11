@@ -61,9 +61,9 @@ def test_static_default_skips_discovery(tmp_path):
 
 def test_setup_generates_observatory_token_without_octoprint_key(tmp_path):
     (tmp_path / ".env.example").write_text(
-        "OCTOPRINT_MKS_WIFI_HOST=192.168.0.95\\n"
-        "OCTOPRINT_API_KEY=\\n"
-        "NEPTUNE_OBSERVATORY_TOKEN=replace-with-long-random-local-observatory-token\\n"
+        "OCTOPRINT_MKS_WIFI_HOST=192.168.0.95\n"
+        "OCTOPRINT_API_KEY=\n"
+        "NEPTUNE_OBSERVATORY_TOKEN=replace-with-long-random-local-observatory-token\n"
     )
     with (
         patch.object(setup, "ROOT", tmp_path),
