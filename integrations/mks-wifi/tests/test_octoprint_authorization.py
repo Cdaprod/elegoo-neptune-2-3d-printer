@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
+from urllib.error import URLError
 from unittest.mock import patch
 
 import pytest
@@ -153,3 +154,26 @@ def test_saved_key_http_403_never_triggers_approval(tmp_path):
         assert auth.main() == 1
     approve.assert_not_called()
     assert auth.parse_env(local_env.read_text())["OCTOPRINT_API_KEY"] == KEY
+
+
+def test_wait_for_api_retries_until_octoprint_responds():
+    attempts = []
+    sleeps = []
+
+    def fake_request(_opener, url, **kwargs):
+        assert url == BASE + "/api/version"
+        attempts.append(url)
+        if len(attempts) < 3:
+            raise URLError("connection refused")
+        return 200, "", {"api": "0.1"}
+
+    with patch.object(auth, "request", side_effect=fake_request):
+        auth.wait_for_api(FakeOpener(), BASE, sleep=sleeps.append, attempts=4)
+    assert len(attempts) == 3
+    assert sleeps == [1, 1]
+
+
+def test_wait_for_api_timeout_preserves_key_and_reports_startup_failure():
+    with patch.object(auth, "request", side_effect=URLError("connection refused")):
+        with pytest.raises(RuntimeError, match="did not become ready"):
+            auth.wait_for_api(FakeOpener(), BASE, sleep=lambda _: None, attempts=2)
