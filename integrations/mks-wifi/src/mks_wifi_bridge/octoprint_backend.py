@@ -116,9 +116,7 @@ class OctoPrintBackend:
             "nozzle_temperature": _field(
                 nozzle.get("actual"), target_c=nozzle.get("target"), unit="°C"
             ),
-            "bed_temperature": _field(
-                bed.get("actual"), target_c=bed.get("target"), unit="°C"
-            ),
+            "bed_temperature": _field(bed.get("actual"), target_c=bed.get("target"), unit="°C"),
             "printer_state": {
                 "status": "available" if normalized is not None else "unsupported_or_not_reported",
                 "value": normalized,
