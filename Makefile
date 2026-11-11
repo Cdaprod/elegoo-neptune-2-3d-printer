@@ -5,10 +5,10 @@ SHELL := /bin/sh
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make setup PRINTER_IP=192.168.0.50  # securely prompt for existing OctoPrint API key' 'make up                              # validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
+	@printf '%s\n' 'make setup                           # prompt for printer address and API key' 'make up                              # validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
 
 setup:
-	@$(PYTHON) scripts/setup_env.py --printer-ip "$(PRINTER_IP)"
+	@$(PYTHON) scripts/setup_env.py
 
 up: check
 	@docker compose up -d --build
