@@ -87,6 +87,7 @@ class StatusResponse(BaseModel):
     poll_latency_ms: float | None = None
     last_error: str | None
     firmware_identification: str | None
+    printer_backend: str = "mks"
     motion: dict[str, Any]
     command_activity: dict[str, Any] = Field(default_factory=dict)
     timeline: dict[str, Any] = Field(default_factory=dict)
