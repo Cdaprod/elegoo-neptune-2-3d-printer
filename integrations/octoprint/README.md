@@ -68,6 +68,16 @@ Open `http://192.168.0.9:5001` on the local network and check **Settings → Plu
 
 The current image inherits the upstream Python version; a Python end-of-life warning is separate from network connectivity and should be addressed with a tested base-image upgrade. The plugin and MKS TCP handshake have not been verified against the physical printer.
 
+## PrintJobHistory plugin (bundled and persistent)
+
+The image now bundles **PrintJobHistory 1.17.5** from the official OctoPrint plugin repository's maintained `vojtakaniok` fork. The image build downloads its release archive and Python dependencies into the offline wheelhouse. The container startup initializer installs the pinned plugin into the active OctoPrint interpreter and verifies the `PrintJobHistory` plugin entry point before OctoPrint starts.
+
+The plugin uses its default local SQLite storage under OctoPrint's persistent `/octoprint` volume. No external database, credentials, or runtime download is required. Its database is created by the plugin when OctoPrint loads it. Existing jobs are **not backfilled**: the plugin begins collecting results after it is installed and enabled. The existing Remote Connection raw TCP configuration is preserved by the volume.
+
+**Observatory history:** Set `NEPTUNE_PRINTER_BACKEND=octoprint` and `OCTOPRINT_API_KEY` in the deployment environment, and keep `NEPTUNE_OCTOPRINT_CONTROLS_ENABLED=false` for monitoring only. Observatory's Print History page can switch between its own observed sessions and the PrintJobHistory plugin's reported outcomes. The adapter queries the authenticated, read-only `/plugin/PrintJobHistory/loadPrintJobHistoryByQuery` endpoint. An OctoPrint API key with permission to access that endpoint is required. A failed plugin call is reported; no direct MKS connection or printer command is attempted.
+
+Rebuild with `docker compose --profile octoprint up -d --build`, preserving `octoprint-data`. Check `docker compose logs octoprint` for the startup plugin verification, then verify **Settings → Plugin Manager → Print Job History**. Plugin startup compatibility still requires deployment verification; CI mock tests cannot prove plugin activation on your specific running image.
+
 ## Dark mode (Themeify)
 
 The custom image bundles and installs [Themeify](https://github.com/birkbjo/OctoPrint-Themeify) alongside Remote Connection during `docker compose --profile octoprint up -d --build`. Once rebuilt, open **Settings → Plugins → Themeify** and select its **Dark** theme. Themeify's theme selection is stored in OctoPrint's persistent `octoprint-data` volume and should survive future rebuilds; the image install alone does not guarantee Dark is selected automatically. For a correctly styled header, Themeify's documentation recommends **Settings → Appearance → Color: default** and disabling **Transparent Color**.
