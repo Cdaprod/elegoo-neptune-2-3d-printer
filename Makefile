@@ -1,19 +1,25 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
-.PHONY: help setup up down restart ps logs check token rotate-token
+.PHONY: help setup authorize-octoprint up down restart ps logs check token rotate-token
 
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make setup                           # configure static printer IP, API key and token' 'make up                              # initialize, validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
+	@printf '%s\n' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # request browser-approved OctoPrint application key' 'make up                              # provision API key, validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
 
 setup:
 	@$(PYTHON) scripts/setup_env.py
 
-up: setup check
-	@docker compose up -d --build
+authorize-octoprint: setup
+	@OCTOPRINT_API_KEY=authorization-pending docker compose stop neptune-observatory
+	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d --build octoprint
+	@$(PYTHON) scripts/authorize_octoprint.py
+
+up: authorize-octoprint check
+	@docker compose up -d --build --no-deps --force-recreate neptune-observatory
 
 check:
+	@$(PYTHON) scripts/authorize_octoprint.py --check-config
 	@docker compose config --quiet
 
 down:

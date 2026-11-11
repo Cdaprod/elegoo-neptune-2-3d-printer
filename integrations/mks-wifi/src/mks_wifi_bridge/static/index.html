@@ -1775,7 +1775,13 @@
         }).join("");
         rows.querySelectorAll("[data-sd-entry]").forEach((row)=>row.addEventListener("click",()=>{if(row.dataset.sdKind!=="file"||row.dataset.sdAmbiguous==="true")return;state.selectedSdFile=row.dataset.sdEntry;syncSdSelection();}));
         $("sd-count").textContent=data.status === "available"?`${data.entries.length} entries${data.refreshed_at?` · ${timeText(data.refreshed_at)}`:""}`:data.status.replaceAll("_"," ");
-        $("sd-note").textContent=data.error?`Refresh failed: ${data.error}. ${data.entries?.length?"Displayed rows are cached and may be outdated.": "No current listing available."}`:data.printer_listing_source==="octoprint_local"?"These are files stored in OctoPrint, not the printer SD card. Direct MKS uploads and controls are disabled.":`${data.error} · The display may retain only a complete listing.`:data.printer_listing_source==="firmware_m20"?`Printer names come from fresh M20. Thumbnail and slicer metadata come from the local cache and a filename match; M20 cannot confirm file contents.`:"No fresh M20 listing is available. Cached SD rows are historical; local cached G-code previews below do not prove a file is on the printer.";
+        $("sd-note").textContent=data.error
+          ? `Refresh failed: ${data.error}. ${data.entries?.length ? "Displayed rows are cached and may be outdated." : "No current listing available."}`
+          : data.printer_listing_source==="octoprint_local"
+            ? "These are files stored in OctoPrint, not the printer SD card. Direct MKS uploads and controls are disabled."
+            : data.printer_listing_source==="firmware_m20"
+              ? "Printer names come from fresh M20. Thumbnail and slicer metadata come from the local cache and a filename match; M20 cannot confirm file contents."
+              : "No fresh M20 listing is available. Cached SD rows are historical; local cached G-code previews below do not prove a file is on the printer.";
         renderLocalGcodeIndex(data.local_index||{});
         applySdSearch();syncSdSelection();
       }

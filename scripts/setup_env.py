@@ -9,7 +9,6 @@ import os
 import re
 import secrets
 import stat
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -105,20 +104,12 @@ def main() -> int:
     updates["OCTOPRINT_MKS_WIFI_HOST"] = host
     print(f"Using configured MKS WiFi endpoint: {host}")
 
-    key = values.get("OCTOPRINT_API_KEY", "")
-    if not key or key == "replace-with-octoprint-application-api-key":
-        if not sys.stdin.isatty():
-            parser.error("OctoPrint API key missing; run make setup in an interactive terminal")
-        key = getpass.getpass("Existing OctoPrint application API key (hidden): ").strip()
-        if not key:
-            parser.error("OctoPrint API key is required; generate one in OctoPrint first")
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", key):
-            parser.error("invalid OctoPrint API key characters")
-        updates["OCTOPRINT_API_KEY"] = key
-
+    # OctoPrint issues its own API keys. make up requests one through OctoPrint's
+    # Application Keys plugin after the OctoPrint service has started.
+    # Never accept an invented token or require the operator to copy one here.
     token = values.get("NEPTUNE_OBSERVATORY_TOKEN", "")
     if not token or token == "replace-with-long-random-local-observatory-token":
-        if sys.stdin.isatty():
+        if os.isatty(0):
             choice = input("Observatory token: [Enter] secure random / [p] custom phrase: ").strip().lower()
         else:
             choice = ""
@@ -136,7 +127,7 @@ def main() -> int:
 
     save(replace_values(content, updates))
     print("Root .env configured (permissions 0600). Credentials were not printed.")
-    print("Next: make check && make up")
+    print("Next: make up (OctoPrint will ask you to approve access in its browser UI)")
     return 0
 
 

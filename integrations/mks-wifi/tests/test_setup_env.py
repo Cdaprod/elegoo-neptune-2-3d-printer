@@ -57,3 +57,25 @@ def test_static_default_skips_discovery(tmp_path):
         setup.parse_env((tmp_path / ".env").read_text())["OCTOPRINT_MKS_WIFI_HOST"]
         == "192.168.0.95"
     )
+
+
+def test_setup_generates_observatory_token_without_octoprint_key(tmp_path):
+    (tmp_path / ".env.example").write_text(
+        "OCTOPRINT_MKS_WIFI_HOST=192.168.0.95\n"
+        "OCTOPRINT_API_KEY=\n"
+        "NEPTUNE_OBSERVATORY_TOKEN=replace-with-long-random-local-observatory-token\n"
+    )
+    with (
+        patch.object(setup, "ROOT", tmp_path),
+        patch.object(setup, "ENV", tmp_path / ".env"),
+        patch.object(setup, "EXAMPLE", tmp_path / ".env.example"),
+        patch.object(setup, "discover", side_effect=AssertionError("discovery must not run")),
+        patch.object(setup.os, "isatty", return_value=False),
+        patch.object(sys, "argv", ["setup_env.py"]),
+    ):
+        assert setup.main() == 0
+    values = setup.parse_env((tmp_path / ".env").read_text())
+    assert values["OCTOPRINT_API_KEY"] == ""
+    assert len(values["NEPTUNE_OBSERVATORY_TOKEN"]) >= 32
+    assert values["OCTOPRINT_MKS_WIFI_HOST"] == "192.168.0.95"
+    assert (tmp_path / ".env").stat().st_mode & 0o077 == 0
