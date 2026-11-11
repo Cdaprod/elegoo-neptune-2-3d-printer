@@ -136,12 +136,12 @@ class OctoPrintBackend:
                     "outcome": outcome,
                     "outcome_verified": False,
                     "source": "OctoPrint PrintJobHistory plugin",
-                    "material": (entry.get("filamentModels") or {}).get("total", {}).get(
-                        "material"
-                    ),
-                    "filament_weight_g": (entry.get("filamentModels") or {}).get(
-                        "total", {}
-                    ).get("usedWeight"),
+                    "material": (entry.get("filamentModels") or {})
+                    .get("total", {})
+                    .get("material"),
+                    "filament_weight_g": (entry.get("filamentModels") or {})
+                    .get("total", {})
+                    .get("usedWeight"),
                 }
             )
         return {
