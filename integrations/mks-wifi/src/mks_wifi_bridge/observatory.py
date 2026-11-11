@@ -1030,6 +1030,12 @@ def create_app(
     async def motion() -> dict[str, Any]:
         return dashboard_snapshot()["motion"]
 
+    @app.get("/api/print/history", dependencies=[Depends(require_auth)])
+    async def print_history(limit: int = 200) -> dict[str, Any]:
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
+        return await asyncio.to_thread(motion_timeline.list_print_history, limit)
+
     @app.get("/api/timeline", dependencies=[Depends(require_auth)])
     async def timeline_snapshot() -> dict[str, Any]:
         return dashboard_snapshot()["timeline"]
