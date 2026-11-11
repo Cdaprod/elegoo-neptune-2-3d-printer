@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from discover_mks import discover, mks_http_identity
+from discover_mks import discover
 import getpass
 import os
 import re
@@ -88,13 +88,23 @@ def main() -> int:
         print("Generated and saved a new Observatory token (run make token to display).")
         return 0
 
-    host = values.get("OCTOPRINT_MKS_WIFI_HOST", "")
-    if not host or host == "printer.local" or not mks_http_identity(host):
+    # Shell environment takes precedence over saved .env; a known static address
+    # is authoritative and does not require the optional HTTP management UI.
+    shell_host = os.environ.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+    saved_host = values.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+    if shell_host:
+        host, source = shell_host, "shell environment"
+    elif saved_host and saved_host != "printer.local":
+        host, source = saved_host, "existing .env"
+    else:
         try:
             host = discover()
         except RuntimeError as exc:
             parser.error(str(exc))
-    print(f"Discovered MKS WiFi management interface at {host}")
+        source = "local network discovery"
+    if not HOST_PATTERN.fullmatch(host):
+        parser.error("printer address must be an IPv4 address or hostname without URL/port")
+    print(f"MKS WiFi address: {host} ({source})")
     updates["OCTOPRINT_MKS_WIFI_HOST"] = host
 
     key = values.get("OCTOPRINT_API_KEY", "")
