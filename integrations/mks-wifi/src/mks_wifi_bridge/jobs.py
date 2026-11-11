@@ -73,7 +73,13 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": status,
         "active": active,
-        "source": "MKS read-only telemetry" if fresh else "Last telemetry sample · stale",
+        "source": (
+            "OctoPrint API telemetry"
+            if fresh and connection.get("transport") == "OctoPrint API"
+            else "MKS read-only telemetry"
+            if fresh
+            else "Last telemetry sample · stale"
+        ),
         "observed_at": snapshot.get("observed_at"),
         "filename": filename,
         "progress_percent": progress,
