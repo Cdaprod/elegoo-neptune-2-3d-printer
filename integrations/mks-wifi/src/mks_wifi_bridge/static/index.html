@@ -1222,6 +1222,10 @@
         const connection = snapshot.connection || {};
         const connected = Boolean(connection.connected) && !snapshot.stale;
         const status = telemetry.printer_state?.value || "unknown";
+        if (!state.historySourceInitialized) {
+          $("history-source").value = snapshot.printer_backend === "octoprint" ? "octoprint" : "observatory";
+          state.historySourceInitialized = true;
+        }
         renderOctoprintControls();
         const twinStateText = `Printer · ${status.replaceAll("_", " ")}`;
         const nozzleText = `Nozzle · ${fmtTemp(nozzle)}`;
