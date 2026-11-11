@@ -6,9 +6,6 @@ services:
     image: neptune-observatory:local
     container_name: neptune-observatory
     restart: unless-stopped
-    depends_on:
-      octoprint:
-        condition: service_started
     logging:
       driver: json-file
       options:
@@ -19,9 +16,9 @@ services:
     volumes:
       - commissioning-data:/data
     environment:
-      NEPTUNE_PRINTER_BACKEND: octoprint
-      OCTOPRINT_BASE_URL: http://octoprint:80
-      OCTOPRINT_API_KEY: ${OCTOPRINT_API_KEY:?Set OCTOPRINT_API_KEY in the root .env or shell for the root stack}
+      NEPTUNE_PRINTER_BACKEND: ${NEPTUNE_PRINTER_BACKEND:-mks}
+      OCTOPRINT_BASE_URL: ${OCTOPRINT_BASE_URL:-http://octoprint:80}
+      OCTOPRINT_API_KEY: ${OCTOPRINT_API_KEY:-}
       OCTOPRINT_TIMEOUT_SECONDS: ${OCTOPRINT_TIMEOUT_SECONDS:-3}
       NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: ${NEPTUNE_OCTOPRINT_CONTROLS_ENABLED:-false}
       MKS_WIFI_HOST: ${MKS_WIFI_HOST:-printer.local}
@@ -34,7 +31,7 @@ services:
       NEPTUNE_OBSERVATORY_BIND_HOST: 0.0.0.0
       NEPTUNE_OBSERVATORY_PORT: 8000
       NEPTUNE_OBSERVATORY_TOKEN: ${NEPTUNE_OBSERVATORY_TOKEN:?Set NEPTUNE_OBSERVATORY_TOKEN in .env}
-      NEPTUNE_CONTROL_EXECUTION_ENABLED: "false"
+      NEPTUNE_CONTROL_EXECUTION_ENABLED: ${NEPTUNE_CONTROL_EXECUTION_ENABLED:-true}
       NEPTUNE_VERIFIED_COMMANDS: ${NEPTUNE_VERIFIED_COMMANDS:-}
       NEPTUNE_VERIFIED_MACROS: ${NEPTUNE_VERIFIED_MACROS:-}
       NEPTUNE_ALLOWED_COMMANDS: ${NEPTUNE_ALLOWED_COMMANDS:-}
