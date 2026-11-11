@@ -10,7 +10,7 @@ ARG SPOOL_MANAGER_PLUGIN_URL=https://github.com/WildRikku/OctoPrint-SpoolManager
 ARG FILAMENT_MANAGER_PLUGIN_URL=https://github.com/OllisGit/OctoPrint-FilamentManager/releases/download/1.9.1/master.zip
 ARG LAYER_PROGRESS_PLUGIN_URL=https://github.com/OllisGit/OctoPrint-DisplayLayerProgress/releases/download/1.28.0/master.zip
 ARG CURA_THUMBNAILS_PLUGIN_URL=https://github.com/jneilliii/OctoPrint-UltimakerFormatPackage/archive/refs/tags/1.2.0.zip
-ARG SLICER_THUMBNAILS_PLUGIN_URL=https://github.com/jneilliii/OctoPrint-PrusaSlicerThumbnails/archive/refs/tags/1.2.4.zip
+ARG SLICER_THUMBNAILS_PLUGIN_URL=https://github.com/jneilliii/OctoPrint-PrusaSlicerThumbnails/archive/refs/tags/1.2.3.zip
 ARG COST_ESTIMATION_PLUGIN_URL=https://github.com/Hillshum/OctoPrint-CostEstimation/releases/download/v3.6.0/master.zip
 
 RUN set -eux; \
