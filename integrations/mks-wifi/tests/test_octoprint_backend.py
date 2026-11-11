@@ -135,7 +135,7 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
             "/api/printer/sdcard", params={"refresh": "true"}, headers=headers
         ).json()
         assert listing["printer_listing_source"] == "octoprint_local"
-        assert client.post(
+        arm = client.post(
             "/api/control/arm",
             json={
                 "confirmation": "ENABLE OPERATOR MODE",
@@ -144,20 +144,24 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
                 "power_switch_reachable": True,
             },
             headers=headers,
-        ).status_code == 423
-        assert client.post(
+        )
+        assert arm.status_code == 423
+        execute = client.post(
             "/api/control/execute", json={"macro_id": "home_x"}, headers=headers
-        ).status_code == 423
-        assert client.post(
+        )
+        assert execute.status_code == 423
+        upload = client.post(
             "/api/printer/sdcard/upload",
             params={"filename": "test.gcode"},
             headers=headers,
-        ).status_code == 423
-        assert client.post(
+        )
+        assert upload.status_code == 423
+        workflow = client.post(
             "/api/control/workflows",
             json={"macro_id": "filament_change_guided"},
             headers=headers,
-        ).status_code == 423
+        )
+        assert workflow.status_code == 423
 
 
 @pytest.mark.parametrize(
