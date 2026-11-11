@@ -129,10 +129,12 @@ def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: A
         assert payload["printer_backend"] == "octoprint"
         assert payload["connection"]["transport"] == "OctoPrint API"
         assert payload["print_job"]["source"] == "OctoPrint API telemetry"
-        assert client.get("/api/control/catalog", headers=headers).json()["execution_enabled"] is False
-        assert client.get("/api/printer/sdcard", params={"refresh": "true"}, headers=headers).json()[
-            "printer_listing_source"
-        ] == "octoprint_local"
+        catalog = client.get("/api/control/catalog", headers=headers).json()
+        assert catalog["execution_enabled"] is False
+        listing = client.get(
+            "/api/printer/sdcard", params={"refresh": "true"}, headers=headers
+        ).json()
+        assert listing["printer_listing_source"] == "octoprint_local"
         assert client.post(
             "/api/control/arm",
             json={
