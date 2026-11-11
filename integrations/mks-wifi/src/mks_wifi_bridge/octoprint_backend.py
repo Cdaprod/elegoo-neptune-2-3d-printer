@@ -19,7 +19,9 @@ class OctoPrintError(RuntimeError):
 
 
 class _NoRedirects(HTTPRedirectHandler):
-    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+    def redirect_request(
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> None:
         return None
 
 
@@ -74,7 +76,7 @@ class OctoPrintBackend:
             if exc.code in {401, 403}:
                 raise OctoPrintError("OctoPrint API authentication failed") from None
             raise OctoPrintError(f"OctoPrint API returned HTTP {exc.code}") from None
-        except (OSError, URLError, TimeoutError) as exc:
+        except (OSError, URLError, TimeoutError):
             raise OctoPrintError("OctoPrint API is unreachable or timed out") from None
         except (ValueError, UnicodeError):
             raise OctoPrintError("OctoPrint returned malformed JSON") from None
