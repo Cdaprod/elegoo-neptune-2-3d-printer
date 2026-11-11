@@ -1,0 +1,179 @@
+"""Regression tests: OctoPrint is the only printer I/O owner in OctoPrint mode."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from mks_wifi_bridge.motion_timeline import MotionTimeline
+from mks_wifi_bridge.observatory import PrinterService, create_app
+from mks_wifi_bridge.octoprint_backend import OctoPrintBackend, OctoPrintError
+
+
+class StubBackend(OctoPrintBackend):
+    def __init__(self) -> None:
+        super().__init__("http://octoprint:80", "test-secret")
+        self.calls: list[str] = []
+        self.disconnected = False
+
+    async def get(self, endpoint: str) -> dict[str, Any]:
+        self.calls.append(endpoint)
+        if self.disconnected:
+            raise OctoPrintError("OctoPrint disconnected")
+        if endpoint == "/api/connection":
+            return {"current": {"state": "Operational", "port": "remote://mks:8080"}}
+        if endpoint == "/api/printer":
+            return {
+                "temperature": {
+                    "tool0": {"actual": 24.0, "target": 0.0},
+                    "bed": {"actual": 23.0, "target": 0.0},
+                },
+                "state": {"text": "Operational", "flags": {"operational": True}},
+            }
+        if endpoint == "/api/job":
+            return {
+                "job": {"file": {"name": "part.gcode", "size": 1234}},
+                "progress": {"completion": 0.0, "printTime": 0, "printTimeLeft": None},
+            }
+        if endpoint == "/api/files":
+            return {
+                "files": [
+                    {"name": "part.gcode", "type": "machinecode", "size": 1234, "origin": "local"},
+                    {"name": "sd.gco", "type": "machinecode", "origin": "sdcard"},
+                ]
+            }
+        raise AssertionError(f"Unexpected endpoint {endpoint}")
+
+
+def forbidden_mks(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("OctoPrint mode opened a forbidden native MKS connection")
+
+
+def make_service(backend: StubBackend) -> PrinterService:
+    return PrinterService(
+        host=backend.host,
+        port=backend.port,
+        backend=backend,
+        client_factory=forbidden_mks,
+        sd_reader=forbidden_mks,
+        motion_query=forbidden_mks,
+        motion_enabled=True,
+        motion_query_enabled=True,
+        interval=30.0,
+    )
+
+
+def test_backend_reads_realistic_octoprint_status_without_mks_tcp() -> None:
+    backend = StubBackend()
+    service = make_service(backend)
+    result = asyncio.run(service.poll_once())
+    assert result["connection"]["connected"] is True
+    assert result["connection"]["transport"] == "OctoPrint API"
+    assert result["telemetry"]["nozzle_temperature"]["value"] == 24.0
+    assert result["telemetry"]["bed_temperature"]["value"] == 23.0
+    assert result["telemetry"]["print_active"]["value"] is False
+    assert result["telemetry"]["current_file"]["value"] == "part.gcode"
+    assert backend.calls == ["/api/connection", "/api/printer", "/api/job"]
+
+
+def test_octoprint_file_catalog_has_correct_provenance() -> None:
+    backend = StubBackend()
+    service = make_service(backend)
+    result = asyncio.run(service.refresh_sd())
+    assert result["source"] == "octoprint_local"
+    assert result["entries"] == [
+        {
+            "name": "part.gcode",
+            "kind": "file",
+            "size_bytes": 1234,
+            "source": "octoprint_local",
+        }
+    ]
+    assert backend.calls == ["/api/files"]
+
+
+def test_octoprint_failures_are_stale_and_never_fallback_to_mks() -> None:
+    backend = StubBackend()
+    service = make_service(backend)
+
+    async def check() -> None:
+        await service.poll_once()
+        backend.disconnected = True
+        failed = await service.poll_once()
+        assert failed["connection"]["connected"] is False
+        assert failed["stale"] is True
+        assert failed["last_error"] == "OctoPrint disconnected"
+        assert failed["telemetry"]["nozzle_temperature"]["value"] == 24.0
+
+    asyncio.run(check())
+
+
+def test_dashboard_exposes_octoprint_mode_and_blocks_direct_controls(tmp_path: Any) -> None:
+    backend = StubBackend()
+    service = make_service(backend)
+    app = create_app(
+        service,
+        bind_host="0.0.0.0",
+        auth_token="test-only-observatory-secret",
+        control_enabled=True,
+        timeline=MotionTimeline(tmp_path / "octoprint.sqlite3"),
+    )
+    headers = {"Authorization": "Bearer test-only-observatory-secret"}
+    with TestClient(app) as client:
+        response = client.get("/api/printer/status", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["printer_backend"] == "octoprint"
+        assert payload["connection"]["transport"] == "OctoPrint API"
+        assert payload["print_job"]["source"] == "OctoPrint API telemetry"
+        assert client.get("/api/control/catalog", headers=headers).json()["execution_enabled"] is False
+        assert client.get("/api/printer/sdcard", params={"refresh": "true"}, headers=headers).json()[
+            "printer_listing_source"
+        ] == "octoprint_local"
+        assert client.post(
+            "/api/control/arm",
+            json={
+                "confirmation": "ENABLE OPERATOR MODE",
+                "attended": True,
+                "no_competing_clients": True,
+                "power_switch_reachable": True,
+            },
+            headers=headers,
+        ).status_code == 423
+        assert client.post(
+            "/api/control/execute", json={"macro_id": "home_x"}, headers=headers
+        ).status_code == 423
+        assert client.post(
+            "/api/printer/sdcard/upload",
+            params={"filename": "test.gcode"},
+            headers=headers,
+        ).status_code == 423
+        assert client.post(
+            "/api/control/workflows",
+            json={"macro_id": "filament_change_guided"},
+            headers=headers,
+        ).status_code == 423
+
+
+@pytest.mark.parametrize(
+    ("url", "key"),
+    [
+        ("http://octoprint:80/other", "abc"),
+        ("http://admin:pass@octoprint:80", "abc"),
+        ("ftp://octoprint", "abc"),
+        ("http://octoprint:80", ""),
+        ("http://octoprint:80?token=bad", "abc"),
+    ],
+)
+def test_octoprint_rejects_unsafe_url_and_missing_key(url: str, key: str) -> None:
+    with pytest.raises(ValueError):
+        OctoPrintBackend(url, key)
+
+
+def test_octoprint_rejects_arbitrary_api_paths() -> None:
+    backend = OctoPrintBackend("http://octoprint", "fixture")
+    with pytest.raises(ValueError):
+        asyncio.run(backend.get("/api/printer/command"))
