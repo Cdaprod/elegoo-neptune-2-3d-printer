@@ -99,13 +99,16 @@ def authorize(opener, base: str, *, sleep=time.sleep, open_browser=webbrowser.op
             status, _, _ = request(opener, base + "/plugin/appkeys/probe")
             if status == 204:
                 break
-            if status in {403, 404}:
-                raise RuntimeError("OctoPrint Application Keys plugin is unavailable")
+            # Initial OctoPrint startup can temporarily return 404 before the
+            # plugin routes are registered. Retry until the readiness window ends.
         except (OSError, URLError, TimeoutError):
             pass
         sleep(1)
     else:
-        raise RuntimeError("OctoPrint did not become ready for Application Keys authorization")
+        raise RuntimeError(
+            "OctoPrint Application Keys plugin did not become available; "
+            "confirm OctoPrint is running and its bundled plugin is enabled"
+        )
 
     status, location, response = request(
         opener, base + "/plugin/appkeys/request", method="POST", payload={"app": APP_NAME}
