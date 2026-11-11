@@ -15,9 +15,11 @@ spec.loader.exec_module(module)
 
 
 def test_discover_unique_mks_from_local_candidates():
-    with patch.object(module, "neighbor_ips", return_value={"192.168.1.2"}), patch.object(
-        module, "local_subnets", return_value={"192.168.1.3"}
-    ), patch.object(module, "mks_http_identity", side_effect=lambda ip: ip == "192.168.1.3"):
+    with (
+        patch.object(module, "neighbor_ips", return_value={"192.168.1.2"}),
+        patch.object(module, "local_subnets", return_value={"192.168.1.3"}),
+        patch.object(module, "mks_http_identity", side_effect=lambda ip: ip == "192.168.1.3"),
+    ):
         assert module.discover() == "192.168.1.3"
 
 
@@ -38,10 +40,13 @@ def test_discover_refuses_ambiguous_printers():
 def test_http_fingerprint_does_not_contact_raw_tcp():
     class Response:
         status = 200
+
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             return None
+
         def read(self, count):
             return b"<html>update_sketch update_spiffs update_cfg</html>"
 
