@@ -1,7 +1,7 @@
-"""Authenticated, read-only OctoPrint adapter for Neptune Observatory.
+"""Authenticated OctoPrint adapter for Neptune Observatory.
 
 OctoPrint owns the single native MKS WiFi TCP session. This adapter never
-connects to the printer, issues G-code, or triggers print/thermal actions.
+connects directly to the printer. Control operations are explicit and allowlisted.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _field(value: Any, **extra: Any) -> dict[str, Any]:
 
 
 class OctoPrintBackend:
-    """One OctoPrint API origin, server-side secret, bounded read-only requests."""
+    """One OctoPrint API origin, server-side secret, bounded API requests."""
 
     def __init__(self, base_url: str, api_key: str, timeout: float = 3.0) -> None:
         parsed = urlsplit(base_url)
@@ -86,6 +86,46 @@ class OctoPrintBackend:
         if endpoint not in {"/api/connection", "/api/printer", "/api/job", "/api/files"}:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
+
+    def _post_sync(self, endpoint: str, command: str) -> dict[str, Any]:
+        allowed = {
+            ("/api/job", "pause"): {"command": "pause", "action": "pause"},
+            ("/api/job", "resume"): {"command": "pause", "action": "resume"},
+            ("/api/job", "cancel"): {"command": "cancel"},
+            ("/api/printer/printhead", "home_x"): {"command": "home", "axes": ["x"]},
+            ("/api/printer/printhead", "home_y"): {"command": "home", "axes": ["y"]},
+            ("/api/printer/printhead", "home_z"): {"command": "home", "axes": ["z"]},
+        }
+        body = allowed.get((endpoint, command))
+        if body is None:
+            raise ValueError("Unsupported OctoPrint control operation")
+        request = Request(
+            self.base_url + endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "X-Api-Key": self.api_key,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with self._opener.open(request, timeout=self.timeout) as response:
+                if response.status not in {200, 201, 202, 204}:
+                    raise OctoPrintError("OctoPrint rejected the control request")
+            return {"accepted": True, "operation": command}
+        except HTTPError as exc:
+            if exc.code in {401, 403}:
+                raise OctoPrintError("OctoPrint control authorization failed") from None
+            if exc.code in {409, 422}:
+                raise OctoPrintError("OctoPrint rejected the current printer state") from None
+            raise OctoPrintError(f"OctoPrint control returned HTTP {exc.code}") from None
+        except (OSError, URLError, TimeoutError):
+            raise OctoPrintError("OctoPrint control request failed or timed out") from None
+
+    async def execute_control(self, operation: str) -> dict[str, Any]:
+        endpoint = "/api/printer/printhead" if operation.startswith("home_") else "/api/job"
+        return await asyncio.to_thread(self._post_sync, endpoint, operation)
 
     async def read_state(self) -> dict[str, Any]:
         connection = await self.get("/api/connection")
