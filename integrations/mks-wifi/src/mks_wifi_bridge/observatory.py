@@ -426,7 +426,7 @@ class PrinterService:
         async with self.io_lock:
             try:
                 if self.backend is not None:
-                    self.sd_entries = await self.backend.list_files()
+                    self.sd_entries = await self.backend.list_files(refresh=True)
                     self.sd_refreshed_at = utc_now()
                     self.sd_status = "available"
                     self.sd_error = None
@@ -574,7 +574,7 @@ class PrinterService:
             "entries": self.sd_entries,
             "refreshed_at": iso(self.sd_refreshed_at),
             "error": self.sd_error,
-            "source": "octoprint_local" if self.backend is not None else "firmware_m20",
+            "source": "octoprint_sdcard" if self.backend is not None else "firmware_m20",
         }
 
     def diagnostics_payload(self) -> dict[str, Any]:
@@ -1218,7 +1218,7 @@ def create_app(
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
         payload["printer_listing_source"] = (
-            "octoprint_local"
+            "octoprint_sdcard"
             if octoprint_mode
             else "firmware_m20"
             if payload.get("status") == "available"
