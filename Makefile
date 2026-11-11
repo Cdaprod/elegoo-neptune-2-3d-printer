@@ -5,12 +5,12 @@ SHELL := /bin/sh
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make setup                           # prompt for printer address and API key' 'make up                              # validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
+	@printf '%s\n' 'make setup                           # configure static printer IP, API key and token' 'make up                              # initialize, validate and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
 
 setup:
 	@$(PYTHON) scripts/setup_env.py
 
-up: check
+up: setup check
 	@docker compose up -d --build
 
 check:
