@@ -1,16 +1,16 @@
 # Neptune 2 — OctoPrint: network-first, USB fallback
 
-This integration runs OctoPrint alongside the existing Neptune Observatory repository without changing the printer's Marlin firmware. **Network mode is the default** and works on Docker Desktop for macOS without a USB device. Network transport is experimental until the MKS WiFi raw TCP protocol has been validated with OctoPrint.
+This integration runs OctoPrint alongside the existing Neptune Observatory repository without changing the printer's Marlin firmware. **Network mode is the default** and works on Docker Desktop for macOS without a USB device. The MKS WiFi raw TCP connection has already shown an operational status and live temperatures through OctoPrint's Remote Connection plugin on the target network. Final deployment validation remains host-specific.
 
 ## Network deployment (MacBook or Raspberry Pi)
 
 From the repository root:
 
 ```bash
-docker compose --profile octoprint up -d --build
+docker compose up -d --build
 ```
 
-OctoPrint is available at `http://localhost:5001` (override `OCTOPRINT_HOST_PORT` in `integrations/octoprint/.env`). Complete the first-run wizard and enable access control.
+The root Compose stack includes both OctoPrint and Observatory on the same network. Configure the **root** `.env` from [../../.env.example](../../.env.example), then start both using `docker compose up -d --build`. OctoPrint is available at `http://localhost:5001` (configurable via root `OCTOPRINT_HOST_PORT`); Observatory uses `http://octoprint:80` internally. Complete the OctoPrint first-run wizard and enable access control if this is a new installation.
 
 ### Remote Connection plugin
 
@@ -20,15 +20,11 @@ The custom [Dockerfile](Dockerfile) builds offline wheels for **OctoPrint-Remote
 https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
 ```
 
-After the image builds and OctoPrint starts, in the plugin's remote-connection settings, add the MKS WiFi hostname/IP and TCP port **8080**, selecting **raw TCP** (not RFC2217). Choose the new remote port in OctoPrint's Connection panel. The module accepts line-delimited G-code over a raw socket; its compatibility with OctoPrint's streaming/acknowledgment expectations remains **unverified**. Do not start a print until read-only M115/M105 tests and connection stability pass. The plugin is installed from the image's offline wheelhouse by `90-install-octoprint-plugins` at each container startup, and its entry point is checked before OctoPrint starts. Its configuration is saved in the persistent `/octoprint` data volume, so configure the network endpoint only once. If the plugin is not shown after deployment, inspect the Docker build logs and OctoPrint's Plugin Manager; a successful image build alone does not prove runtime compatibility.
+The image now ships a startup initializer, `91-configure-mks-remote`, which preconfigures the Remote Connection plugin with `OCTOPRINT_MKS_WIFI_HOST` and `OCTOPRINT_MKS_WIFI_PORT=8080` as **Raw TCP (`socket`)**, not RFC2217. The initializer adds the endpoint without deleting existing remote connections and selects it only if no prior serial port was deliberately selected. The settings survive normal rebuilds inside the existing `/octoprint` volume. An existing port choice is preserved, so check OctoPrint's Connection panel if you previously configured USB or another connection.
 
-**Single-client constraint:** MKS WiFi accepts only one active TCP client. Stop Observatory completely before testing OctoPrint:
+**Connection is intentionally manual by default.** `OCTOPRINT_MKS_AUTO_CONNECT=false` prevents automatic reconnection to the printer when the Docker stack starts. After verifying the selected `REMOTE:socket://<printer-host>:8080` port, connect from the OctoPrint UI. Set `OCTOPRINT_MKS_AUTO_CONNECT=true` only when you want OctoPrint to connect on startup and its current selected port matches the configured MKS remote. Raw TCP compatibility should be checked on the actual printer before printing.
 
-```bash
-docker compose stop neptune-observatory
-```
-
-Do not simultaneously operate both controllers. Avoid heating, jogging, SD printing, or uploading during initial connection tests. To restore Observatory, disconnect OctoPrint from the printer first, then `docker compose start neptune-observatory`.
+**Single-client constraint:** OctoPrint exclusively owns the MKS TCP connection in the root stack. Observatory is forced into its OctoPrint API backend and does **not** connect directly to MKS. Do not start a separate direct-MKS Observatory, printer utility, or other competing native socket client during operation. The root stack needs a valid `OCTOPRINT_API_KEY` and `NEPTUNE_OBSERVATORY_TOKEN` in the private root `.env`. OctoPrint startup/connection issues are surfaced as stale Observatory data rather than silently falling back.
 
 ## USB fallback (Linux Raspberry Pi)
 
@@ -43,7 +39,7 @@ Set `OCTOPRINT_SERIAL_DEVICE` in `integrations/octoprint/.env` to the resolved h
 
 ```bash
 cd integrations/octoprint
-docker compose -f compose.yaml -f compose.usb.yaml --profile octoprint up -d
+docker compose -f compose.yaml -f compose.usb.yaml up -d
 ```
 
 Select `/dev/ttyUSB-printer` in OctoPrint's Connection panel. USB passthrough is for a Linux Docker host, not macOS Docker Desktop. The USB override is deliberately not included by the root Compose stack.
