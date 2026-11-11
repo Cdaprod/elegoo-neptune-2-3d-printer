@@ -934,8 +934,7 @@ def create_app(
     app.state.auth_required = auth_required
     app.state.auth_token = auth_token
     app.state.sd_upload_enabled = (
-        not octoprint_mode
-        and os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
+        not octoprint_mode and os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
     )
     app.state.sd_upload_in_progress = False
 
