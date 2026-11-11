@@ -484,7 +484,7 @@
 
     <main>
       <header class="topbar">
-        <div><h1>Elegoo Neptune 2</h1><div class="subtitle">Real-time monitoring <span aria-hidden="true">·</span> MKS WiFi <span id="printer-address">· TCP 8080</span></div></div>
+        <div><h1>Elegoo Neptune 2</h1><div class="subtitle">Real-time monitoring <span aria-hidden="true">·</span> <span id="printer-backend-label">MKS WiFi</span> <span id="printer-address">· TCP 8080</span></div></div>
         <div class="top-meta"><div class="last-update">Last update<strong id="updated-at">Waiting for printer</strong></div><span id="live-pill" class="pill"><i class="dot"></i><span>Connecting</span></span></div>
       </header>
 
@@ -1070,7 +1070,8 @@
         $("machine-printer-state").textContent = status === "unknown" ? "Unknown" : status[0].toUpperCase() + status.slice(1);
         $("machine-nozzle").textContent = fmtTemp(nozzle) + " · " + fmtTarget(nozzle).replace("Target ", "");
         $("machine-bed").textContent = fmtTemp(bed) + " · " + fmtTarget(bed).replace("Target ", "");
-        $("printer-address").textContent = `· TCP ${connection.port || 8080}`;
+        $("printer-backend-label").textContent = snapshot.printer_backend === "octoprint" ? "OctoPrint" : "MKS WiFi";
+        $("printer-address").textContent = `· ${connection.transport || "raw TCP"} ${connection.port || 8080}`;
         $("nozzle-value").textContent = fmtTemp(nozzle); $("nozzle-target").textContent = fmtTarget(nozzle);
         $("bed-value").textContent = fmtTemp(bed); $("bed-target").textContent = fmtTarget(bed);
         $("nozzle-value-large").textContent = fmtTemp(nozzle); $("nozzle-target-large").textContent = fmtTarget(nozzle);
@@ -1082,7 +1083,7 @@
         $("side-poll").textContent = `Polling every ${Number(snapshot.poll_interval_seconds || 2).toFixed(1)} s`;
         $("updated-at").textContent = timeText(snapshot.observed_at);
         $("fresh-detail").textContent = age == null ? "No successful reading yet" : `${duration(age)}${snapshot.stale ? " · stale" : " · current"}`;
-        $("link-detail").textContent = connected ? `MKS WiFi · TCP ${connection.port || 8080}` : snapshot.last_error || "No active connection";
+        $("link-detail").textContent = connected ? `${snapshot.printer_backend === "octoprint" ? "OctoPrint API" : "MKS WiFi · TCP"} ${connection.port || 8080}` : snapshot.last_error || "No active connection";
         $("worker-detail").textContent = `One shared worker · ${snapshot.poll_interval_seconds || 2} s interval`;
         $("metric-connection").textContent = connected ? "Connected" : "Offline";
         $("metric-age").textContent = age == null ? "—" : duration(age);
@@ -1585,7 +1586,7 @@
           const preview=entry.kind==="file"&&entry.preview_available
             ? `<img class="sd-preview" loading="lazy" src="/api/printer/sdcard/preview/${encodeURIComponent(entry.name)}" alt="Print preview for ${esc(entry.name)}">`
             : '<span class="sd-preview-empty" aria-label="No print preview available"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 12h8M8 15h5"/></svg></span>';
-          const listedFrom=data.printer_listing_source==="firmware_m20"?"Printer SD · fresh M20":"Printer SD · cached listing";
+          const listedFrom=data.printer_listing_source==="octoprint_local"?"OctoPrint local files":data.printer_listing_source==="firmware_m20"?"Printer SD · fresh M20":"Printer SD · cached listing";
           const localSource=entry.preview_source==="cached_local_gcode"?` · ${entry.preview_stale?"offline cached":"local cached"} thumbnail`:"";
           const previewLabel=!entry.preview_available?"No preview":entry.preview_source==="cached_local_gcode"?(entry.preview_stale?"Offline cache":"Local cache"):"Observatory cache";
           const localMeta=entry.local_metadata?.metadata||{};
@@ -1594,7 +1595,7 @@
         }).join("");
         rows.querySelectorAll("[data-sd-entry]").forEach((row)=>row.addEventListener("click",()=>{if(row.dataset.sdKind!=="file"||row.dataset.sdAmbiguous==="true")return;state.selectedSdFile=row.dataset.sdEntry;syncSdSelection();}));
         $("sd-count").textContent=data.status === "available"?`${data.entries.length} entries${data.refreshed_at?` · ${timeText(data.refreshed_at)}`:""}`:data.status.replaceAll("_"," ");
-        $("sd-note").textContent=data.error?`${data.error} · The display may retain only a complete listing.`:data.printer_listing_source==="firmware_m20"?`Printer names come from fresh M20. Thumbnail and slicer metadata come from the local cache and a filename match; M20 cannot confirm file contents.`:"No fresh M20 listing is available. Cached SD rows are historical; local cached G-code previews below do not prove a file is on the printer.";
+        $("sd-note").textContent=data.printer_listing_source==="octoprint_local"?"These are files stored in OctoPrint, not the printer SD card. Direct MKS uploads and controls are disabled.":data.error?`${data.error} · The display may retain only a complete listing.`:data.printer_listing_source==="firmware_m20"?`Printer names come from fresh M20. Thumbnail and slicer metadata come from the local cache and a filename match; M20 cannot confirm file contents.`:"No fresh M20 listing is available. Cached SD rows are historical; local cached G-code previews below do not prove a file is on the printer.";
         renderLocalGcodeIndex(data.local_index||{});
         applySdSearch();syncSdSelection();
       }

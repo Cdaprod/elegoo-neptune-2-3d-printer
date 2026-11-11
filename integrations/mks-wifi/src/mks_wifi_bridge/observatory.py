@@ -43,6 +43,7 @@ from .local_gcode_index import LocalGcodeIndexer
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
+from .octoprint_backend import OctoPrintBackend
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
 from .workflows import GuidedWorkflowManager, WorkflowError
 
@@ -86,6 +87,7 @@ class StatusResponse(BaseModel):
     poll_latency_ms: float | None = None
     last_error: str | None
     firmware_identification: str | None
+    printer_backend: str = "mks"
     motion: dict[str, Any]
     command_activity: dict[str, Any] = Field(default_factory=dict)
     timeline: dict[str, Any] = Field(default_factory=dict)
@@ -242,6 +244,7 @@ class PrinterService:
         motion_query_enabled: bool = False,
         motion_interval: float = 10.0,
         motion_query: Any = query_m114,
+        backend: OctoPrintBackend | None = None,
     ) -> None:
         if interval <= 0 or timeout <= 0:
             raise ValueError("poll interval and connection timeout must be positive")
@@ -252,6 +255,7 @@ class PrinterService:
         self.interval = interval
         self.timeout = timeout
         self.client_factory = client_factory
+        self.backend = backend
         self.sd_reader = sd_reader
         self.motion_enabled = motion_enabled
         self.motion_query_enabled = motion_query_enabled
@@ -291,69 +295,72 @@ class PrinterService:
         self.last_attempt_at = utc_now()
         try:
             async with self.io_lock:
-                client = self.client_factory(self.host, port=self.port, timeout=self.timeout)
-                status = await client.get_status()
-                if (
-                    self.firmware is None
-                    or self.firmware_observed_at is None
-                    or (utc_now() - self.firmware_observed_at).total_seconds()
-                    >= FIRMWARE_REFRESH_SECONDS
-                ):
-                    try:
-                        self.firmware = await client.get_firmware()
-                        self.firmware_observed_at = utc_now()
-                    except MksWifiConnectionError:
-                        # Status remains useful; retain the last known firmware string.
-                        pass
-                if self.motion_enabled:
-                    now = time.monotonic()
-                    due = (
-                        self.motion_last_query_monotonic is None
-                        or now - self.motion_last_query_monotonic >= self.motion_interval
-                    )
-                    if due:
-                        current_payload = telemetry_payload(status, self.firmware)
-                        printer_state = current_payload["printer_state"].get("value")
-                        idle = (
-                            printer_state == "idle"
-                            and current_payload["print_active"].get("value") is False
+                if self.backend is not None:
+                    status = await self.backend.read_state()
+                else:
+                    client = self.client_factory(self.host, port=self.port, timeout=self.timeout)
+                    status = await client.get_status()
+                    if (
+                        self.firmware is None
+                        or self.firmware_observed_at is None
+                        or (utc_now() - self.firmware_observed_at).total_seconds()
+                        >= FIRMWARE_REFRESH_SECONDS
+                    ):
+                        try:
+                            self.firmware = await client.get_firmware()
+                            self.firmware_observed_at = utc_now()
+                        except MksWifiConnectionError:
+                            # Status remains useful; retain the last known firmware string.
+                            pass
+                    if self.motion_enabled:
+                        now = time.monotonic()
+                        due = (
+                            self.motion_last_query_monotonic is None
+                            or now - self.motion_last_query_monotonic >= self.motion_interval
                         )
-                        self.motion_last_query_monotonic = now
-                        if idle:
-                            try:
-                                result = await self.motion_query(
-                                    self.host, self.port, min(self.timeout, 3.0)
-                                )
-                            except Exception as exc:
-                                logger.info("M114 position query unavailable: %s", exc)
-                                result = {
-                                    "status": "unsupported_or_unavailable",
-                                    "error": str(exc) or type(exc).__name__,
-                                    "axes": {
-                                        axis: {
-                                            "status": "unavailable",
-                                            "value_mm": None,
-                                        }
-                                        for axis in AXES
-                                    },
-                                    "raw_lines": [],
-                                }
-                            sample = build_motion_sample(
-                                result,
-                                observed_at=iso(utc_now()) or "",
-                                printer_state=printer_state,
-                                previous=(
-                                    self.motion_latest if self.motion_continuity_valid else None
-                                ),
+                        if due:
+                            current_payload = telemetry_payload(status, self.firmware)
+                            printer_state = current_payload["printer_state"].get("value")
+                            idle = (
+                                printer_state == "idle"
+                                and current_payload["print_active"].get("value") is False
                             )
-                            self.motion_latest = sample
-                            self.motion_last_observed_at = utc_now()
-                            self.motion_history.append(sample)
-                            self.motion_status = sample["status"]
-                            self.motion_continuity_valid = sample["status"] == "available"
-                        else:
-                            self.motion_status = "skipped_non_idle_or_unknown"
-                            self.motion_continuity_valid = False
+                            self.motion_last_query_monotonic = now
+                            if idle:
+                                try:
+                                    result = await self.motion_query(
+                                        self.host, self.port, min(self.timeout, 3.0)
+                                    )
+                                except Exception as exc:
+                                    logger.info("M114 position query unavailable: %s", exc)
+                                    result = {
+                                        "status": "unsupported_or_unavailable",
+                                        "error": str(exc) or type(exc).__name__,
+                                        "axes": {
+                                            axis: {
+                                                "status": "unavailable",
+                                                "value_mm": None,
+                                            }
+                                            for axis in AXES
+                                        },
+                                        "raw_lines": [],
+                                    }
+                                sample = build_motion_sample(
+                                    result,
+                                    observed_at=iso(utc_now()) or "",
+                                    printer_state=printer_state,
+                                    previous=(
+                                        self.motion_latest if self.motion_continuity_valid else None
+                                    ),
+                                )
+                                self.motion_latest = sample
+                                self.motion_last_observed_at = utc_now()
+                                self.motion_history.append(sample)
+                                self.motion_status = sample["status"]
+                                self.motion_continuity_valid = sample["status"] == "available"
+                            else:
+                                self.motion_status = "skipped_non_idle_or_unknown"
+                                self.motion_continuity_valid = False
         except (MksWifiConnectionError, OSError, TimeoutError) as exc:
             self.motion_continuity_valid = False
             self.connected = False
@@ -372,7 +379,9 @@ class PrinterService:
             self.latencies_ms.append((time.monotonic() - started) * 1000)
             return self.status_payload()
 
-        self.telemetry = telemetry_payload(status, self.firmware)
+        self.telemetry = (
+            status if self.backend is not None else telemetry_payload(status, self.firmware)
+        )
         self.observed_at = utc_now()
         self.last_attempt_at = self.observed_at
         self.connected = True
@@ -413,27 +422,33 @@ class PrinterService:
     async def refresh_sd(self) -> dict[str, Any]:
         async with self.io_lock:
             try:
-                result = await self.sd_reader(self.host, self.port, timeout=self.timeout)
-                raw = result["raw_response"]
-                complete = result["status"] == "complete_listing"
-                if not complete:
-                    self.sd_status = "partial_or_no_response"
-                    self.sd_error = "Printer did not return the complete End file list marker."
-                else:
-                    entries: list[dict[str, Any]] = []
-                    for raw_line in raw.splitlines():
-                        name = raw_line.strip()
-                        lower = name.lower()
-                        if not name or lower in {"begin file list", "end file list", "ok"}:
-                            continue
-                        kind = "directory" if name.upper().endswith(".DIR") else "file"
-                        if kind == "directory":
-                            name = name[:-4].rstrip("/") + "/"
-                        entries.append({"name": name, "kind": kind, "size_bytes": None})
-                    self.sd_entries = entries
+                if self.backend is not None:
+                    self.sd_entries = await self.backend.list_files()
                     self.sd_refreshed_at = utc_now()
                     self.sd_status = "available"
                     self.sd_error = None
+                else:
+                    result = await self.sd_reader(self.host, self.port, timeout=self.timeout)
+                    raw = result["raw_response"]
+                    complete = result["status"] == "complete_listing"
+                    if not complete:
+                        self.sd_status = "partial_or_no_response"
+                        self.sd_error = "Printer did not return the complete End file list marker."
+                    else:
+                        entries: list[dict[str, Any]] = []
+                        for raw_line in raw.splitlines():
+                            name = raw_line.strip()
+                            lower = name.lower()
+                            if not name or lower in {"begin file list", "end file list", "ok"}:
+                                continue
+                            kind = "directory" if name.upper().endswith(".DIR") else "file"
+                            if kind == "directory":
+                                name = name[:-4].rstrip("/") + "/"
+                            entries.append({"name": name, "kind": kind, "size_bytes": None})
+                        self.sd_entries = entries
+                        self.sd_refreshed_at = utc_now()
+                        self.sd_status = "available"
+                        self.sd_error = None
             except (OSError, TimeoutError) as exc:
                 self.sd_status = "error"
                 self.sd_error = str(exc) or type(exc).__name__
@@ -455,7 +470,7 @@ class PrinterService:
                 "connected": self.connected,
                 "host": self.host,
                 "port": self.port,
-                "transport": "raw TCP",
+                "transport": "OctoPrint API" if self.backend is not None else "raw TCP",
             },
             "telemetry": self.telemetry,
             "observed_at": iso(self.observed_at),
@@ -556,6 +571,7 @@ class PrinterService:
             "entries": self.sd_entries,
             "refreshed_at": iso(self.sd_refreshed_at),
             "error": self.sd_error,
+            "source": "octoprint_local" if self.backend is not None else "firmware_m20",
         }
 
     def diagnostics_payload(self) -> dict[str, Any]:
@@ -669,15 +685,48 @@ def create_app(
     auth_required = not _is_loopback(bind_host)
     if auth_required and not auth_token:
         raise ValueError("NEPTUNE_OBSERVATORY_TOKEN is required when binding beyond localhost")
+    backend_name = os.getenv("NEPTUNE_PRINTER_BACKEND", "mks").strip().lower()
+    if backend_name not in {"mks", "octoprint"}:
+        raise ValueError("NEPTUNE_PRINTER_BACKEND must be mks or octoprint")
+    octoprint_backend = (
+        OctoPrintBackend(
+            os.getenv("OCTOPRINT_BASE_URL", "http://octoprint:80"),
+            os.getenv("OCTOPRINT_API_KEY", ""),
+            timeout=float(os.getenv("OCTOPRINT_TIMEOUT_SECONDS", "3")),
+        )
+        if service is None and backend_name == "octoprint"
+        else None
+    )
     printer = service or PrinterService(
-        host=os.getenv("MKS_WIFI_HOST", DEFAULT_HOST),
-        port=int(os.getenv("MKS_WIFI_PORT", str(DEFAULT_PORT))),
+        host=(
+            octoprint_backend.host
+            if octoprint_backend is not None
+            else os.getenv("MKS_WIFI_HOST", DEFAULT_HOST)
+        ),
+        port=(
+            octoprint_backend.port
+            if octoprint_backend is not None
+            else int(os.getenv("MKS_WIFI_PORT", str(DEFAULT_PORT)))
+        ),
+        backend=octoprint_backend,
         interval=float(os.getenv("NEPTUNE_POLL_INTERVAL_SECONDS", "2")),
         timeout=float(os.getenv("MKS_WIFI_TIMEOUT", "2.5")),
-        motion_enabled=os.getenv("NEPTUNE_MOTION_POLLING_ENABLED", "false").lower() == "true",
-        motion_query_enabled=os.getenv("NEPTUNE_MOTION_QUERY_ENABLED", "false").lower() == "true",
+        motion_enabled=(
+            octoprint_backend is None
+            and os.getenv("NEPTUNE_MOTION_POLLING_ENABLED", "false").lower() == "true"
+        ),
+        motion_query_enabled=(
+            octoprint_backend is None
+            and os.getenv("NEPTUNE_MOTION_QUERY_ENABLED", "false").lower() == "true"
+        ),
         motion_interval=float(os.getenv("NEPTUNE_MOTION_POLL_INTERVAL_SECONDS", "10")),
     )
+    octoprint_mode = printer.backend is not None
+    if octoprint_mode:
+        # Never dispatch directly to the MKS module while OctoPrint owns it.
+        control_enabled = False
+        printer.motion_enabled = False
+        printer.motion_query_enabled = False
     motion_timeline = timeline or MotionTimeline(
         os.getenv("NEPTUNE_TIMELINE_DB_PATH", "/data/neptune-observatory.db")
     )
@@ -710,8 +759,11 @@ def create_app(
     capability_registry_runtime = command_executor.capability_registry
     # Every application startup begins locked, even when an operator allowlist is configured.
     command_executor.disarm_session()
+    if octoprint_mode:
+        command_executor.enabled = False
     commissioning_enabled = (
-        os.getenv("NEPTUNE_COOLDOWN_COMMISSIONING_ENABLED", "false").lower() == "true"
+        not octoprint_mode
+        and os.getenv("NEPTUNE_COOLDOWN_COMMISSIONING_ENABLED", "false").lower() == "true"
     )
     cooldown_executor = commissioning_executor or CooldownCommissioningExecutor(
         lambda: MksTcpCommandTransport(
@@ -808,6 +860,7 @@ def create_app(
             }
         payload["timeline"] = timeline_data
         payload["print_job"] = print_job_summary(payload)
+        payload["printer_backend"] = "octoprint" if octoprint_mode else "mks"
         motion["planned_history"] = timeline_data.get("planned_history", [])
         return payload
 
@@ -839,7 +892,7 @@ def create_app(
     app = FastAPI(
         title="Neptune Observatory",
         version="1.0.0",
-        description="Read-only telemetry for the Elegoo Neptune 2 over MKS WiFi.",
+        description="Printer observability via MKS WiFi or the OctoPrint API.",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
@@ -880,7 +933,9 @@ def create_app(
     app.state.cooldown_in_progress = False
     app.state.auth_required = auth_required
     app.state.auth_token = auth_token
-    app.state.sd_upload_enabled = os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
+    app.state.sd_upload_enabled = (
+        not octoprint_mode and os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
+    )
     app.state.sd_upload_in_progress = False
 
     app.mount(
@@ -901,6 +956,11 @@ def create_app(
 
     async def require_control_auth(request: Request) -> None:
         await require_control_token(request)
+        if octoprint_mode:
+            raise HTTPException(
+                status_code=423,
+                detail="Direct MKS machine controls are disabled in OctoPrint mode.",
+            )
         if not command_executor.execution_enabled:
             raise HTTPException(
                 status_code=423,
@@ -1136,7 +1196,9 @@ def create_app(
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
         payload["printer_listing_source"] = (
-            "firmware_m20"
+            "octoprint_local"
+            if octoprint_mode
+            else "firmware_m20"
             if payload.get("status") == "available"
             and payload.get("refreshed_at")
             and (utc_now() - datetime.fromisoformat(payload["refreshed_at"])).total_seconds() <= 60
@@ -1233,7 +1295,7 @@ def create_app(
     async def sd_upload_status() -> dict[str, Any]:
         configured = bool(app.state.sd_upload_enabled)
         return {
-            "supported_by_source": True,
+            "supported_by_source": not octoprint_mode,
             "configured": configured,
             "available": configured and command_executor.execution_enabled,
             "status": "ready_after_confirmation"
@@ -1250,6 +1312,10 @@ def create_app(
 
     @app.post("/api/printer/sdcard/upload", dependencies=[Depends(require_auth)])
     async def upload_sd_file(request: Request, filename: str) -> dict[str, Any]:
+        if octoprint_mode:
+            raise HTTPException(
+                status_code=423, detail="MKS SD uploads disabled in OctoPrint mode."
+            )
         if not app.state.sd_upload_enabled:
             raise HTTPException(
                 status_code=423,
@@ -1441,6 +1507,7 @@ def create_app(
                     )
         return {
             "execution_enabled": command_executor.execution_enabled,
+            "printer_backend": "octoprint" if octoprint_mode else "mks",
             "macros": macro_catalog,
             "calibrations": commands.list_calibrations(),
             "capabilities": capabilities,
@@ -1458,6 +1525,10 @@ def create_app(
     @app.post("/api/control/arm", dependencies=[Depends(require_auth)])
     async def arm_control_session(payload: ControlArmRequest, request: Request) -> dict[str, Any]:
         await require_control_token(request)
+        if octoprint_mode:
+            raise HTTPException(
+                status_code=423, detail="Machine controls are locked in OctoPrint mode."
+            )
         if payload.confirmation != "ENABLE OPERATOR MODE":
             raise HTTPException(status_code=422, detail="Type ENABLE OPERATOR MODE exactly.")
         if (
@@ -1581,6 +1652,8 @@ def create_app(
 
     @app.post("/api/control/workflows", status_code=201, dependencies=[Depends(require_auth)])
     async def start_workflow(payload: WorkflowStartRequest, request: Request) -> dict[str, Any]:
+        if octoprint_mode:
+            raise HTTPException(status_code=423, detail="MKS workflows disabled in OctoPrint mode.")
         origin = request.headers.get("origin")
         if origin and not _origin_matches(request.headers.get("host", ""), origin):
             raise HTTPException(status_code=403, detail="Request origin is not allowed")
@@ -1764,6 +1837,10 @@ def create_app(
 
     @app.post("/api/control/preview", dependencies=[Depends(require_auth)])
     async def control_preview(payload: PreviewRequest) -> dict[str, Any]:
+        if octoprint_mode:
+            raise HTTPException(
+                status_code=423, detail="Direct MKS controls disabled in OctoPrint mode."
+            )
         try:
             if payload.macro_id in {"start_sd_print", "print_first_layer_sd"}:
                 if (
@@ -1809,6 +1886,10 @@ def create_app(
 
     @app.post("/api/control/execute", status_code=202, dependencies=[Depends(require_auth)])
     async def control_execute(payload: ExecutionRequest, request: Request) -> dict[str, Any]:
+        if octoprint_mode:
+            raise HTTPException(
+                status_code=423, detail="Direct MKS controls disabled in OctoPrint mode."
+            )
         if workflows.active is not None and not workflows.allows_operation(payload.macro_id):
             raise HTTPException(
                 status_code=409,
