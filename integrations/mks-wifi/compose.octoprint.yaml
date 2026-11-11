@@ -1,0 +1,15 @@
+# This file is overlaid on compose.yaml ONLY by the root include.
+# Keep the standalone Observatory compose.yaml usable in direct-MKS mode.
+services:
+  neptune-observatory:
+    depends_on:
+      octoprint:
+        condition: service_started
+    environment:
+      NEPTUNE_PRINTER_BACKEND: octoprint
+      OCTOPRINT_BASE_URL: http://octoprint:80
+      OCTOPRINT_API_KEY: ${OCTOPRINT_API_KEY:?Set OCTOPRINT_API_KEY in the root .env for the combined stack}
+      NEPTUNE_CONTROL_EXECUTION_ENABLED: "false"
+      NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: ${NEPTUNE_OCTOPRINT_CONTROLS_ENABLED:-false}
+      NEPTUNE_MOTION_POLLING_ENABLED: "false"
+      NEPTUNE_MOTION_QUERY_ENABLED: "false"

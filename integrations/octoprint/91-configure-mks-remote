@@ -1,0 +1,98 @@
+#!/bin/sh
+set -eu
+
+# Runs after 90-install-octoprint-plugins, before the OctoPrint service starts.
+# Keeps user-controlled OctoPrint config and all plugin databases in /octoprint.
+exec /usr/local/bin/python3 - <<'PY'
+import os
+import re
+import stat
+import tempfile
+from pathlib import Path
+
+import yaml
+
+host = os.environ.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+port_value = os.environ.get("OCTOPRINT_MKS_WIFI_PORT", "8080").strip()
+if not host or not re.fullmatch(r"[A-Za-z0-9_.-]+", host):
+    raise SystemExit("OCTOPRINT_MKS_WIFI_HOST must be a hostname or IPv4 address")
+try:
+    port = int(port_value)
+except ValueError as exc:
+    raise SystemExit("Invalid OCTOPRINT_MKS_WIFI_PORT") from exc
+if not 1 <= port <= 65535:
+    raise SystemExit("OCTOPRINT_MKS_WIFI_PORT out of range")
+
+remote = {"host": host, "port": port, "protocol": "socket"}
+selected_port = f"REMOTE:socket://{host}:{port}"
+config_dir = Path(os.environ.get("OCTOPRINT_CONFIG_DIR", "/octoprint"))
+config_dir.mkdir(parents=True, exist_ok=True)
+config_path = config_dir / "config.yaml"
+config = yaml.safe_load(config_path.read_text()) if config_path.is_file() else {}
+if config is None:
+    config = {}
+if not isinstance(config, dict):
+    raise SystemExit("OctoPrint config.yaml must contain a mapping")
+
+plugins = config.setdefault("plugins", {})
+if not isinstance(plugins, dict):
+    raise SystemExit("OctoPrint plugins config is not a mapping")
+settings = plugins.setdefault("remote_connection", {})
+if not isinstance(settings, dict):
+    raise SystemExit("OctoPrint remote_connection settings are invalid")
+remotes = settings.setdefault("remotes", [])
+if not isinstance(remotes, list):
+    raise SystemExit("OctoPrint remote_connection remotes must be a list")
+
+changed = False
+if not any(
+    isinstance(existing, dict)
+    and existing.get("host") == host
+    and str(existing.get("port")) == str(port)
+    and existing.get("protocol") == "socket"
+    for existing in remotes
+):
+    remotes.append(remote)
+    changed = True
+
+serial = config.setdefault("serial", {})
+if not isinstance(serial, dict):
+    raise SystemExit("OctoPrint serial settings are invalid")
+if serial.get("port") in (None, "", "AUTO"):
+    serial["port"] = selected_port
+    changed = True
+
+autoconnect = os.environ.get("OCTOPRINT_MKS_AUTO_CONNECT", "false").lower()
+if autoconnect not in {"true", "false"}:
+    raise SystemExit("OCTOPRINT_MKS_AUTO_CONNECT must be true or false")
+if autoconnect == "true":
+    if serial.get("port") != selected_port:
+        raise SystemExit(
+            "Refusing auto-connect: an existing serial port selection differs "
+            "from the configured MKS raw TCP endpoint"
+        )
+    if serial.get("autoconnect") is not True:
+        serial["autoconnect"] = True
+        changed = True
+
+if changed:
+    reference = config_path.stat() if config_path.exists() else config_dir.stat()
+    fd, temporary = tempfile.mkstemp(prefix=".neptune-config-", dir=config_dir)
+    try:
+        os.fchmod(fd, stat.S_IMODE(reference.st_mode) if config_path.exists() else 0o600)
+        os.fchown(fd, reference.st_uid, reference.st_gid)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(config, stream, sort_keys=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, config_path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+print(
+    "[neptune-plugins] Remote Connection: "
+    f"raw TCP {host}:{port}; selected={serial.get('port') == selected_port}; "
+    f"autoconnect={serial.get('autoconnect') is True}; changed={changed}"
+)
+PY

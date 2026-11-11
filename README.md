@@ -52,29 +52,41 @@ These images are captured from the running application, not mockups.
 
 The app's read-only telemetry and root SD listing have been exercised against the target printer. Dashboard `G28 X` has been physically observed to home the X carriage. Other control families are implemented behind runtime checks, but this does not mean every command has been independently verified on every firmware revision. See [feature status](docs/feature-status.md) before enabling controls.
 
-## Root Compose deployment
+## Root Compose deployment — OctoPrint owns the printer
 
-The repository root `compose.yaml` includes Neptune Observatory and an **opt-in** OctoPrint service. Ordinary `docker compose up -d --build` starts Observatory only. OctoPrint is assigned the `octoprint` profile so MacBook deployments do not require a Linux USB device. Docker Compose v2.20+ is required for `include`.
+The root [`compose.yaml`](compose.yaml) uses Docker Compose v2.20+ **`include:`** to load [OctoPrint](integrations/octoprint/compose.yaml) and [Neptune Observatory](integrations/mks-wifi/compose.yaml). Both join the same default Docker network. OctoPrint is the **sole** connection owner of the printer's MKS WiFi **raw TCP port 8080**; Observatory calls `http://octoprint:80` through Docker's service DNS. The root deployment forces `NEPTUNE_PRINTER_BACKEND=octoprint` and disables direct MKS controls.
 
-On the Raspberry Pi, connect the printer over USB, follow [OctoPrint setup](integrations/octoprint/README.md), and set `OCTOPRINT_SERIAL_DEVICE` in `integrations/octoprint/.env` to the resolved serial device. Then from the repository root run:
-
-```bash
-docker compose --profile octoprint up -d --build
+```mermaid
+flowchart LR
+  Browser["Browser :8000"] --> Observatory["Neptune Observatory"]
+  Observatory -->|"HTTP OctoPrint API :80, X-Api-Key"| OctoPrint["OctoPrint"]
+  OctoPrint -->|"Remote Connection plugin: socket://PRINTER:8080"| MKS["MKS WiFi / Neptune 2"]
+  OctoPrint --> Store[("OctoPrint volume: history, settings, files")]
+  Observatory --> History[("Observatory volume: telemetry, digital twin")]
 ```
 
-When deploying Observatory only, configure `integrations/mks-wifi/.env` as described below. OctoPrint and Observatory use different control paths (USB and MKS WiFi); do not send competing G-code commands. The root stack does not flash firmware.
+### Configure and deploy from the repository root
 
-## Neptune Observatory via OctoPrint (opt-in, read-only)
+Copy [`.env.example`](.env.example) into a private root `.env`; set the *printer's* MKS WiFi hostname/IP, your existing OctoPrint application API key, and a strong Observatory token. The OctoPrint UI remains at `http://<docker-host>:5001`, Observatory at `http://<docker-host>:8000`. The application API key is only used server-side and must not be committed.
 
-The printer's **MKS WiFi Raw TCP port 8080 has been confirmed working through OctoPrint Remote Connection** (the OctoPrint interface showed `Operational` and fresh nozzle/bed temperatures). The OctoPrint backend makes OctoPrint the **only** direct printer communication owner and retains Observatory's existing dashboard, historical telemetry, and Digital Twin. It does not yet enable Observatory-issued motion, thermal, print lifecycle, or file-upload actions; those controls are explicitly locked in this mode.
+`/elegoo-neptune-2-3d-printer`
 
-1. Keep the existing OctoPrint Remote Connection configuration. On the OctoPrint web UI, generate an application/API key with sufficient **read** access under Settings → Application Keys. Do not paste the key into a browser query string, GitHub issue, or commit.
-2. From the repository root, copy `integrations/mks-wifi/.env.example` to `integrations/mks-wifi/.env` if needed. Set `NEPTUNE_PRINTER_BACKEND=octoprint`, `OCTOPRINT_BASE_URL=http://octoprint:80`, `OCTOPRINT_API_KEY=<local-key>`, and your existing `NEPTUNE_OBSERVATORY_TOKEN`. Keep the file private. Port 80 is the OctoPrint **container** port; the existing host dashboard remains on port 5001 by default.
-3. Start both services **from the repository root** with `docker compose --profile octoprint up -d --build`. Observatory is served on port 8000, OctoPrint on port 5001. Never launch a separate Observatory instance in direct MKS mode while OctoPrint is controlling the printer.
-4. Sign into Observatory and verify `/api/printer/status` shows `printer_backend: octoprint`, `connection.transport: OctoPrint API`, and fresh temperature/job data. Its file list in this mode is **OctoPrint local storage**, not the native printer SD card.
-5. To revert, stop Observatory, set `NEPTUNE_PRINTER_BACKEND=mks`, **disconnect OctoPrint from the printer**, then restart Observatory. Do not assume that stopping just the OctoPrint browser disconnects its backend.
+```bash
+cp .env.example .env
+# Edit .env: OCTOPRINT_MKS_WIFI_HOST, OCTOPRINT_API_KEY, NEPTUNE_OBSERVATORY_TOKEN
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 octoprint neptune-observatory
+```
 
-If the OctoPrint API is unavailable, Observatory marks telemetry stale rather than secretly reconnecting to MKS. Remote printing and printer controls must still be performed in OctoPrint until an independently tested command adapter is added. An API key is required for the OctoPrint backend and must remain server-side. Neither API nor printer ports should be publicly exposed.
+**Raw TCP preconfiguration:** The image installs the Remote Connection plugin from its prebuilt wheelhouse and its startup initializer idempotently adds the raw `socket` endpoint to OctoPrint's `/octoprint/config.yaml` without removing existing plugin entries. On a new installation it preselects `REMOTE:socket://<printer>:8080`. Previously selected ports are preserved. `OCTOPRINT_MKS_AUTO_CONNECT=false` by default—connect using OctoPrint after verifying the right printer. Setting it to `true` intentionally enables OctoPrint automatic connection *only when* the preselected port matches this remote. Existing OctoPrint authentication, files and PrintJobHistory data remain in the existing named volume.
+
+### Verify the full path
+
+Use OctoPrint's Connection panel to select `REMOTE:socket://<printer-host>:8080` if not already selected and connect once ready. With a valid API key, Observatory should report `printer_backend: octoprint`, `connection.transport: OctoPrint API`, and fresh temperatures in `/api/printer/status`. A disconnected OctoPrint instance leaves Observatory stale; Observatory will **never fall back to opening a competing MKS socket**. Open **Print History** to switch between the plugin's reported print outcomes and Observatory's own recorded sessions.
+
+Both services now start with plain `docker compose up -d --build`, not a Compose profile. Existing volumes are preserved by normal rebuilds; never run `docker compose down -v` unless intentionally deleting data. USB passthrough remains a separate optional OctoPrint-only deployment, not part of this root raw TCP stack. To run Observatory directly against MKS, first disconnect/stop OctoPrint and use a separate deliberate configuration; do not run simultaneous MKS clients.
 
 ## Quick start with Docker Compose
 

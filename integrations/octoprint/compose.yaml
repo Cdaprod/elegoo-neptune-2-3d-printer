@@ -1,6 +1,5 @@
 services:
   octoprint:
-    profiles: ["octoprint"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,6 +12,9 @@ services:
       - octoprint-data:/octoprint
     environment:
       ENABLE_MJPG_STREAMER: "false"
+      OCTOPRINT_MKS_WIFI_HOST: ${OCTOPRINT_MKS_WIFI_HOST:?Set OCTOPRINT_MKS_WIFI_HOST to your printer IP or hostname}
+      OCTOPRINT_MKS_WIFI_PORT: ${OCTOPRINT_MKS_WIFI_PORT:-8080}
+      OCTOPRINT_MKS_AUTO_CONNECT: ${OCTOPRINT_MKS_AUTO_CONNECT:-false}
     logging:
       driver: json-file
       options:
