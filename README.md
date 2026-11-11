@@ -65,6 +65,21 @@ flowchart LR
   Observatory --> History[("Observatory volume: telemetry, digital twin")]
 ```
 
+### One-command credential setup with Make
+
+From the repository root, run `make setup PRINTER_IP=<your-printer-IP>`. The setup script creates a private `.env` (mode 0600), prompts for your **existing OctoPrint API key** without echoing it, and either generates a cryptographically secure Observatory token automatically or lets you enter a custom phrase interactively. No credential needs to appear in your shell history. Existing credentials are preserved on subsequent runs.
+
+`/elegoo-neptune-2-3d-printer`
+
+```bash
+make setup PRINTER_IP=192.168.0.50
+make up
+make token         # Display saved Observatory token locally when needed
+# make rotate-token # Optional: rotate token, invalidates existing Observatory sessions
+```
+
+`make up` runs Compose validation then builds and starts both services. `make logs`, `make ps`, `make down`, and `make restart` are also available. Do not put the OctoPrint key or your Observatory token phrase into Make variables: interactive hidden prompts protect them from process listings and shell history. The API key must first exist in OctoPrint.
+
 ### Configure and deploy from the repository root
 
 Copy [`.env.example`](.env.example) into a private root `.env`; set the *printer's* MKS WiFi hostname/IP, your existing OctoPrint application API key, and a strong Observatory token. The OctoPrint UI remains at `http://<docker-host>:5001`, Observatory at `http://<docker-host>:8000`. The application API key is only used server-side and must not be committed.
