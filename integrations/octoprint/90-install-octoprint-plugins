@@ -10,7 +10,7 @@ fi
 
 echo "[neptune-plugins] Installing bundled plugins into active OctoPrint Python..."
 "$PYTHON" -m pip install --no-index --find-links=/opt/octoprint-plugin-wheels \
-  'OctoPrint-Remote_connection==0.1.1' 'Themeify==1.2.2' 'OctoPrint-PrintJobHistory==1.17.5'
+  'OctoPrint-Remote_connection==0.1.1' 'Themeify==1.2.2' 'Print-Job-History==1.17.5'
 
 echo "[neptune-plugins] Checking OctoPrint plugin entry points..."
 "$PYTHON" - <<'PY'
