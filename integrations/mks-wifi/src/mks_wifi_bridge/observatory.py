@@ -938,6 +938,7 @@ def create_app(
     )
     app.state.sd_upload_in_progress = False
     app.state.octoprint_control_lock = asyncio.Lock()
+    app.state.octoprint_command_last_accepted_at = {}
 
     app.mount(
         "/static",
@@ -1029,6 +1030,23 @@ def create_app(
     @app.get("/api/printer/motion", dependencies=[Depends(require_auth)])
     async def motion() -> dict[str, Any]:
         return dashboard_snapshot()["motion"]
+
+    @app.get("/api/print/history", dependencies=[Depends(require_auth)])
+    async def print_history(limit: int = 200) -> dict[str, Any]:
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
+        return await asyncio.to_thread(motion_timeline.list_print_history, limit)
+
+    @app.get("/api/print/history/octoprint", dependencies=[Depends(require_auth)])
+    async def octoprint_print_history(limit: int = 200) -> dict[str, Any]:
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
+        if not octoprint_mode or printer.backend is None:
+            raise HTTPException(status_code=404, detail="OctoPrint backend is not active.")
+        try:
+            return await printer.backend.print_job_history(limit)
+        except OctoPrintError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.get("/api/timeline", dependencies=[Depends(require_auth)])
     async def timeline_snapshot() -> dict[str, Any]:
@@ -1523,6 +1541,25 @@ def create_app(
             ),
         }
 
+    @app.get("/api/octoprint/control/capabilities", dependencies=[Depends(require_auth)])
+    async def octoprint_control_capabilities() -> dict[str, Any]:
+        enabled = (
+            octoprint_mode
+            and os.getenv("NEPTUNE_OCTOPRINT_CONTROLS_ENABLED", "false").lower() == "true"
+        )
+        return {
+            "backend": "octoprint" if octoprint_mode else "mks",
+            "enabled": enabled,
+            "operations": (
+                ["home_x", "home_y", "home_z", "pause", "resume", "cancel"] if enabled else []
+            ),
+            "notice": (
+                "OctoPrint exclusively owns the MKS link. Every action requires "
+                "fresh telemetry, physical attendance and exact confirmation. "
+                "Acceptance does not prove mechanical completion."
+            ),
+        }
+
     @app.post("/api/octoprint/control", dependencies=[Depends(require_auth)])
     async def octoprint_control(request: Request) -> dict[str, Any]:
         """Explicit, attended commands through OctoPrint only; never native MKS."""
@@ -1553,6 +1590,11 @@ def create_app(
                 status_code=422,
                 detail="Exact confirmation, attendance, and accessible power switch required.",
             )
+        if operation.startswith("home_") and body.get("travel_path_clear") is not True:
+            raise HTTPException(
+                status_code=422,
+                detail="A clear homing travel path must be confirmed.",
+            )
         async with app.state.octoprint_control_lock:
             snapshot = printer.status_payload()
             state = (snapshot.get("telemetry") or {}).get("printer_state", {}).get("value")
@@ -1582,10 +1624,18 @@ def create_app(
                 )
             if operation == "cancel" and state not in {"printing", "paused"}:
                 raise HTTPException(status_code=409, detail="No active print to cancel.")
+            last_sent = app.state.octoprint_command_last_accepted_at.get(operation)
+            if last_sent is not None and time.monotonic() - last_sent < 10:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A matching command was recently accepted. Verify the printer first.",
+                )
             try:
                 result = await printer.backend.execute_control(operation)
             except OctoPrintError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
+            if result.get("accepted"):
+                app.state.octoprint_command_last_accepted_at[operation] = time.monotonic()
             commands.record_event(operation, "octoprint_command_accepted")
             return {**result, "backend": "octoprint", "verified_complete": False}
 

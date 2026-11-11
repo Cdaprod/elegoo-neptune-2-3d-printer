@@ -19,6 +19,7 @@ WORD = re.compile(r"([A-Z])\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)")
 MAX_GCODE_BYTES = 50 * 1024 * 1024
 MAX_SEGMENTS = 80_000
 RETENTION_DAYS = 30
+PRINT_HISTORY_RETENTION_DAYS = 365
 MAX_TELEMETRY_ROWS = 100_000
 MAX_STORED_GCODE_FILES = 8
 MAX_STORED_SEGMENTS = 200_000
@@ -866,8 +867,12 @@ class MotionTimeline:
     @staticmethod
     def _prune(db: sqlite3.Connection) -> None:
         cutoff = (datetime.now(UTC) - timedelta(days=RETENTION_DAYS)).isoformat()
+        history_cutoff = (
+            datetime.now(UTC) - timedelta(days=PRINT_HISTORY_RETENTION_DAYS)
+        ).isoformat()
         db.execute(
-            "DELETE FROM print_sessions WHERE ended_at IS NOT NULL AND ended_at < ?", (cutoff,)
+            "DELETE FROM print_sessions WHERE ended_at IS NOT NULL AND ended_at < ?",
+            (history_cutoff,),
         )
         db.execute(
             "DELETE FROM telemetry WHERE id NOT IN "
@@ -961,6 +966,11 @@ class MotionTimeline:
         filename = val("current_file") or val("filename") or val("sd_filename")
         progress = val("progress_percent")
         state = val("printer_state") or "unknown"
+        source = (
+            "OctoPrint_API_telemetry"
+            if (connection or {}).get("transport") == "OctoPrint API"
+            else "MKS_read_only_telemetry"
+        )
         observed = snapshot.get("observed_at") or now_iso()
         latency = snapshot.get("poll_latency_ms")
         with self.lock, self._db() as db:
@@ -974,10 +984,14 @@ class MotionTimeline:
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
             if active is True:
-                if current is None or (
-                    filename
-                    and current["filename"]
-                    and filename.casefold() != current["filename"].casefold()
+                if (
+                    current is None
+                    or current["source"] != source
+                    or (
+                        filename
+                        and current["filename"]
+                        and filename.casefold() != current["filename"].casefold()
+                    )
                 ):
                     if current is not None:
                         db.execute(
@@ -1000,7 +1014,7 @@ class MotionTimeline:
                             state,
                             progress,
                             match["id"] if match else None,
-                            "MKS_read_only_telemetry",
+                            source,
                         ),
                     )
                 else:
@@ -1211,6 +1225,60 @@ class MotionTimeline:
                         ),
                     )
             self._prune(db)
+
+    def list_print_history(self, limit: int = 200) -> dict[str, Any]:
+        """Read persisted observed sessions without implying successful print completion."""
+        if isinstance(limit, bool) or not 1 <= limit <= 500:
+            raise ValueError("Print history limit must be between 1 and 500")
+        with self.lock, self._db() as db:
+            total = db.execute("SELECT COUNT(*) FROM print_sessions").fetchone()[0]
+            rows = [
+                dict(row)
+                for row in db.execute(
+                    "SELECT id,filename,started_at,ended_at,state,progress,source "
+                    "FROM print_sessions ORDER BY started_at DESC LIMIT ?",
+                    (limit,),
+                )
+            ]
+        for row in rows:
+            state = str(row["state"] or "unknown").lower()
+            ended = row["ended_at"] is not None
+            if not ended:
+                outcome = "active_or_unfinished"
+            elif state in {"completed", "complete", "success"}:
+                outcome = "reported_completed"
+            elif state in {"cancelled", "canceled"}:
+                outcome = "reported_cancelled"
+            elif state in {"failed", "error"}:
+                outcome = "reported_failed"
+            elif state == "interrupted":
+                outcome = "inferred_interrupted"
+            else:
+                outcome = "ended_unverified"
+            elapsed = None
+            if ended:
+                try:
+                    start = datetime.fromisoformat(row["started_at"])
+                    finish = datetime.fromisoformat(row["ended_at"])
+                    elapsed = max(0, int((finish - start).total_seconds()))
+                except (TypeError, ValueError):
+                    pass
+            row["outcome"] = outcome
+            row["duration_seconds"] = elapsed
+            row["outcome_verified"] = False
+        return {
+            "sessions": rows,
+            "total": total,
+            "returned": len(rows),
+            "limit": limit,
+            "source": "Observatory SQLite recording",
+            "retention_days": PRINT_HISTORY_RETENTION_DAYS,
+            "note": (
+                "These are Observatory-observed sessions. An idle transition or "
+                "100% progress alone does not prove print completion. A session "
+                "recorded as ended_unverified has no verified final outcome."
+            ),
+        }
 
     def snapshot(
         self, limit: int = 500, live_snapshot: dict[str, Any] | None = None

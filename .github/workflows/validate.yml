@@ -46,3 +46,19 @@ jobs:
           MKS_WIFI_HOST: printer.example.invalid
           NEPTUNE_OBSERVATORY_TOKEN: validation-only-not-a-secret
         run: docker compose config --quiet
+
+  octoprint-plugin-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build OctoPrint image with offline plugin wheelhouse
+        run: docker build -t neptune-octoprint-ci integrations/octoprint
+      - name: Check bundled plugin wheel and startup installer
+        run: |
+          docker run --rm --entrypoint /bin/sh neptune-octoprint-ci -c '
+            set -eu
+            ls /opt/octoprint-plugin-wheels | grep -qi print_job_history
+            test -x /etc/cont-init.d/90-install-octoprint-plugins
+            /etc/cont-init.d/90-install-octoprint-plugins
+          '

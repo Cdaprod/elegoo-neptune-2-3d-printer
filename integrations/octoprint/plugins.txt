@@ -1,3 +1,6 @@
 # Install through OctoPrint Settings > Plugin Manager > Get More > ...from URL.
 # This plugin adds raw TCP and RFC2217 remote printer connections.
 https://github.com/mstarostik/OctoPrint-Remote_connection/archive/main.zip
+
+# Pinned print history plugin; stores historical print outcomes in the persistent OctoPrint data volume.
+https://github.com/vojtakaniok/OctoPrint-PrintJobHistory/releases/download/1.17.5/main.zip
