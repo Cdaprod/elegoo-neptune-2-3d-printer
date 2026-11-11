@@ -39,6 +39,8 @@ jobs:
         run: |
           uv run --no-sync ruff check src tests
           uv run --no-sync ruff format --check src tests
+      - name: Compile dashboard JavaScript
+        run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests
         run: node --test tests/*.mjs
       - name: Validate Compose configuration
