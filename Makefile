@@ -1,11 +1,11 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
-.PHONY: help setup authorize-octoprint reauthorize-octoprint up down restart ps logs check token rotate-token
+.PHONY: help setup authorize-octoprint reauthorize-octoprint up down restart ps logs check token rotate-token sd-rebuild
 
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # validate or provision OctoPrint application key' 'make reauthorize-octoprint           # explicitly replace a revoked OctoPrint key' 'make up                              # reuse valid API key and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services'
+	@printf '%s\n' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # validate or provision OctoPrint application key' 'make reauthorize-octoprint           # explicitly replace a revoked OctoPrint key' 'make up                              # reuse valid API key and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services' 'make sd-rebuild                      # backup and rebuild inserted SD card safely'
 
 setup:
 	@$(PYTHON) scripts/setup_env.py
@@ -47,3 +47,6 @@ token:
 
 rotate-token:
 	@$(PYTHON) scripts/setup_env.py --rotate-token
+
+sd-rebuild:
+	@$(PYTHON) scripts/neptune_sd_rebuild.py
