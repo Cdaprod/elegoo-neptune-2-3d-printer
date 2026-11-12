@@ -1,5 +1,7 @@
 # SD-card workflow
 
+**Validated physical workflow (2026-11-12):** The Neptune 2 resumed real SD-card printing after a verified FAT32/MBR rebuild and unique uppercase 8.3 `.GCO` filenames. The operator observed heating, extrusion and first-layer deposition from the physical touchscreen. This does not validate wireless upload or remote print controls. See [the physical SD acceptance record](sd-print-validation-2026-11-12.md). The repeatable, guarded macOS recovery tool lives at [`scripts/neptune_sd_rebuild.py`](../scripts/neptune_sd_rebuild.py) and is run with `python3 scripts/neptune_sd_rebuild.py` from the repository root.
+
 The printer's microSD card can remain installed. Neptune Observatory issues a read-only root listing request through the MKS WiFi client and presents the returned directory entries. A root listing does not imply that the app can read arbitrary file contents.
 
 ## Current behavior
