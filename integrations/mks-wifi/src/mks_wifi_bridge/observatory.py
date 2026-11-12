@@ -43,6 +43,7 @@ from .local_gcode_index import LocalGcodeIndexer
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
+from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
 from .octoprint_backend import OctoPrintBackend, OctoPrintError
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
 from .workflows import GuidedWorkflowManager, WorkflowError
@@ -245,6 +246,7 @@ class PrinterService:
         motion_interval: float = 10.0,
         motion_query: Any = query_m114,
         backend: OctoPrintBackend | None = None,
+        physical_status_reader: Any = None,
     ) -> None:
         if interval <= 0 or timeout <= 0:
             raise ValueError("poll interval and connection timeout must be positive")
@@ -256,6 +258,8 @@ class PrinterService:
         self.timeout = timeout
         self.client_factory = client_factory
         self.backend = backend
+        self.physical_status_reader = physical_status_reader
+        self.external_sd_status: dict[str, Any] | None = None
         self.sd_reader = sd_reader
         self.motion_enabled = motion_enabled
         self.motion_query_enabled = motion_query_enabled
@@ -297,6 +301,16 @@ class PrinterService:
             async with self.io_lock:
                 if self.backend is not None:
                     status = await self.backend.read_state()
+                    if self.physical_status_reader is not None:
+                        try:
+                            self.external_sd_status = await self.physical_status_reader.read_state()
+                        except (MksHttpStatusError, OSError, TimeoutError) as exc:
+                            self.external_sd_status = {
+                                "status": "unavailable", "state": "unknown",
+                                "active": None, "source": "mks_wifi_http",
+                                "confidence": "unavailable",
+                                "error": str(exc), "observed_at": iso(utc_now()),
+                            }
                 else:
                     client = self.client_factory(self.host, port=self.port, timeout=self.timeout)
                     status = await client.get_status()
@@ -385,6 +399,12 @@ class PrinterService:
         self.telemetry = (
             status if self.backend is not None else telemetry_payload(status, self.firmware)
         )
+        if self.backend is not None:
+            self.telemetry["external_sd"] = self.external_sd_status or {
+                "status": "unavailable", "state": "unknown", "active": None,
+                "source": "mks_wifi_http", "confidence": "not_configured",
+                "observed_at": None,
+            }
         self.observed_at = utc_now()
         self.last_attempt_at = self.observed_at
         self.connected = True
@@ -691,6 +711,17 @@ def create_app(
     backend_name = os.getenv("NEPTUNE_PRINTER_BACKEND", "mks").strip().lower()
     if backend_name not in {"mks", "octoprint"}:
         raise ValueError("NEPTUNE_PRINTER_BACKEND must be mks or octoprint")
+    physical_status_reader = None
+    if (
+        service is None and backend_name == "octoprint"
+        and os.getenv("NEPTUNE_MKS_HTTP_MONITOR_ENABLED", "true").lower() == "true"
+        and os.getenv("OCTOPRINT_MKS_WIFI_HOST")
+    ):
+        physical_status_reader = MksHttpStatusReader(
+            os.environ["OCTOPRINT_MKS_WIFI_HOST"],
+            port=int(os.getenv("NEPTUNE_MKS_HTTP_PORT", "80")),
+            timeout=float(os.getenv("NEPTUNE_MKS_HTTP_TIMEOUT_SECONDS", "1.5")),
+        )
     octoprint_backend = (
         OctoPrintBackend(
             os.getenv("OCTOPRINT_BASE_URL", "http://octoprint:80"),
@@ -712,6 +743,7 @@ def create_app(
             else int(os.getenv("MKS_WIFI_PORT", str(DEFAULT_PORT)))
         ),
         backend=octoprint_backend,
+        physical_status_reader=physical_status_reader,
         interval=float(os.getenv("NEPTUNE_POLL_INTERVAL_SECONDS", "2")),
         timeout=float(os.getenv("MKS_WIFI_TIMEOUT", "2.5")),
         motion_enabled=(
@@ -783,9 +815,49 @@ def create_app(
         ),
     )
 
+    def recording_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+        """Reconcile print history without changing OctoPrint control interlocks."""
+        if printer.backend is None:
+            return snapshot
+        result = dict(snapshot)
+        reported = dict(result.get("telemetry") or {})
+        external = reported.get("external_sd") or {}
+        if external.get("status") == "available":
+            reported["printer_state"] = {
+                "status": "available", "value": external.get("state"),
+                "source": "mks_wifi_http",
+            }
+            reported["print_active"] = {
+                "status": "available", "value": external.get("active"),
+                "source": "mks_wifi_http",
+            }
+            reported["progress_percent"] = {
+                "status": "available" if external.get("progress_percent") is not None
+                else "unsupported_or_not_reported",
+                "value": external.get("progress_percent"),
+                "source_command": "M27", "source": "mks_wifi_http",
+            }
+            reported["current_file"] = {
+                "status": "available" if external.get("filename")
+                else "unsupported_or_not_reported",
+                "value": external.get("filename"), "source": "mks_wifi_http",
+            }
+            result["physical_source"] = "mks_wifi_http"
+        elif (reported.get("print_active") or {}).get("value") is False:
+            # OctoPrint Operational does not mean that a TFT SD job stopped.
+            reported["printer_state"] = {
+                "status": "unsupported_or_not_reported", "value": None,
+            }
+            reported["print_active"] = {
+                "status": "unsupported_or_not_reported", "value": None,
+            }
+        result["telemetry"] = reported
+        return result
+
     def dashboard_snapshot(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         """Attach runtime coordinate estimates without presenting them as M114 data."""
         payload = dict(snapshot or printer.status_payload())
+        reconciled = recording_snapshot(payload)
         motion = dict(payload.get("motion") or printer.motion_payload())
         control = command_executor.capability_payload()
         references = {
@@ -844,7 +916,7 @@ def create_app(
         }
         payload["motion"] = motion
         try:
-            timeline_data = motion_timeline.snapshot(live_snapshot=payload)
+            timeline_data = motion_timeline.snapshot(live_snapshot=reconciled)
         except Exception as exc:
             logger.exception("Motion timeline is temporarily unavailable")
             timeline_data = {
@@ -869,7 +941,7 @@ def create_app(
 
     async def publish_dashboard_snapshot(snapshot: dict[str, Any]) -> None:
         try:
-            motion_timeline.record_snapshot(snapshot, command_executor.history())
+            motion_timeline.record_snapshot(recording_snapshot(snapshot), command_executor.history())
         except Exception:
             logger.exception("Could not persist this telemetry timeline sample")
         await hub.publish(dashboard_snapshot(snapshot))
