@@ -24,7 +24,7 @@ def mks_state(progress: float = 8, state: str = "printing") -> dict:
             "paused": state == "paused",
         }}},
         {"job": {"file": {"name": "enclosure.gcode"}},
-         "progress": {"completion": progress, "printTime": 123}},
+         "progress": {"completion": progress / 100, "printTime": 123}},
     )
 
 
@@ -74,7 +74,7 @@ def test_only_two_read_only_http_requests_are_sent() -> None:
             {"state": {"flags": {"operational": True, "printing": True}}}
             if path == "/api/printer"
             else {"job": {"file": {"name": "part.gcode"}},
-                  "progress": {"completion": 8}}
+                  "progress": {"completion": 0.08}}
         )
 
     reader._get_sync = fake_get
