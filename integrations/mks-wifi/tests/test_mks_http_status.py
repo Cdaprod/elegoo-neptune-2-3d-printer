@@ -18,13 +18,19 @@ from mks_wifi_bridge.observatory import PrinterService
 
 def mks_state(progress: float = 8, state: str = "printing") -> dict:
     return normalize_mks_http_status(
-        {"state": {"flags": {
-            "operational": True,
-            "printing": state == "printing",
-            "paused": state == "paused",
-        }}},
-        {"job": {"file": {"name": "enclosure.gcode"}},
-         "progress": {"completion": progress / 100, "printTime": 123}},
+        {
+            "state": {
+                "flags": {
+                    "operational": True,
+                    "printing": state == "printing",
+                    "paused": state == "paused",
+                }
+            }
+        },
+        {
+            "job": {"file": {"name": "enclosure.gcode"}},
+            "progress": {"completion": progress / 100, "printTime": 123},
+        },
     )
 
 
@@ -52,12 +58,16 @@ def test_m27_7_to_8_represents_cached_progress_in_source_protocol() -> None:
 
 def test_mks_http_parser_does_not_invent_state_or_invalid_progress() -> None:
     assert normalize_mks_http_status({}, {})["state"] == "unknown"
-    assert normalize_mks_http_status(
-        {"state": {"flags": {"operational": True}}}, {}
-    )["state"] == "unknown"
-    assert normalize_mks_http_status(
-        {"state": {"flags": {"printing": True}}}, {"progress": {"completion": 999}}
-    )["progress_percent"] is None
+    assert (
+        normalize_mks_http_status({"state": {"flags": {"operational": True}}}, {})["state"]
+        == "unknown"
+    )
+    assert (
+        normalize_mks_http_status(
+            {"state": {"flags": {"printing": True}}}, {"progress": {"completion": 999}}
+        )["progress_percent"]
+        is None
+    )
     with pytest.raises(ValueError):
         MksHttpStatusReader("public.example")
     with pytest.raises(ValueError):
@@ -73,8 +83,7 @@ def test_only_two_read_only_http_requests_are_sent() -> None:
         return (
             {"state": {"flags": {"operational": True, "printing": True}}}
             if path == "/api/printer"
-            else {"job": {"file": {"name": "part.gcode"}},
-                  "progress": {"completion": 0.08}}
+            else {"job": {"file": {"name": "part.gcode"}}, "progress": {"completion": 0.08}}
         )
 
     reader._get_sync = fake_get
@@ -115,7 +124,9 @@ def test_mks_http_error_degrades_without_losing_octoprint_temperature() -> None:
             raise MksHttpStatusError("MKS HTTP status unreachable or timed out")
 
     service = PrinterService(
-        backend=Backend(), physical_status_reader=Broken(), interval=30,
+        backend=Backend(),
+        physical_status_reader=Broken(),
+        interval=30,
     )
     snapshot = asyncio.run(service.poll_once())
     assert snapshot["connection"]["connected"] is True
@@ -127,18 +138,22 @@ def test_mks_http_error_degrades_without_losing_octoprint_temperature() -> None:
 def test_recorded_sd_sessions_end_without_claiming_physical_success(tmp_path) -> None:
     db = MotionTimeline(tmp_path / "sessions.sqlite3")
     for progress, active, state in [
-        (7, True, "printing"), (8, True, "printing"), (None, False, "idle")
+        (7, True, "printing"),
+        (8, True, "printing"),
+        (None, False, "idle"),
     ]:
         sample = host_snapshot()
         sample["physical_source"] = "mks_wifi_http"
-        sample["telemetry"].update({
-            "printer_state": {"value": state},
-            "print_active": {"value": active},
-            "progress_percent": {"value": progress},
-            "current_file": {"value": "enclosure.gcode" if active else None},
-            "nozzle_temperature": {"value": 210, "target_c": 210},
-            "bed_temperature": {"value": 60, "target_c": 60},
-        })
+        sample["telemetry"].update(
+            {
+                "printer_state": {"value": state},
+                "print_active": {"value": active},
+                "progress_percent": {"value": progress},
+                "current_file": {"value": "enclosure.gcode" if active else None},
+                "nozzle_temperature": {"value": 210, "target_c": 210},
+                "bed_temperature": {"value": 60, "target_c": 60},
+            }
+        )
         db.record_snapshot(sample)
     history = db.list_print_history()
     assert history["sessions"][0]["source"] == "MKS_HTTP_SD_telemetry"
