@@ -102,7 +102,7 @@ def test_existing_key_is_never_rotated_on_validation_failure(tmp_path):
     with (
         patch.object(auth, "ENV", local_env),
         patch.object(auth, "save", side_effect=save_test),
-        patch.object(auth, "valid_key", return_value=False),
+        patch.object(auth, "wait_for_api"),
         patch.object(auth, "authorize", return_value=KEY) as approve,
         patch.object(sys, "argv", ["authorize_octoprint.py"]),
     ):
@@ -135,6 +135,7 @@ def test_explicit_reauthorization_replaces_revoked_key(tmp_path):
         patch.object(auth, "ENV", local_env),
         patch.object(auth, "save", side_effect=save_test),
         patch.object(auth, "authorize", return_value=KEY) as approve,
+        patch.object(auth, "wait_for_api"),
         patch.object(sys, "argv", ["authorize_octoprint.py", "--reauthorize"]),
     ):
         assert auth.main() == 0
