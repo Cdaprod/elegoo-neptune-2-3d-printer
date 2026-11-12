@@ -62,6 +62,12 @@ if serial.get("port") in (None, "", "AUTO"):
     serial["port"] = selected_port
     changed = True
 
+# Observatory reads OctoPrint's own Send:/Recv: history. Logging is bounded by
+# OctoPrint's rotating serialFile handler and does not open another MKS socket.
+if serial.get("log") is not True:
+    serial["log"] = True
+    changed = True
+
 autoconnect = os.environ.get("OCTOPRINT_MKS_AUTO_CONNECT", "false").lower()
 if autoconnect not in {"true", "false"}:
     raise SystemExit("OCTOPRINT_MKS_AUTO_CONNECT must be true or false")
