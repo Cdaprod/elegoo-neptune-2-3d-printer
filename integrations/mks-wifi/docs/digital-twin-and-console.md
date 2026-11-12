@@ -92,13 +92,28 @@ or an independently connected MKS WiFi interface. OctoPrint must have
 observed the message to display it. Timestamps and directions come from
 the original log entries, not synthetic G-code polling.
 
-The root deployment enables OctoPrint's built-in rotating serial logging
-through its existing idempotent startup configuration. Observatory reads
-the **single fixed authenticated OctoPrint log download endpoint** using its
-existing OctoPrint API key. It does not open another printer TCP connection,
-send M27, submit G-code, or provide a generic arbitrary log downloader.
-The read-only endpoint is `GET /api/printer/console?limit=200`, with a
-maximum of 500 events and a 2.2 MB input bound.
+The preferred deployment now includes the `Neptune Observatory Terminal`
+OctoPrint plugin, bundled with the repository's Docker image and installed
+automatically into the persistent OctoPrint plugins directory during container
+initialization. The plugin observes `octoprint.comm.protocol.gcode.sent` and
+`octoprint.comm.protocol.gcode.received` hooks, retaining at most **500**
+messages in an in-memory ring buffer. It does no network or disk I/O in the
+communication callbacks, does not change outgoing commands, and returns each
+incoming firmware line **unchanged**.
+
+Observatory reads `GET /api/plugin/neptune_terminal?limit=250` using its
+existing OctoPrint API key and MONITOR permission. If an older OctoPrint image
+lacks this plugin, it falls back to the existing bounded, authenticated
+`serial.log` download; an empty fallback is marked **unavailable** rather
+than misleadingly claiming a synchronized terminal. The root deployment no
+longer forces serial.log on (a possible performance cost); an existing user's
+serial.log setting is preserved. Printer communication before the live plugin
+started cannot be reconstructed from its memory.
+
+The dashboard remains authenticated via
+`GET /api/printer/console?limit=200`, with a maximum of 500 events.
+Neither backend opens a second printer TCP connection, sends M27, submits
+G-code, or provides an arbitrary API client.
 
 The dashboard refreshes visible communications at most once per five seconds,
 provides Send/Recv filters, pause/resume of the view, and copy/download of

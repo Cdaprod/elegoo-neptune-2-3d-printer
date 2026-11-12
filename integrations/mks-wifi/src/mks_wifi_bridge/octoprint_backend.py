@@ -123,7 +123,73 @@ class OctoPrintBackend:
             raise OctoPrintError("OctoPrint serial log is unreachable or timed out") from None
 
     async def serial_console(self, limit: int = 200) -> dict[str, Any]:
-        return await asyncio.to_thread(self._read_serial_log_sync, limit)
+        """Prefer live OctoPrint hooks over optional, potentially empty serial.log."""
+        if isinstance(limit, bool) or not 1 <= limit <= 500:
+            raise ValueError("Terminal history limit must be between 1 and 500")
+        try:
+            response = await asyncio.to_thread(
+                self._get_sync, f"/api/plugin/neptune_terminal?limit={limit}"
+            )
+        except OctoPrintError as exc:
+            # Old image without the plugin: retain read-only file compatibility.
+            # Do not hide plugin permission/auth errors behind a misleading 0-line log.
+            if "HTTP 404" not in str(exc):
+                raise
+            fallback = await asyncio.to_thread(self._read_serial_log_sync, limit)
+            if not fallback["events"]:
+                return {
+                    **fallback,
+                    "status": "unavailable",
+                    "note": (
+                        "Live terminal bridge not installed yet and OctoPrint "
+                        "serial.log has no Send/Recv messages. Deploy the updated "
+                        "OctoPrint image after the SD print finishes."
+                    ),
+                }
+            return fallback
+
+        events = response.get("events")
+        if (
+            response.get("status") != "available"
+            or response.get("source") != "octoprint_live_terminal_hook"
+            or not isinstance(events, list)
+            or len(events) > 500
+        ):
+            raise OctoPrintError("Neptune live terminal plugin returned an invalid response")
+        validated = []
+        for item in events[-limit:]:
+            if not isinstance(item, dict):
+                raise OctoPrintError("Neptune live terminal plugin returned an invalid event")
+            direction = item.get("direction")
+            message = item.get("text")
+            observed_at = item.get("observed_at")
+            if (
+                direction not in {"send", "recv"}
+                or not isinstance(message, str)
+                or len(message) > 610
+                or not message.startswith("Send: " if direction == "send" else "Recv: ")
+                or not isinstance(observed_at, str)
+                or len(observed_at) > 64
+            ):
+                raise OctoPrintError("Neptune live terminal plugin returned an invalid event")
+            validated.append(
+                {
+                    "direction": direction,
+                    "text": message,
+                    "observed_at": observed_at,
+                    "source": "octoprint_live_terminal_hook",
+                }
+            )
+        return {
+            "status": "available",
+            "source": "octoprint_live_terminal_hook",
+            "events": validated,
+            "limit": limit,
+            "note": (
+                "Real OctoPrint printer communications captured since the "
+                "Neptune live terminal plugin loaded. No G-code is sent."
+            ),
+        }
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         # Endpoints are fixed internal literals, never caller-controlled URLs.

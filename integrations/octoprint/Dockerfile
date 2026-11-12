@@ -24,5 +24,8 @@ RUN set -eux; \
 COPY 90-install-octoprint-plugins /etc/cont-init.d/90-install-octoprint-plugins
 RUN chmod 755 /etc/cont-init.d/90-install-octoprint-plugins
 
+# Image-bundled source copied into persistent OctoPrint plugin directory at startup.
+COPY neptune_terminal.py /opt/neptune-plugins/neptune_terminal.py
+
 COPY 91-configure-mks-remote /etc/cont-init.d/91-configure-mks-remote
 RUN chmod 755 /etc/cont-init.d/91-configure-mks-remote
