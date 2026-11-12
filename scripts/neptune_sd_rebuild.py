@@ -222,7 +222,9 @@ def ignored(relative: Path) -> bool:
     )
 
 
-def inventory(root: Path) -> dict[str, dict[str, Any]]:
+def inventory(
+    root: Path, *, include_metadata: bool = False
+) -> dict[str, dict[str, Any]]:
     found: dict[str, dict[str, Any]] = {}
     for directory, dirs, names in os.walk(root, followlinks=False):
         base = Path(directory)
@@ -235,12 +237,12 @@ def inventory(root: Path) -> dict[str, dict[str, Any]]:
         dirs[:] = sorted(
             name
             for name in dirs
-            if not ignored((base / name).relative_to(root))
+            if include_metadata or not ignored((base / name).relative_to(root))
         )
         for name in sorted(names):
             path = base / name
             rel = path.relative_to(root)
-            if ignored(rel):
+            if not include_metadata and ignored(rel):
                 continue
             if path.is_symlink() or not path.is_file():
                 raise RebuildError(
@@ -365,6 +367,11 @@ def verified_backup(
     return (
         original.is_dir()
         and inventory(original) == manifest["source_files"]
+        and (
+            "backup_all_files" not in manifest
+            or inventory(original, include_metadata=True)
+            == manifest["backup_all_files"]
+        )
     )
 
 
@@ -407,6 +414,7 @@ def perform_backup(
     base: Path,
 ) -> tuple[Path, dict[str, Any]]:
     source_files = inventory(mount)
+    all_source_files = inventory(mount, include_metadata=True)
     if not source_files:
         raise RebuildError(
             "No user files on card and no recovery backup found; "
@@ -435,7 +443,9 @@ def perform_backup(
         )
         if (
             inventory(mount) != source_files
-            or inventory(folder / "original") != source_files
+            or inventory(mount, include_metadata=True) != all_source_files
+            or inventory(folder / "original", include_metadata=True)
+            != all_source_files
         ):
             raise RebuildError(
                 "Backup verification failed or source changed; "
@@ -451,6 +461,7 @@ def perform_backup(
             "fingerprint": fingerprint(info),
             "original_label": fat_label(label),
             "source_files": source_files,
+            "backup_all_files": all_source_files,
             "name_map": plan,
             "note": (
                 "Original files retained. Restore flattens "
