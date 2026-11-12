@@ -82,9 +82,7 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         # Never attribute host metadata to an MKS print, even when /api/job
         # fails or /api/printer reports an ambiguous state.
         sd_active = external_selected and external.get("active") is True
-        candidate_progress = (
-            _valid_percent(external.get("progress_percent")) if sd_active else None
-        )
+        candidate_progress = _valid_percent(external.get("progress_percent")) if sd_active else None
         filename = {
             "status": "available" if sd_active and external.get("filename") else "unavailable",
             "value": external.get("filename") if sd_active else None,
