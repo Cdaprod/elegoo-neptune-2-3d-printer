@@ -35,6 +35,8 @@ jobs:
         run: uv sync --locked --extra dev --extra web --no-editable
       - name: Run Python tests
         run: uv run --no-sync pytest -q
+      - name: Validate flag-free SD rebuild and failure recovery
+        run: python ../../scripts/test_neptune_sd_rebuild.py -q
       - name: Lint and formatting
         run: |
           uv run --no-sync ruff check src tests
