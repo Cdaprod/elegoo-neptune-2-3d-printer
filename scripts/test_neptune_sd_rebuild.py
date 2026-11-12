@@ -84,6 +84,7 @@ class TestNeptuneSdRebuild(unittest.TestCase):
         (self.card.source / "Very long enclosure.gcode").write_bytes(b"G1 X5\n")
         (self.card.source / "Very long enclosure.gco").write_bytes(b"G1 X6\n")
         (self.card.source / "config.txt").write_bytes(b"config\n")
+        (self.card.source / ".DS_Store").write_bytes(b"macOS metadata")
         (self.card.source / "models").mkdir()
         (self.card.source / "models" / "another.gcode").write_bytes(b"G1 Y3\n")
 
@@ -119,7 +120,23 @@ class TestNeptuneSdRebuild(unittest.TestCase):
             self.assertLessEqual(len(Path(name).stem), 8)
             self.assertTrue(name.endswith(".GCO"))
         self.assertEqual(sd.inventory(backup / "original"), manifest["source_files"])
+        self.assertIn(".DS_Store", manifest["backup_all_files"])
+        self.assertEqual(
+            sd.inventory(backup / "original", include_metadata=True),
+            manifest["backup_all_files"],
+        )
+        self.assertNotIn(".DS_Store", sd.inventory(self.card.destination))
         self.assertEqual(sd.inventory(self.card.destination), sd.expected_files(manifest))
+
+    def test_backup_metadata_hash_mismatch_is_detected(self):
+        self.card.erase_failed = True
+        with self.assertRaises(sd.RebuildError):
+            self.card.rebuild()
+        backup = self.pending()
+        manifest = sd.load_manifest(backup)
+        self.assertTrue(sd.verified_backup(backup, manifest))
+        (backup / "original" / ".DS_Store").write_bytes(b"tampered")
+        self.assertFalse(sd.verified_backup(backup, manifest))
 
     def test_failed_erase_keeps_verified_backup_and_retries_without_recopied_files(self):
         self.card.erase_failed = True
