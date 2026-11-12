@@ -69,9 +69,11 @@ def is_sd_card(info: dict[str, Any]) -> bool:
     size = info.get("TotalSize") or info.get("Size")
     return (
         info.get("WholeDisk") is True
+        and info.get("Removable") is True
         and info.get("RemovableMedia") is True
+        and info.get("OSInternalMedia") is False
         and info.get("BusProtocol") == "Secure Digital"
-        and info.get("VirtualOrPhysical") != "Virtual"
+        and info.get("VirtualOrPhysical") == "Physical"
         and isinstance(size, int)
         and not isinstance(size, bool)
         and MIN_SIZE <= size <= MAX_SIZE
