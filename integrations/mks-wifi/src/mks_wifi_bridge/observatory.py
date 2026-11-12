@@ -41,9 +41,9 @@ from .gcode_thumbnail import extract_gcode_thumbnail
 from .jobs import print_job_summary
 from .local_gcode_index import LocalGcodeIndexer
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
+from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
-from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
 from .octoprint_backend import OctoPrintBackend, OctoPrintError
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
 from .workflows import GuidedWorkflowManager, WorkflowError
@@ -822,7 +822,9 @@ def create_app(
         result = dict(snapshot)
         reported = dict(result.get("telemetry") or {})
         external = reported.get("external_sd") or {}
-        if external.get("status") == "available":
+        # Do not let a conflicting MKS idle snapshot terminate a host-owned print.
+        host_active = (reported.get("print_active") or {}).get("value")
+        if external.get("status") == "available" and host_active is not True:
             reported["printer_state"] = {
                 "status": "available", "value": external.get("state"),
                 "source": "mks_wifi_http",
