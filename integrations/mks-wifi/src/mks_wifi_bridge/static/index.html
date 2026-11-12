@@ -173,7 +173,9 @@
     .console-output { min-height: 100px; max-height: 230px; overflow: auto; padding: 12px; color: #b8d1e9; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
     .console-form { display: flex; gap: 7px; border-top: 1px solid #1c3044; padding: 9px; }
     .printer-log { border-bottom: 1px solid #2c435a; }
-    .printer-log-status { color: #80b8d8; }
+    .printer-log .console-head { flex-wrap: wrap; gap: 5px 12px; align-items: baseline; }
+    .printer-log .console-head strong { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    .printer-log-status { color: #80b8d8; flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
     .printer-log-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px; }
     .printer-log-toolbar label { font-size: 11px; color: #9eb2c9; }
     .printer-log-toolbar select { background: #0b1623; color: #d5e9ff; padding: 7px; border: 1px solid #2c435a; border-radius: 6px; }
@@ -743,16 +745,19 @@
       function renderPrinterTerminal() {
         const result = state.terminal;
         const text = result?.status === "available"
-          ? (filteredTerminalLines() || "No Send/Recv lines recorded in the available log.")
-          : (result?.note || "Printer communications unavailable; OctoPrint serial logging may not be active.");
+          ? (filteredTerminalLines() || result.note || "No printer communication observed yet.")
+          : (result?.note || "Printer communications unavailable; check the live OctoPrint bridge.");
         for (const panel of terminalPanels()) {
           const output = panel.querySelector(".printer-log-output");
           const pinned = output.scrollTop + output.clientHeight >= output.scrollHeight - 15;
           output.textContent = text;
           if (pinned) output.scrollTop = output.scrollHeight;
           const status = panel.querySelector(".printer-log-status");
+          const label = result?.source === "octoprint_live_terminal_hook"
+            ? "OctoPrint live" : "OctoPrint serial.log fallback";
           status.textContent = state.terminalPaused ? "Paused · view frozen"
-            : (result?.status === "available" ? `OctoPrint serial.log · ${result.events.length} lines` : "Unavailable · no synthetic entries");
+            : (result?.status === "available" ? `${label} · ${result.events.length} lines`
+              : "Unavailable · no synthetic entries");
           panel.querySelector("[data-log-filter]").value = state.terminalFilter;
           panel.querySelector("[data-log-pause]").textContent = state.terminalPaused ? "Resume" : "Pause";
         }
