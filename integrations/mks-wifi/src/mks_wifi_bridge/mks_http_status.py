@@ -9,7 +9,7 @@ import math
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 class MksHttpStatusError(RuntimeError):
@@ -90,7 +90,7 @@ class MksHttpStatusReader:
         literal = f"[{host}]" if address.version == 6 else host
         self.base_url = f"http://{literal}:{port}"
         self.timeout = timeout
-        self._opener = build_opener(_NoRedirect())
+        self._opener = build_opener(ProxyHandler({}), _NoRedirect())
 
     def _get_sync(self, path: str) -> dict[str, Any]:
         if path not in {"/api/printer", "/api/job"}:
@@ -120,5 +120,12 @@ class MksHttpStatusReader:
         if initial["state"] not in {"printing", "paused"}:
             # Makerbase firmware does not send a response to /api/job while idle.
             return initial
-        job = await asyncio.to_thread(self._get_sync, "/api/job")
+        try:
+            job = await asyncio.to_thread(self._get_sync, "/api/job")
+        except MksHttpStatusError as exc:
+            # The printer state is independently reported by /api/printer.
+            return {
+                **initial, "error": str(exc),
+                "confidence": "firmware_cached_state_job_details_unavailable",
+            }
         return normalize_mks_http_status(printer, job)
