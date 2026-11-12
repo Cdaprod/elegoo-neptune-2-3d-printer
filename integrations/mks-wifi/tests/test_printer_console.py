@@ -106,6 +106,7 @@ def test_console_requires_auth_and_returns_actual_octoprint_events(tmp_path: Any
         assert page.count('class="printer-log" data-printer-log') == 2
         assert "/api/printer/console?limit=250" in page
 
+
 class RealTimeStub(OctoPrintBackend):
     """OctoPrint's live buffer has lines even when serial.log is empty."""
 
@@ -194,9 +195,7 @@ def test_bundled_live_plugin_only_reads_messages_without_modification() -> None:
     from pathlib import Path
     from unittest.mock import patch
 
-    path = (
-        Path(__file__).parents[2] / "octoprint" / "neptune_terminal.py"
-    )
+    path = Path(__file__).parents[2] / "octoprint" / "neptune_terminal.py"
     assert path.is_file()
     plugin_module = types.ModuleType("octoprint.plugin")
     plugin_module.SimpleApiPlugin = type("SimpleApiPlugin", (), {})
