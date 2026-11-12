@@ -82,13 +82,38 @@ request. It does not download file contents or modify the card. For simulation
 or live matching, select the corresponding OrcaSlicer export from the current
 device. OrcaSlicer profile files and printer settings are not modified.
 
-## Read-only console
+## Printer communications console
 
-The Home preview and Console page provide a fixed query allowlist for cached
-status, temperature, motion, firmware, diagnostics, health, and command audit
-data. This is a safe query prompt, not a shell, code REPL, arbitrary API client,
-or G-code console. It cannot issue M114, change settings, or control the
-printer.
+The Home preview and dedicated Console page now display actual `Send:` and
+`Recv:` messages captured by **OctoPrint's own serial.log**. This is the
+same class of printer-communication evidence as a slicer device console,
+but cannot be promised to contain identical events from a *different* client
+or an independently connected MKS WiFi interface. OctoPrint must have
+observed the message to display it. Timestamps and directions come from
+the original log entries, not synthetic G-code polling.
+
+The root deployment enables OctoPrint's built-in rotating serial logging
+through its existing idempotent startup configuration. Observatory reads
+the **single fixed authenticated OctoPrint log download endpoint** using its
+existing OctoPrint API key. It does not open another printer TCP connection,
+send M27, submit G-code, or provide a generic arbitrary log downloader.
+The read-only endpoint is `GET /api/printer/console?limit=200`, with a
+maximum of 500 events and a 2.2 MB input bound.
+
+The dashboard refreshes visible communications at most once per five seconds,
+provides Send/Recv filters, pause/resume of the view, and copy/download of
+the visible lines. Both Console panels render the same log. When OctoPrint
+has not enabled logging, its API key lacks permission to download logs,
+the printer isn't connected, or the file isn't present, the UI reports
+**unavailable** instead of synthesizing missing messages. Raw serial
+logging can increase I/O and may affect printing performance; OctoPrint
+rotates this log and monitoring should be reviewed during a long print.
+
+The Home preview and Console page also retain their existing fixed
+diagnostic query allowlist for cached status, temperature, motion, firmware,
+diagnostics, health, and command audit data. Those queries are separate from
+printer communications; the query prompt remains **read-only** and cannot
+issue M114, change settings, run code, or control the printer.
 
 ## Validation boundaries
 

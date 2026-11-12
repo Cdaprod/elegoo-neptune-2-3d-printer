@@ -1125,6 +1125,33 @@ def create_app(
     async def motion() -> dict[str, Any]:
         return dashboard_snapshot()["motion"]
 
+    @app.get("/api/printer/console", dependencies=[Depends(require_auth)])
+    async def printer_console(limit: int = 200) -> dict[str, Any]:
+        """Read actual OctoPrint Send/Recv history; never dispatch G-code."""
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="Limit must be from 1 to 500.")
+        if not octoprint_mode or printer.backend is None:
+            return {
+                "status": "unavailable",
+                "source": "no_serial_log_in_direct_mks_mode",
+                "events": [],
+                "limit": limit,
+                "note": (
+                    "No shared OctoPrint terminal history exists in direct MKS mode. "
+                    "A new printer connection was not opened."
+                ),
+            }
+        try:
+            return await printer.backend.serial_console(limit)
+        except OctoPrintError as exc:
+            return {
+                "status": "unavailable",
+                "source": "octoprint_serial_log",
+                "events": [],
+                "limit": limit,
+                "note": str(exc),
+            }
+
     @app.get("/api/print/history", dependencies=[Depends(require_auth)])
     async def print_history(limit: int = 200) -> dict[str, Any]:
         if not 1 <= limit <= 500:

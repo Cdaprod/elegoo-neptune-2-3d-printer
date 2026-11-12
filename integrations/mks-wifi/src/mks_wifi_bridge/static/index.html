@@ -172,6 +172,15 @@
     .console-head { display: flex; justify-content: space-between; padding: 10px 13px; border-bottom: 1px solid #1c3044; color: #9eb2c9; font-size: 10px; }
     .console-output { min-height: 100px; max-height: 230px; overflow: auto; padding: 12px; color: #b8d1e9; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
     .console-form { display: flex; gap: 7px; border-top: 1px solid #1c3044; padding: 9px; }
+    .printer-log { border-bottom: 1px solid #2c435a; }
+    .printer-log-status { color: #80b8d8; }
+    .printer-log-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px; }
+    .printer-log-toolbar label { font-size: 11px; color: #9eb2c9; }
+    .printer-log-toolbar select { background: #0b1623; color: #d5e9ff; padding: 7px; border: 1px solid #2c435a; border-radius: 6px; }
+    .printer-log-toolbar .btn { min-height: 30px; padding: 6px 10px; font-size: 11px; }
+    .printer-log-output { height: 190px; overflow-y: auto; overflow-x: hidden; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; color: #c1ddf1; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #view-console .printer-log-output { height: min(46vh, 420px); }
+
     .console-form input { flex: 1; min-width: 0; border: 1px solid #2c435a; border-radius: 8px; background: #0b1623; color: var(--text); padding: 9px; font: 11px ui-monospace, monospace; }
     .console-form .btn { min-height: 36px; padding: 7px 10px; }
     .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; }
@@ -522,7 +531,16 @@
           <article class="card home-panel"><div class="home-panel-head"><h2>Motion Telemetry</h2><button class="home-panel-link" data-open-view="motion">Open Motion ↗</button></div><div id="home-motion-values" class="home-motion-values"><span>X <strong>—</strong></span><span>Y <strong>—</strong></span><span>Z <strong>—</strong></span><span>E <strong>—</strong></span></div><div class="home-motion-chart"><canvas id="chart-home-motion" aria-label="Firmware-reported or planned coordinate history; sources are labeled separately"></canvas><div class="chart-empty visible" id="empty-home-motion">Position telemetry unavailable; planned coordinates appear when a G-code path is available.</div></div><div class="note" id="home-motion-note">M114 coordinates are unavailable from the current printer response.</div><div class="axis-feedrate-legend"><span><i></i>X</span><span class="fy"><i></i>Y</span><span class="fz"><i></i>Z</span><span class="fe"><i></i>E</span></div><div class="home-feedrate-chart"><canvas id="chart-home-feedrate" aria-label="Shared axis-specific planned feedrate over time; not measured motor speed"></canvas><div class="chart-empty visible" id="empty-home-feedrate">Waiting for motion timeline</div></div><div class="note">Feedrate is planned or estimated from G-code and acknowledged dashboard moves; motor speed is not reported by this firmware.</div><div class="reference-events" id="home-motion-events" aria-live="polite"></div></article>
           <article class="card home-panel"><div class="home-panel-head"><h2>Digital Twin</h2><button class="home-panel-link" data-open-view="digital-twin">Open Twin ↗</button></div><div class="home-twin-canvas" id="home-twin"><div class="chart-empty visible">Loading local 3D preview…</div></div><div class="twin-status-row"><span class="twin-status-chip" id="home-twin-state">Printer · waiting</span><span class="twin-status-chip" id="home-twin-nozzle">Nozzle · —</span><span class="twin-status-chip" id="home-twin-bed">Bed · —</span><span class="twin-status-chip" id="home-twin-position">Toolhead · illustrative</span><span class="twin-status-chip" id="home-twin-progress">Progress unavailable</span></div><div class="note">Schematic Neptune 2 kinematics · operator-observed references are distinguished from measured position</div><div class="note" id="home-twin-action">Last machine action · none recorded</div></article>
         </div>
-        <article class="card home-panel"><div class="home-panel-head"><h2>Observatory Console · read only</h2><button class="home-panel-link" data-open-view="console">Full console ↗</button></div><div class="console-panel" data-console><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Neptune Observatory read-only console. Type help to list supported queries. Arbitrary code and G-code are not accepted.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div></article>
+        <article class="card home-panel"><div class="home-panel-head"><h2>Observatory Console · read only</h2><button class="home-panel-link" data-open-view="console">Full console ↗</button></div><div class="console-panel" data-console><div class="printer-log" data-printer-log>
+              <div class="console-head"><strong>PRINTER COMMUNICATIONS · Send / Recv</strong><span class="printer-log-status">Loading OctoPrint serial.log…</span></div>
+              <div class="printer-log-toolbar">
+                <label>Show <select data-log-filter aria-label="Printer log filter"><option value="all">All lines</option><option value="send">Send only</option><option value="recv">Receive only</option></select></label>
+                <button class="btn" type="button" data-log-pause>Pause</button>
+                <button class="btn" type="button" data-log-copy>Copy</button>
+                <button class="btn" type="button" data-log-download>Download</button>
+              </div>
+              <div class="printer-log-output" role="log" aria-live="off" aria-label="Read-only printer Send and Receive log">Only genuine OctoPrint serial log lines are displayed. No new commands are sent.</div>
+            </div><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Neptune Observatory read-only console. Type help to list supported queries. Arbitrary code and G-code are not accepted.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div></article>
       </section>
 
       <section class="view" id="view-history" aria-label="Print history results">
@@ -609,8 +627,17 @@
       </section>
 
       <section class="view" id="view-console" aria-label="Read-only Observatory Console">
-        <div class="view-heading"><div><h1>Observatory Console</h1><p>Run named, read-only telemetry queries against Neptune Observatory’s cached local API.</p></div><span class="tag">NO G-CODE · NO CODE EVALUATION</span></div>
-        <div class="card home-panel"><div class="console-panel" data-console><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Type help to list supported queries. This is not a shell, JavaScript REPL, Python console, or G-code terminal.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div><div class="note" style="margin-top:10px">Supported commands only read cached REST data. The `motion` query does not send M114. Use the Motion page’s separate, server-gated button for a one-shot position request.</div></div>
+        <div class="view-heading"><div><h1>Observatory Console</h1><p>Read actual OctoPrint printer communications (Send / Recv) and run safe cached diagnostic queries.</p></div><span class="tag">READ-ONLY · NO G-CODE</span></div>
+        <div class="card home-panel"><div class="console-panel" data-console><div class="printer-log" data-printer-log>
+              <div class="console-head"><strong>PRINTER COMMUNICATIONS · Send / Recv</strong><span class="printer-log-status">Loading OctoPrint serial.log…</span></div>
+              <div class="printer-log-toolbar">
+                <label>Show <select data-log-filter aria-label="Printer log filter"><option value="all">All lines</option><option value="send">Send only</option><option value="recv">Receive only</option></select></label>
+                <button class="btn" type="button" data-log-pause>Pause</button>
+                <button class="btn" type="button" data-log-copy>Copy</button>
+                <button class="btn" type="button" data-log-download>Download</button>
+              </div>
+              <div class="printer-log-output" role="log" aria-live="off" aria-label="Read-only printer Send and Receive log">Only genuine OctoPrint serial log lines are displayed. No new commands are sent.</div>
+            </div><div class="console-head"><span>SAFE QUERY PROMPT</span><span>GET only · local API</span></div><div class="console-output" role="log" aria-live="polite">Type help to list supported queries. This is not a shell, JavaScript REPL, Python console, or G-code terminal.</div><form class="console-form"><input aria-label="Read-only console query" autocomplete="off" placeholder="status | temperatures | motion | firmware | diagnostics | help"><button class="btn" type="submit">Run query</button></form></div><div class="note" style="margin-top:10px">Supported commands only read cached REST data. The `motion` query does not send M114. Use the Motion page’s separate, server-gated button for a one-shot position request.</div></div>
       </section>
 
       <section class="view" id="view-machine" aria-label="Machine control and macro library">
@@ -682,7 +709,7 @@
   <script>
     (() => {
       const $ = (id) => document.getElementById(id);
-      const state = { snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null, printHistory: null, octoprintCapabilities: null };
+      const state = { terminal: null, terminalPaused: false, terminalFilter: "all", terminalUpdated: null, snapshot: null, history: [], motion: null, selectedTime: null, diagnostics: null, sd: null, sdUpload: null, selectedSdFile: null, selectedUploadFile: null, catalog: null, pendingMacro: null, pendingCommissioning: false, pendingOriginCard: null, lastPreview: null, operationResults: {}, reopenPreviewAfterArm: false, operatorModeArmed: false, activeOperationId: null, range: 15, feedRange: 5, feedPanMs: 0, feedScrubMs: null, feedDemo: false, feedDemoData: null, feedSession: null, socket: null, retry: 1000, fallback: null, toastTimer: null, printHistory: null, octoprintCapabilities: null };
       let twinModulePromise = null;
       const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
       const commandSummary = (commands, limit = 2) => {
@@ -705,6 +732,70 @@
         if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || `Request failed (${response.status})`); }
         return response.json();
       }
+      // Same serial Send/Recv messages OctoPrint observes, not an additional
+      // printer connection or fabricated event stream.
+      const terminalPanels = () => [...document.querySelectorAll("[data-printer-log]")];
+      const filteredTerminalLines = () => {
+        const events = state.terminal?.events || [];
+        const selected = events.filter(event => state.terminalFilter === "all" || event.direction === state.terminalFilter);
+        return selected.map(event => `${event.observed_at ? event.observed_at + "  " : ""}${event.text}`).join("\n");
+      };
+      function renderPrinterTerminal() {
+        const result = state.terminal;
+        const text = result?.status === "available"
+          ? (filteredTerminalLines() || "No Send/Recv lines recorded in the available log.")
+          : (result?.note || "Printer communications unavailable; OctoPrint serial logging may not be active.");
+        for (const panel of terminalPanels()) {
+          const output = panel.querySelector(".printer-log-output");
+          const pinned = output.scrollTop + output.clientHeight >= output.scrollHeight - 15;
+          output.textContent = text;
+          if (pinned) output.scrollTop = output.scrollHeight;
+          const status = panel.querySelector(".printer-log-status");
+          status.textContent = state.terminalPaused ? "Paused · view frozen"
+            : (result?.status === "available" ? `OctoPrint serial.log · ${result.events.length} lines` : "Unavailable · no synthetic entries");
+          panel.querySelector("[data-log-filter]").value = state.terminalFilter;
+          panel.querySelector("[data-log-pause]").textContent = state.terminalPaused ? "Resume" : "Pause";
+        }
+      }
+      async function loadPrinterTerminal() {
+        if (state.terminalPaused || document.hidden || !state.snapshot) return;
+        const view = document.querySelector(".view.active")?.id;
+        if (view !== "view-console" && view !== "view-overview") return;
+        try {
+          state.terminal = await api("/api/printer/console?limit=250");
+        } catch(error) {
+          state.terminal = {status:"unavailable", note:error.message, events:[]};
+        }
+        state.terminalUpdated = new Date().toISOString();
+        renderPrinterTerminal();
+      }
+      for (const panel of terminalPanels()) {
+        panel.querySelector("[data-log-filter]").addEventListener("change", event => {
+          state.terminalFilter = event.target.value;
+          renderPrinterTerminal();
+        });
+        panel.querySelector("[data-log-pause]").addEventListener("click", () => {
+          state.terminalPaused = !state.terminalPaused;
+          renderPrinterTerminal();
+          if (!state.terminalPaused) loadPrinterTerminal();
+        });
+        panel.querySelector("[data-log-copy]").addEventListener("click", async () => {
+          const content = filteredTerminalLines();
+          if (!content) return showToast("No printer communications to copy.");
+          try { await navigator.clipboard.writeText(content); showToast("Printer log copied."); }
+          catch { showToast("Clipboard access was not granted."); }
+        });
+        panel.querySelector("[data-log-download]").addEventListener("click", () => {
+          const content = filteredTerminalLines();
+          if (!content) return showToast("No printer communications to download.");
+          const objectUrl = URL.createObjectURL(new Blob([content + "\n"], {type:"text/plain"}));
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = "neptune-printer-console-" + new Date().toISOString().replaceAll(":", "-") + ".log";
+          document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl);
+        });
+      }
+      setInterval(loadPrinterTerminal, 5000);
       const consoleRoutes = {
         status: "/api/printer/status",
         temperatures: "/api/printer/temperatures",
@@ -1853,7 +1944,7 @@
       async function bootstrap() {
         try {
           const [snapshot, temps, sd] = await Promise.all([api("/api/printer/status"),api("/api/printer/temperatures"),api("/api/printer/sdcard")]);
-          state.history=temps.history||[]; connectionView(snapshot); renderSd(sd); await refreshSdUploadStatus(); await loadDiagnostics(); await refreshGuidedWorkflow();
+          state.history=temps.history||[]; connectionView(snapshot); renderSd(sd); await refreshSdUploadStatus(); await loadDiagnostics(); await refreshGuidedWorkflow(); loadPrinterTerminal();
         } catch(e) { if(e.message!=="Authentication required") showToast(e.message); }
       }
       function connectSocket() {

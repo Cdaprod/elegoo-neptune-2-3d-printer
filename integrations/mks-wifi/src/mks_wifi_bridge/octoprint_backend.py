@@ -13,6 +13,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .printer_console import MAX_LOG_BYTES, parse_serial_log
+
 
 class OctoPrintError(RuntimeError):
     """Sanitized upstream failure; API keys and full URLs are never reported."""
@@ -80,6 +82,48 @@ class OctoPrintBackend:
             raise OctoPrintError("OctoPrint API is unreachable or timed out") from None
         except (ValueError, UnicodeError):
             raise OctoPrintError("OctoPrint returned malformed JSON") from None
+
+    def _read_serial_log_sync(self, limit: int) -> dict[str, Any]:
+        """Read OctoPrint's *fixed* authenticated log-download path; no printer writes."""
+        if isinstance(limit, bool) or not 1 <= limit <= 500:
+            raise ValueError("Terminal history limit must be between 1 and 500")
+        request = Request(
+            self.base_url + "/downloads/logs/serial.log",
+            headers={
+                "X-Api-Key": self.api_key,
+                "Accept": "text/plain",
+                # Some OctoPrint deployments support range requests.
+                "Range": f"bytes=-{MAX_LOG_BYTES}",
+            },
+            method="GET",
+        )
+        try:
+            with self._opener.open(request, timeout=self.timeout) as response:
+                if response.status not in {200, 206}:
+                    raise OctoPrintError("OctoPrint serial log download returned unexpected status")
+                content = response.read(MAX_LOG_BYTES + 1)
+            if len(content) > MAX_LOG_BYTES:
+                raise OctoPrintError("OctoPrint serial log exceeded the bounded reader")
+            return parse_serial_log(
+                content,
+                limit=limit,
+                truncated=(response.status == 206),
+            )
+        except HTTPError as exc:
+            if exc.code in {401, 403}:
+                raise OctoPrintError(
+                    "OctoPrint serial log access denied (administrator permission required)"
+                ) from None
+            if exc.code == 404:
+                raise OctoPrintError(
+                    "OctoPrint serial.log unavailable; verify serial logging is enabled"
+                ) from None
+            raise OctoPrintError(f"OctoPrint serial log returned HTTP {exc.code}") from None
+        except (OSError, URLError, TimeoutError):
+            raise OctoPrintError("OctoPrint serial log is unreachable or timed out") from None
+
+    async def serial_console(self, limit: int = 200) -> dict[str, Any]:
+        return await asyncio.to_thread(self._read_serial_log_sync, limit)
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         # Endpoints are fixed internal literals, never caller-controlled URLs.
