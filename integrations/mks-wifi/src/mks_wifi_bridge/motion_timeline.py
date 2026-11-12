@@ -967,7 +967,9 @@ class MotionTimeline:
         progress = val("progress_percent")
         state = val("printer_state") or "unknown"
         source = (
-            "OctoPrint_API_telemetry"
+            "MKS_HTTP_SD_telemetry"
+            if snapshot.get("physical_source") == "mks_wifi_http"
+            else "OctoPrint_API_telemetry"
             if (connection or {}).get("transport") == "OctoPrint API"
             else "MKS_read_only_telemetry"
         )
