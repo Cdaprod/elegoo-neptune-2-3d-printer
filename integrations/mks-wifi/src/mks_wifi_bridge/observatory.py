@@ -306,10 +306,13 @@ class PrinterService:
                             self.external_sd_status = await self.physical_status_reader.read_state()
                         except (MksHttpStatusError, OSError, TimeoutError) as exc:
                             self.external_sd_status = {
-                                "status": "unavailable", "state": "unknown",
-                                "active": None, "source": "mks_wifi_http",
+                                "status": "unavailable",
+                                "state": "unknown",
+                                "active": None,
+                                "source": "mks_wifi_http",
                                 "confidence": "unavailable",
-                                "error": str(exc), "observed_at": iso(utc_now()),
+                                "error": str(exc),
+                                "observed_at": iso(utc_now()),
                             }
                 else:
                     client = self.client_factory(self.host, port=self.port, timeout=self.timeout)
@@ -401,8 +404,11 @@ class PrinterService:
         )
         if self.backend is not None:
             self.telemetry["external_sd"] = self.external_sd_status or {
-                "status": "unavailable", "state": "unknown", "active": None,
-                "source": "mks_wifi_http", "confidence": "not_configured",
+                "status": "unavailable",
+                "state": "unknown",
+                "active": None,
+                "source": "mks_wifi_http",
+                "confidence": "not_configured",
                 "observed_at": None,
             }
         self.observed_at = utc_now()
@@ -713,7 +719,8 @@ def create_app(
         raise ValueError("NEPTUNE_PRINTER_BACKEND must be mks or octoprint")
     physical_status_reader = None
     if (
-        service is None and backend_name == "octoprint"
+        service is None
+        and backend_name == "octoprint"
         and os.getenv("NEPTUNE_MKS_HTTP_MONITOR_ENABLED", "true").lower() == "true"
         and os.getenv("OCTOPRINT_MKS_WIFI_HOST")
     ):
@@ -826,29 +833,36 @@ def create_app(
         host_active = (reported.get("print_active") or {}).get("value")
         if external.get("status") == "available" and host_active is not True:
             reported["printer_state"] = {
-                "status": "available", "value": external.get("state"),
+                "status": "available",
+                "value": external.get("state"),
                 "source": "mks_wifi_http",
             }
             reported["print_active"] = {
-                "status": "available", "value": external.get("active"),
+                "status": "available",
+                "value": external.get("active"),
                 "source": "mks_wifi_http",
             }
             reported["progress_percent"] = {
-                "status": "available" if external.get("progress_percent") is not None
+                "status": "available"
+                if external.get("progress_percent") is not None
                 else "unsupported_or_not_reported",
                 "value": external.get("progress_percent"),
-                "source_command": "M27", "source": "mks_wifi_http",
+                "source_command": "M27",
+                "source": "mks_wifi_http",
             }
             reported["current_file"] = {
-                "status": "available" if external.get("filename")
+                "status": "available"
+                if external.get("filename")
                 else "unsupported_or_not_reported",
-                "value": external.get("filename"), "source": "mks_wifi_http",
+                "value": external.get("filename"),
+                "source": "mks_wifi_http",
             }
             result["physical_source"] = "mks_wifi_http"
         elif (reported.get("print_active") or {}).get("value") is False:
             # OctoPrint Operational does not mean that a TFT SD job stopped.
             reported["printer_state"] = {
-                "status": "unsupported_or_not_reported", "value": None,
+                "status": "unsupported_or_not_reported",
+                "value": None,
             }
             reported["print_active"] = {
                 "status": "unsupported_or_not_reported", "value": None,
