@@ -20,7 +20,9 @@ spec.loader.exec_module(sd)
 CARD = {
     "WholeDisk": True,
     "DeviceIdentifier": "disk6",
+    "Removable": True,
     "RemovableMedia": True,
+    "OSInternalMedia": False,
     "BusProtocol": "Secure Digital",
     "Internal": True,  # Actual built-in macOS card reader can report this.
     "TotalSize": 30992760832,
@@ -91,10 +93,14 @@ class TestNeptuneSdRebuild(unittest.TestCase):
     def test_sd_reader_internal_true_is_allowed_but_internal_media_is_not(self):
         self.assertTrue(sd.is_sd_card(CARD))
         for altered in (
+            {"Removable": False},
             {"RemovableMedia": False},
+            {"OSInternalMedia": True},
+            {"OSInternalMedia": None},
             {"BusProtocol": "USB"},
             {"WholeDisk": False},
             {"VirtualOrPhysical": "Virtual"},
+            {"VirtualOrPhysical": None},
         ):
             self.assertFalse(sd.is_sd_card({**CARD, **altered}))
 
