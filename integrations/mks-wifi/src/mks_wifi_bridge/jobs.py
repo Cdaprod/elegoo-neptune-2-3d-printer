@@ -43,7 +43,7 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     # A partial/ambiguous MKS reply is not evidence of an idle printer.
     external_selected = (
         octoprint_mode
-        and not (active_value is True)
+        and active_value is not True
         and external_available
         and external_state in {"printing", "paused", "idle"}
     )
