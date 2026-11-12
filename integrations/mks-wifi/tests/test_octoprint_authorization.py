@@ -5,8 +5,8 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
-from urllib.error import URLError
 from unittest.mock import patch
+from urllib.error import URLError
 
 import pytest
 
