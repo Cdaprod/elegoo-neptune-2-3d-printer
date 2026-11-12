@@ -74,19 +74,19 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         filename = {
             "status": "available" if external.get("filename") else "unavailable",
             "value": external.get("filename"),
-            "source_command": "M994",
+            "source_command": "MKS_HTTP_/api/job",
         }
         progress = {
             "status": "available"
             if external.get("progress_percent") is not None
             else "unavailable",
             "value": _valid_percent(external.get("progress_percent")),
-            "source_command": "M27",
+            "source_command": "MKS_HTTP_/api/job",
         }
         elapsed = {
             "status": "available" if external.get("elapsed_seconds") is not None else "unavailable",
             "value": external.get("elapsed_seconds"),
-            "source_command": "M992",
+            "source_command": "MKS_HTTP_/api/job",
         }
     try:
         elapsed_value = float(elapsed["value"])
