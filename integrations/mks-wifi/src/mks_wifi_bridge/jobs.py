@@ -39,8 +39,15 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     external = telemetry.get("external_sd") or {}
     octoprint_mode = connection.get("transport") == "OctoPrint API"
     external_available = external.get("status") == "available"
+    external_state = external.get("state")
+    # A partial/ambiguous MKS reply is not evidence of an idle printer.
+    external_selected = (
+        octoprint_mode
+        and active_value is not True
+        and external_available
+        and external_state in {"printing", "paused", "idle"}
+    )
     host_running = active_value is True
-    external_selected = external_available and not host_running
     if not fresh:
         status = "stale" if snapshot.get("observed_at") else "unavailable"
         active = None
@@ -70,23 +77,28 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     if progress["value"] is None:
         progress["status"] = "unavailable"
     elapsed = _reported_value(telemetry, "elapsed_seconds", fresh=fresh)
-    if fresh and octoprint_mode and external_selected:
+    if fresh and octoprint_mode and not host_running:
+        # OctoPrint's idle job fields are not physical SD-job metadata.
+        # Never attribute host metadata to an MKS print, even when /api/job
+        # fails or /api/printer reports an ambiguous state.
+        sd_active = external_selected and external.get("active") is True
+        candidate_progress = _valid_percent(external.get("progress_percent")) if sd_active else None
         filename = {
-            "status": "available" if external.get("filename") else "unavailable",
-            "value": external.get("filename"),
-            "source_command": "MKS_HTTP_/api/job",
+            "status": "available" if sd_active and external.get("filename") else "unavailable",
+            "value": external.get("filename") if sd_active else None,
+            "source_command": "MKS_HTTP_/api/job" if sd_active else None,
         }
         progress = {
-            "status": "available"
-            if external.get("progress_percent") is not None
-            else "unavailable",
-            "value": _valid_percent(external.get("progress_percent")),
-            "source_command": "MKS_HTTP_/api/job",
+            "status": "available" if candidate_progress is not None else "unavailable",
+            "value": candidate_progress,
+            "source_command": "MKS_HTTP_/api/job" if sd_active else None,
         }
         elapsed = {
-            "status": "available" if external.get("elapsed_seconds") is not None else "unavailable",
-            "value": external.get("elapsed_seconds"),
-            "source_command": "MKS_HTTP_/api/job",
+            "status": "available"
+            if sd_active and external.get("elapsed_seconds") is not None
+            else "unavailable",
+            "value": external.get("elapsed_seconds") if sd_active else None,
+            "source_command": "MKS_HTTP_/api/job" if sd_active else None,
         }
     try:
         elapsed_value = float(elapsed["value"])

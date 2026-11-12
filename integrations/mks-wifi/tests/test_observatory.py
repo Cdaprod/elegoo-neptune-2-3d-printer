@@ -296,7 +296,8 @@ def test_one_shot_motion_timeout_consumes_gate_without_retry() -> None:
         calls += 1
         return {"status": "unavailable", "axes": {}, "raw_lines": [], "error": "timeout"}
 
-    service = make_service(motion_query_enabled=True, motion_query=position_query)
+    # The one-shot gate must not race the fast 30 ms background poller.
+    service = make_service(interval=30, motion_query_enabled=True, motion_query=position_query)
     with TestClient(create_app(service)) as client:
         wait_for_success(service)
         response = client.post("/api/printer/motion/query", json={"confirmation": "M114"})

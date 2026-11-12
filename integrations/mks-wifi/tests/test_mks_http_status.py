@@ -158,3 +158,67 @@ def test_recorded_sd_sessions_end_without_claiming_physical_success(tmp_path) ->
     history = db.list_print_history()
     assert history["sessions"][0]["source"] == "MKS_HTTP_SD_telemetry"
     assert history["sessions"][0]["outcome"] == "ended_unverified"
+
+
+@pytest.mark.parametrize(
+    ("physical", "expected_state"),
+    [
+        ({"status": "unknown", "state": "unknown"}, "unknown"),
+        ({"status": "unavailable", "state": "unknown"}, "unknown"),
+        ({"status": "available", "state": "idle", "active": False}, "idle"),
+    ],
+)
+def test_octoprint_idle_metadata_never_leaks_into_physical_sd(
+    physical: dict, expected_state: str
+) -> None:
+    snapshot = host_snapshot(physical)
+    snapshot["telemetry"].update(
+        {
+            "current_file": {"status": "available", "value": "stale-host.gcode"},
+            "progress_percent": {"status": "available", "value": 97},
+            "elapsed_seconds": {"status": "available", "value": 3600},
+        }
+    )
+    summary = print_job_summary(snapshot)
+    assert summary["status"] == expected_state
+    assert summary["filename"]["status"] == "unavailable"
+    assert summary["filename"]["value"] is None
+    assert summary["progress_percent"]["value"] is None
+    assert summary["elapsed_seconds"]["value"] is None
+
+
+def test_active_mks_sd_retains_only_mks_job_metadata_when_host_idle() -> None:
+    snapshot = host_snapshot(mks_state(8))
+    snapshot["telemetry"].update(
+        {
+            "current_file": {"status": "available", "value": "wrong-host.gcode"},
+            "progress_percent": {"status": "available", "value": 78},
+            "elapsed_seconds": {"status": "available", "value": 900},
+        }
+    )
+    summary = print_job_summary(snapshot)
+    assert summary["status"] == "printing"
+    assert summary["filename"]["value"] == "enclosure.gcode"
+    assert summary["progress_percent"]["value"] == 8
+    assert summary["elapsed_seconds"]["value"] == 123
+
+
+def test_active_mks_sd_job_endpoint_failure_hides_host_fields() -> None:
+    physical = {
+        "status": "available",
+        "state": "printing",
+        "active": True,
+        "source": "mks_wifi_http",
+        "error": "MKS status endpoint unreachable or timed out",
+    }
+    snapshot = host_snapshot(physical)
+    snapshot["telemetry"].update(
+        {
+            "current_file": {"status": "available", "value": "host-stale.gcode"},
+            "progress_percent": {"status": "available", "value": 51},
+        }
+    )
+    summary = print_job_summary(snapshot)
+    assert summary["status"] == "printing"
+    assert summary["filename"]["status"] == "unavailable"
+    assert summary["progress_percent"]["status"] == "unavailable"
