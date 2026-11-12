@@ -65,7 +65,8 @@ def normalize_mks_http_status(printer: dict[str, Any], job: dict[str, Any]) -> d
         "active": active if state != "unknown" else None,
         "progress_percent": (
             round(completion_fraction * 100, 4)
-            if active and completion_fraction is not None else None
+            if active and completion_fraction is not None
+            else None
         ),
         "filename": filename if active else None,
         "elapsed_seconds": int(elapsed) if elapsed is not None and active else None,
@@ -125,7 +126,8 @@ class MksHttpStatusReader:
         except MksHttpStatusError as exc:
             # The printer state is independently reported by /api/printer.
             return {
-                **initial, "error": str(exc),
+                **initial,
+                "error": str(exc),
                 "confidence": "firmware_cached_state_job_details_unavailable",
             }
         return normalize_mks_http_status(printer, job)
