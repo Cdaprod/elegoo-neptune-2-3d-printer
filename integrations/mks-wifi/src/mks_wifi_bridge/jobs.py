@@ -39,10 +39,12 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     external = telemetry.get("external_sd") or {}
     octoprint_mode = connection.get("transport") == "OctoPrint API"
     external_available = external.get("status") == "available"
+    host_running = active_value is True
+    external_selected = external_available and not host_running
     if not fresh:
         status = "stale" if snapshot.get("observed_at") else "unavailable"
         active = None
-    elif octoprint_mode and external_available:
+    elif octoprint_mode and external_selected:
         status = str(external.get("state") or "unknown")
         active = external.get("active")
     elif octoprint_mode and active_value is False:
@@ -68,7 +70,7 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     if progress["value"] is None:
         progress["status"] = "unavailable"
     elapsed = _reported_value(telemetry, "elapsed_seconds", fresh=fresh)
-    if fresh and octoprint_mode and external_available:
+    if fresh and octoprint_mode and external_selected:
         filename = {
             "status": "available" if external.get("filename") else "unavailable",
             "value": external.get("filename"), "source_command": "M994",
@@ -103,7 +105,7 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         "active": active,
         "source": (
             "MKS WiFi HTTP · printer-reported SD activity"
-            if fresh and octoprint_mode and external_available
+            if fresh and octoprint_mode and external_selected
             else "OctoPrint API telemetry"
             if fresh and octoprint_mode
             else "MKS read-only telemetry"
@@ -113,7 +115,12 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         "observed_at": snapshot.get("observed_at"),
         "host_job_state": host_state if octoprint_mode else None,
         "physical_activity": {
-            "status": external.get("status", "unavailable") if octoprint_mode else "available",
+            "status": (
+                "conflict" if octoprint_mode and host_running and external_available
+                and external.get("active") is False
+                else external.get("status", "unavailable")
+                if octoprint_mode else "available"
+            ),
             "state": external.get("state", "unknown") if octoprint_mode else status,
             "source": external.get("source", "mks_wifi_http") if octoprint_mode
             else "mks_read_only_telemetry",
