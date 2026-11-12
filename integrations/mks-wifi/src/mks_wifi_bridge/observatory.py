@@ -40,8 +40,8 @@ from .executor import (
 from .gcode_thumbnail import extract_gcode_thumbnail
 from .jobs import print_job_summary
 from .local_gcode_index import LocalGcodeIndexer
-from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
+from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
 from .octoprint_backend import OctoPrintBackend, OctoPrintError
@@ -943,7 +943,9 @@ def create_app(
 
     async def publish_dashboard_snapshot(snapshot: dict[str, Any]) -> None:
         try:
-            motion_timeline.record_snapshot(recording_snapshot(snapshot), command_executor.history())
+            motion_timeline.record_snapshot(
+                recording_snapshot(snapshot), command_executor.history()
+            )
         except Exception:
             logger.exception("Could not persist this telemetry timeline sample")
         await hub.publish(dashboard_snapshot(snapshot))
