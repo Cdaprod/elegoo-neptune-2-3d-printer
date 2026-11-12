@@ -56,11 +56,17 @@ def normalize_mks_http_status(printer: dict[str, Any], job: dict[str, Any]) -> d
     filename = filename.strip()[:240] if isinstance(filename, str) and filename.strip() else None
     active = state in {"printing", "paused"}
     elapsed = _number(progress.get("printTime"), 315360000)
+    # Makerbase HTTP /api/job returns print_rate / 100, unlike raw M27
+    # which returns print_rate as an integer percent.
+    completion_fraction = _number(progress.get("completion"), 1)
     return {
         "status": "available" if state != "unknown" else "unknown",
         "state": state,
         "active": active if state != "unknown" else None,
-        "progress_percent": _number(progress.get("completion"), 100) if active else None,
+        "progress_percent": (
+            round(completion_fraction * 100, 4)
+            if active and completion_fraction is not None else None
+        ),
         "filename": filename if active else None,
         "elapsed_seconds": int(elapsed) if elapsed is not None and active else None,
         "source": "mks_wifi_http",
@@ -110,5 +116,9 @@ class MksHttpStatusReader:
 
     async def read_state(self) -> dict[str, Any]:
         printer = await asyncio.to_thread(self._get_sync, "/api/printer")
+        initial = normalize_mks_http_status(printer, {})
+        if initial["state"] not in {"printing", "paused"}:
+            # Makerbase firmware does not send a response to /api/job while idle.
+            return initial
         job = await asyncio.to_thread(self._get_sync, "/api/job")
         return normalize_mks_http_status(printer, job)
