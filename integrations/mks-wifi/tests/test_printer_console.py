@@ -76,12 +76,15 @@ class ConsoleBackend(OctoPrintBackend):
 def test_console_requires_auth_and_returns_actual_octoprint_events(tmp_path: Any) -> None:
     backend = ConsoleBackend()
     service = PrinterService(
-        host=backend.host, port=backend.port,
-        backend=backend, interval=30,
+        host=backend.host,
+        port=backend.port,
+        backend=backend,
+        interval=30,
         client_factory=lambda *args, **kwargs: pytest.fail("MKS socket must not open"),
     )
     app = create_app(
-        service, bind_host="0.0.0.0",
+        service,
+        bind_host="0.0.0.0",
         auth_token="test-console-secret",
         timeline=MotionTimeline(tmp_path / "console.sqlite3"),
     )
