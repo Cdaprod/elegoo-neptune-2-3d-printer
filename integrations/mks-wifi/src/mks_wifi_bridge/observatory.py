@@ -865,7 +865,8 @@ def create_app(
                 "value": None,
             }
             reported["print_active"] = {
-                "status": "unsupported_or_not_reported", "value": None,
+                "status": "unsupported_or_not_reported",
+                "value": None,
             }
         result["telemetry"] = reported
         return result
