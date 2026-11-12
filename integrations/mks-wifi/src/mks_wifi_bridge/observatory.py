@@ -847,7 +847,7 @@ def create_app(
                 if external.get("progress_percent") is not None
                 else "unsupported_or_not_reported",
                 "value": external.get("progress_percent"),
-                "source_command": "M27",
+                "source_command": "MKS_HTTP_/api/job",
                 "source": "mks_wifi_http",
             }
             reported["current_file"] = {
