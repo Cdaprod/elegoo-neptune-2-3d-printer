@@ -73,17 +73,18 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
     if fresh and octoprint_mode and external_selected:
         filename = {
             "status": "available" if external.get("filename") else "unavailable",
-            "value": external.get("filename"), "source_command": "M994",
+            "value": external.get("filename"),
+            "source_command": "M994",
         }
         progress = {
-            "status": "available" if external.get("progress_percent") is not None
+            "status": "available"
+            if external.get("progress_percent") is not None
             else "unavailable",
             "value": _valid_percent(external.get("progress_percent")),
             "source_command": "M27",
         }
         elapsed = {
-            "status": "available" if external.get("elapsed_seconds") is not None
-            else "unavailable",
+            "status": "available" if external.get("elapsed_seconds") is not None else "unavailable",
             "value": external.get("elapsed_seconds"),
             "source_command": "M992",
         }
@@ -116,17 +117,24 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         "host_job_state": host_state if octoprint_mode else None,
         "physical_activity": {
             "status": (
-                "conflict" if octoprint_mode and host_running and external_available
+                "conflict"
+                if octoprint_mode
+                and host_running
+                and external_available
                 and external.get("active") is False
                 else external.get("status", "unavailable")
-                if octoprint_mode else "available"
+                if octoprint_mode
+                else "available"
             ),
             "state": external.get("state", "unknown") if octoprint_mode else status,
-            "source": external.get("source", "mks_wifi_http") if octoprint_mode
+            "source": external.get("source", "mks_wifi_http")
+            if octoprint_mode
             else "mks_read_only_telemetry",
-            "observed_at": external.get("observed_at") if octoprint_mode
+            "observed_at": external.get("observed_at")
+            if octoprint_mode
             else snapshot.get("observed_at"),
-            "confidence": external.get("confidence", "not_configured") if octoprint_mode
+            "confidence": external.get("confidence", "not_configured")
+            if octoprint_mode
             else "firmware_reported",
             "error": external.get("error") if octoprint_mode else None,
         },
