@@ -1187,8 +1187,9 @@
       function renderPrintJob(snapshot) {
         const job=snapshot?.print_job||{};
         const fresh=job.status!=="stale"&&job.status!=="unavailable";
-        const origin = snapshot?.printer_backend === "octoprint" ? "OctoPrint reported" : "firmware reported";
-        const stateLabels={printing:`Printing · ${origin}`,paused:`Paused · ${origin}`,idle:"No active print",stale:"Printer status stale",unavailable:"Printer status unavailable",unknown:"Print state not reported"};
+        const origin=job.source||"printer telemetry";
+        const sdSource=job.physical_activity?.source==="mks_wifi_http"&&job.physical_activity?.status==="available";
+        const stateLabels={printing:`${sdSource?"SD printing":"Printing"} · ${origin}`,paused:`${sdSource?"SD paused":"Paused"} · ${origin}`,idle:`No active print · ${origin}`,stale:"Printer status stale",unavailable:"Printer status unavailable",unknown:"Physical print activity unknown"};
         const stateNode=$("overview-job-state");
         stateNode.textContent=stateLabels[job.status]||stateLabels.unknown;
         stateNode.dataset.state=job.status||"unknown";
@@ -1205,6 +1206,12 @@
         const details=[];
         if(elapsed.status==="available"||elapsed.status==="stale")details.push(`Elapsed ${duration(Number(elapsed.value))}${elapsed.status==="stale"?" · last report":""}`);
         details.push(fresh?(job.source||"MKS read-only telemetry"):"Last telemetry is retained for display only; it does not establish the current printer state.");
+        if(snapshot?.printer_backend==="octoprint"){
+          details.push(`OctoPrint host job: ${job.host_job_state||"unknown"}`);
+          const physical=job.physical_activity||{};
+          if(physical.status!=="available")details.push(`MKS physical activity unverified${physical.error?" · "+physical.error:""}`);
+          else details.push("MKS cached state · not motor feedback");
+        }
         $("overview-job-meta").textContent=details.join(" · ");
         const sessions=job.recent_sessions||[];
         const rows=$("overview-job-history");
@@ -1245,7 +1252,8 @@
           state.historySourceInitialized = true;
         }
         renderOctoprintControls();
-        const twinStateText = `Printer · ${status.replaceAll("_", " ")}`;
+        const reconciledState = snapshot.printer_backend==="octoprint" ? snapshot.print_job?.status : status;
+        const twinStateText = `Printer · ${(reconciledState||"unknown").replaceAll("_", " ")}${snapshot.printer_backend==="octoprint"?" · SD/host reconciled":""}`;
         const nozzleText = `Nozzle · ${fmtTemp(nozzle)}`;
         const bedText = `Bed · ${fmtTemp(bed)}`;
         for (const id of ["home-twin-state", "full-twin-state"]) if ($(id)) $(id).textContent = twinStateText;
@@ -1445,7 +1453,7 @@
         const historicalLast=state.feedDemo?state.feedDemoData?.ended_at:state.feedSession?.feedrate_history?.at(-1)?.observed_at||state.feedSession?.telemetry?.at(-1)?.observed_at;
         const end=(historicalLast?Date.parse(historicalLast):Date.now())+state.feedPanMs,start=end-state.feedRange*60000;
         const rows=(source||[]).filter((row)=>{const t=Date.parse(row.observed_at);return Number.isFinite(t)&&t>=start&&t<=end;});
-        if(!state.feedDemo&&!state.feedSession&&state.feedPanMs===0&&state.snapshot?.connection?.connected&&!state.snapshot?.stale&&state.snapshot?.telemetry?.printer_state?.value==="idle"&&state.snapshot?.telemetry?.print_active?.value===false){const points=state.snapshot?.timeline?.telemetry||[];for(const point of points){if(point.state!=="idle")continue;const time=Date.parse(point.observed_at);if(Number.isFinite(time)&&time>=start&&time<=end&&!rows.some((row)=>row.observed_at===point.observed_at))rows.push({observed_at:point.observed_at,axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}const now=Date.now();if(now>=start&&now<=end&&!rows.some((row)=>row.observed_at===state.snapshot?.observed_at))rows.push({observed_at:state.snapshot.observed_at||new Date(now).toISOString(),axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}
+        if(!state.feedDemo&&!state.feedSession&&state.feedPanMs===0&&state.snapshot?.connection?.connected&&!state.snapshot?.stale&&state.snapshot?.print_job?.status==="idle"&&state.snapshot?.print_job?.active===false){const points=state.snapshot?.timeline?.telemetry||[];for(const point of points){if(point.state!=="idle")continue;const time=Date.parse(point.observed_at);if(Number.isFinite(time)&&time>=start&&time<=end&&!rows.some((row)=>row.observed_at===point.observed_at))rows.push({observed_at:point.observed_at,axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}const now=Date.now();if(now>=start&&now<=end&&!rows.some((row)=>row.observed_at===state.snapshot?.observed_at))rows.push({observed_at:state.snapshot.observed_at||new Date(now).toISOString(),axis_feedrates_mm_min:{x:0,y:0,z:0,e:0},feedrate_mm_min:0,source:"firmware_reported_state",data_class:"firmware_reported_state_not_motor_feedback",confidence:"no_print_motion_reported"});}
         return rows.sort((a,b)=>Date.parse(a.observed_at)-Date.parse(b.observed_at));
       }
       function drawMotionFeedrate(canvasId="chart-motion-feedrate",emptyId="empty-motion-feedrate",compact=false) {
