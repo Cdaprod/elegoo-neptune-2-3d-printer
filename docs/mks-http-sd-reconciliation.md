@@ -26,6 +26,21 @@ The root `compose.yaml` includes `integrations/mks-wifi/compose.octoprint.yaml`,
 
 When the HTTP endpoint is inaccessible or has different firmware behavior, OctoPrint temperatures and jobs remain operational, and the dashboard marks MKS physical activity unavailable. Use `NEPTUNE_MKS_HTTP_MONITOR_ENABLED=false` to explicitly turn it off. No machine calibration, SD print control, or UI action is automatically initiated.
 
+## SD-job metadata provenance and partial HTTP replies
+
+An OctoPrint idle/Operational host can retain a filename or percent from its
+own last host job. Those fields are **not** evidence about a touchscreen-started
+SD print. When the MKS HTTP reader reports unknown, unavailable, or idle,
+the reconciled physical SD job deliberately hides those host-side filename,
+progress and elapsed fields. An MKS `/api/printer` active result with a failed
+`/api/job` retains the firmware-reported active/paused state but leaves
+filename, progress and elapsed unavailable instead of substituting unrelated
+OctoPrint data. An actual active OctoPrint host job continues to take precedence
+over conflicting cached MKS state.
+
+These semantics are covered by hardware-free regression fixtures. No G-code
+or machine action is sent to the printer.
+
 ## Verification gates
 
 - Hardware-free tests: fractional progress, 7→8 percentage, paused, idle, malformed replies, private-IP validation, HTTP error degradation, conflicting host job, and SQLite unverified session.
