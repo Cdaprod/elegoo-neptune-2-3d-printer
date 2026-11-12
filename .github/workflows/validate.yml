@@ -43,6 +43,9 @@ jobs:
         run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests
         run: node --test tests/*.mjs
+      - name: Test OctoPrint plugin startup (hardware-free)
+        working-directory: .
+        run: python -m unittest discover -s tests -p 'test_octoprint_startup.py' -v
       - name: Validate Compose configuration
         env:
           MKS_WIFI_HOST: printer.example.invalid
