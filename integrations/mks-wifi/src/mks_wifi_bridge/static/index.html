@@ -697,7 +697,11 @@
       function requireLogin() { const d = $("auth-dialog"); if (!d.open) d.showModal(); }
       async function api(path, options = {}) {
         const response = await fetch(path, {credentials:"same-origin", ...options, headers:{"Accept":"application/json", ...(options.headers || {})}});
-        if (response.status === 401) { requireLogin(); throw new Error("Authentication required"); }
+        if (response.status === 401) {
+          if (path === "/api/auth/session") throw new Error("Incorrect dashboard access token. Check the token and try again.");
+          requireLogin();
+          throw new Error("Session expired or authentication required. Enter your dashboard access token.");
+        }
         if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || `Request failed (${response.status})`); }
         return response.json();
       }
@@ -742,11 +746,16 @@
         if (button?.disabled) return;
         if (button) button.disabled = true;
         feedback.textContent = "Connecting…";
+        $("auth-token").removeAttribute("aria-invalid");
         try {
           await api("/api/auth/session", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({token:$("auth-token").value})});
           $("auth-token").value = ""; feedback.textContent = ""; $("auth-dialog").close(); await bootstrap(); connectSocket();
         } catch (error) {
           feedback.textContent = error.message || "Unable to connect. Please try again.";
+          if (feedback.textContent.startsWith("Incorrect dashboard access token")) {
+            $("auth-token").setAttribute("aria-invalid", "true");
+            $("auth-token").focus();
+          }
           showToast(feedback.textContent);
         } finally { if (button) button.disabled = false; }
       });
