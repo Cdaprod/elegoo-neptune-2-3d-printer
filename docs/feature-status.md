@@ -1,6 +1,6 @@
 # Neptune Observatory feature status
 
-Updated 2026-11-05. Routine controls use Operator Mode and do not depend on a
+Updated 2026-11-12 (SD-card physical acceptance; other rows retain their previous evidence). Routine controls use Operator Mode and do not depend on a
 commissioning record. Every service start is disarmed. An MKS acknowledgment is
 recorded separately from physical completion; no position or physical result is
 invented.
@@ -21,7 +21,7 @@ invented.
 | Temperature controls | Available in Operator Mode | PLA/PETG presets, custom nozzle/bed targets, cooldown, live monitoring, and temperature bounds. Heat-up behavior over WiFi has not been physically demonstrated. |
 | Extrusion and filament | Available with runtime temperature gate | Bounded load/unload/purge actions require fresh nozzle telemetry at or above the configured 180 °C minimum. No cold-extrusion override. Physical feed behavior is not verified in this session. |
 | Fan, motors, endstops | Available with runtime checks | M106/M107, M17/M84, and M119 fixed templates are wired. Fan/stepper behavior and exact firmware response remain unverified over WiFi. Motor release requires gantry support confirmation. |
-| SD card | Listing and print controls | M20 listing is read-only. Selection/start/pause/resume/cancel use fixed templates and state checks; exact lifecycle behavior over this printer's MKS channel remains unverified. |
+| SD card | Physical SD print startup observed; network controls separate | M20 listing is read-only. Selection/start/pause/resume/cancel use fixed templates and state checks; exact lifecycle behavior over this printer's MKS channel remains unverified. |
 | Wireless upload | Gated off | Makerbase source documents an upload route, but this printer's installed firmware and end-to-end file integrity are not validated. No upload is enabled by this change. |
 | OrcaSlicer/calibration | Partial | Dashboard offers calibration workflows and offline G-code analysis. This app does not modify slicer profiles or claim to generate/start calibration files. |
 | Diagnostics/console | Working | Cached API queries, firmware reference, operation history, and command responses. Console remains read-only and accepts named queries only. |
