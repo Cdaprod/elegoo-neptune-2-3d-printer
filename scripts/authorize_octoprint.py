@@ -82,6 +82,22 @@ def request(opener, url: str, *, method: str = "GET", payload=None, key=None):
     return status, location, body
 
 
+def wait_for_api(opener, base: str, *, sleep=time.sleep, attempts: int = 90) -> None:
+    """Wait for OctoPrint's HTTP API, not merely Docker's running state."""
+    for _ in range(attempts):
+        try:
+            status, _, _ = request(opener, base + "/api/version")
+            if status in {200, 401, 403}:
+                return
+        except (OSError, URLError, ValueError, TimeoutError):
+            pass
+        sleep(1)
+    raise RuntimeError(
+        "OctoPrint API did not become ready within 90 seconds; "
+        "saved application key was preserved. Check docker compose logs octoprint."
+    )
+
+
 def key_status(opener, base: str, key: str) -> int:
     """Return the HTTP status without silently rotating a persisted key."""
     if not API_KEY_PATTERN.fullmatch(key) or key == PLACEHOLDER:
@@ -178,6 +194,7 @@ def main() -> int:
     try:
         base = local_url(os.environ.get("OCTOPRINT_HOST_PORT") or settings.get("OCTOPRINT_HOST_PORT", "5001"))
         opener = build_opener(NoRedirects())
+        wait_for_api(opener, base)
         if key and key != PLACEHOLDER and not args.reauthorize:
             status = key_status(opener, base, key)
             if status == 200:
