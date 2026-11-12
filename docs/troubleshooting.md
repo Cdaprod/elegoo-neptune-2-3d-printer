@@ -1,5 +1,9 @@
 # Troubleshooting and FAQ
 
+## Physical SD print stalls at 0% or the touchscreen freezes
+
+The 2026-11-12 operator-observed recovery used a fully SHA-256-verified backup, FAT32/MBR format, and unique uppercase root-level 8.3 `.GCO` filenames. The Neptune 2 then started extruding from a touchscreen-selected SD file. See [SD acceptance and remaining limitations](sd-print-validation-2026-11-12.md). Run `python3 scripts/neptune_sd_rebuild.py` from the repository root on macOS; it discovers removable SD media, safeguards the backup, and requires explicit erase confirmation. **Never manually assume a device number or bypass safeguards for disks marked Internal**: built-in SD readers can report `Internal=True`, while genuine system media is disallowed. If macOS reports `loginwindow` preventing unmount, close Finder windows and unmount normally; do not kill that process. A successful format does not certify an intermittently failing card; retain the backup and consider replacing suspect media.
+
 ## The dashboard will not open
 
 - Check `docker compose ps` and the health status.

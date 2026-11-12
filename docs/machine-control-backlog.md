@@ -1,6 +1,6 @@
 # Neptune Observatory completion inventory
 
-Updated 2026-11-05. The normal product flow is Operator Mode; commissioning
+Updated 2026-11-12 (physical SD-print evidence; remote controls remain separately unverified). The normal product flow is Operator Mode; commissioning
 history is diagnostic evidence, not a prerequisite ladder. No CAD, firmware,
 OrcaSlicer profile, or global Codex configuration was accessed or changed.
 
@@ -26,6 +26,10 @@ OrcaSlicer profile, or global Codex configuration was accessed or changed.
 | P2 | Live Twin synchronization | Partial | M27 progress and matching G-code provide a planned-path estimate, not live position. No actual execution-line or position source is available yet. |
 | P2 | OrcaSlicer integration | Partial | Offline toolpath inspection and calibration guidance work; automatic profile mutation and full slicer management are outside the current bridge. |
 | P2 | Moonraker compatibility | Architecture documented only | Current transport factory and command protocol boundary are reusable seams; no Moonraker adapter or second backend is installed. |
+
+## Newly observed physical SD recovery (2026-11-12)
+
+An SD card with 16 G-code files and two printer files was backed up, reformatted to FAT32/MBR, renamed to uppercase 8.3 `.GCO` for print files, and restored with 18/18 SHA-256 checks passing. The operator then observed an actual touchscreen-started print depositing filament; the earlier 0% freeze did not recur. No network-side SD lifecycle, upload/readback, or long-term card endurance was validated. See [physical SD acceptance](sd-print-validation-2026-11-12.md).
 
 ## Known physical evidence
 
