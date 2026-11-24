@@ -1269,3 +1269,20 @@ def test_cooldown_commissioning_api_requires_auth_attendance_and_exact_macro(
             client.get("/api/control/commissioning/cooldown", headers=monitor).json()["enabled"]
             is False
         )
+
+def test_waveshare_hmi_route_uses_same_app_without_control_side_effects() -> None:
+    service = make_service(interval=30.0)
+    app = create_app(service, bind_host="0.0.0.0", auth_token="hmi-secret")
+    with TestClient(app) as client:
+        page = client.get("/hmi")
+        assert page.status_code == 200
+        assert 'id="view-models"' in page.text
+        assert 'id="view-observations"' in page.text
+        assert 'src="/static/hmi.js"' in page.text
+        assert client.get("/hmi/").status_code == 200
+        assert client.get("/static/hmi.js").status_code == 200
+        assert client.get("/").status_code == 200
+        assert client.get("/api/printer/status").status_code == 401
+        login = client.post("/api/auth/session",json={"token":"hmi-secret"},headers={"Origin":"http://testserver"})
+        assert login.status_code == 200
+        assert client.get("/api/printer/status").status_code == 200
