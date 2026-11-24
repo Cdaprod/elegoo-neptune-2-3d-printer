@@ -27,8 +27,8 @@
   text("nozzle-large",value(t.nozzle_temperature));text("bed-large",value(t.bed_temperature));
   const job=s.print_job||{};
   text("job-state",job.status||"Unknown");
-  text("job-file",job.filename||job.file||job.name||"No verified job filename");
-  const percent=number(job.progress_percent??job.progress?.completion??(typeof job.progress==="number"?job.progress:null));
+  text("job-file",job.filename?.status==="available"?job.filename.value:"No verified job filename");
+  const percent=job.progress_percent?.status==="available"?number(job.progress_percent.value):null;
   $("progress").value=percent===null?0:Math.max(0,Math.min(100,percent));
   text("job-meta",percent===null?"Progress not reported":percent.toFixed(1)+"% reported");
   text("printer-state",online?(t.printer_state?.value??job.status??"Connected"):"Unverified");
