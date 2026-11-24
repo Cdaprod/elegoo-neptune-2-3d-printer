@@ -1078,6 +1078,13 @@ def create_app(
         page = files("mks_wifi_bridge").joinpath("static/index.html").read_text(encoding="utf-8")
         return HTMLResponse(page)
 
+    @app.get("/hmi", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/hmi/", response_class=HTMLResponse, include_in_schema=False)
+    async def waveshare_hmi() -> HTMLResponse:
+        """Serve the independent 1280x400 touch frontend without changing the desktop UI."""
+        page = files("mks_wifi_bridge").joinpath("static/hmi.html").read_text(encoding="utf-8")
+        return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
     @app.post("/api/auth/session", include_in_schema=False)
     async def create_session(payload: AuthRequest, request: Request):
         if not _origin_matches(request.headers.get("host", ""), request.headers.get("origin")):
