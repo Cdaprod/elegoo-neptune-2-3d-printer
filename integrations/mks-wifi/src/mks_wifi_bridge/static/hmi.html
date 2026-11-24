@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#09131e">
+<title>Neptune Observatory · Waveshare HMI</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#09131e;color:#edf6ff;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;overflow:hidden}button,input{font:inherit}button{cursor:pointer;min-height:48px;border:1px solid #35536c;background:#172b40;color:#eef7ff;border-radius:11px;padding:6px 15px;touch-action:manipulation}button:focus-visible,a:focus-visible{outline:3px solid #6bcbff;outline-offset:2px}button[aria-current="page"]{background:#25557b;border-color:#60b8f5}
+#app{width:100vw;height:100dvh;min-height:280px;display:grid;grid-template-rows:48px minmax(0,1fr) 59px;gap:8px;padding:8px}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 14px;background:#152638;border:1px solid #2e445c;border-radius:10px;white-space:nowrap;min-width:0}
+.brand{font-weight:800;letter-spacing:.05em}.muted{color:#acc1d2}.topdata{display:flex;align-items:center;gap:21px;font-size:16px;min-width:0}.topdata span{white-space:nowrap}
+#health[data-state="live"]{color:#63e6ad}#health[data-state="offline"]{color:#ff9f9f}#health[data-state="stale"]{color:#fbd078}
+main{min-height:0;overflow:hidden}.view{height:100%;display:none;min-height:0}.view.active{display:grid}
+#view-overview{grid-template-columns:1.3fr 1fr 1fr;gap:10px}.tile{background:#142437;border:1px solid #2c4359;border-radius:12px;padding:14px;min-width:0;overflow:hidden}
+.heading{margin:0 0 8px;color:#b7cde0;text-transform:uppercase;font-size:12px;font-weight:750;letter-spacing:.06em}
+.hero{font-size:clamp(27px,3.1vw,40px);font-weight:750;line-height:1.25;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis}
+.value{font-size:25px;font-weight:750;white-space:nowrap}.detail{font-size:14px;color:#abc0d2;line-height:1.45}.filename{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:16px;margin:10px 0}
+progress{width:100%;height:12px;accent-color:#5bd4ac}
+#view-models{grid-template-rows:auto minmax(0,1fr);gap:6px}.models-head,.observations-head{display:flex;align-items:center;justify-content:space-between;min-width:0;gap:12px}.models-head .heading,.observations-head .heading{margin:0}#model-count{font-size:13px}
+#models{display:flex;align-items:stretch;gap:12px;min-height:0;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;touch-action:pan-x;scrollbar-width:thin;padding:2px 3px 10px}
+.model{flex:0 0 255px;max-width:34vw;min-width:190px;scroll-snap-align:start;display:grid;grid-template-rows:minmax(0,1fr) auto auto;padding:9px;gap:4px;border:1px solid #344e68;border-radius:12px;background:#16283a;overflow:hidden;cursor:pointer}
+.model.selected{border-color:#65c8ff;background:#1b3952}.model img,.model-placeholder{width:100%;height:100%;min-height:0;object-fit:contain;background:#0c1927;border-radius:7px;display:grid;place-items:center}.model-placeholder{font-size:40px;color:#7894ab}
+.model strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.model small{font-size:12px;color:#b7cada;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#view-observations{grid-template-columns:minmax(0,2.2fr) minmax(245px,1fr);gap:10px}
+.graph-wrap{height:calc(100% - 25px);min-height:0}#chart{width:100%;height:100%}.legend{font-size:13px;color:#b6c9da}.legend b{color:#7bd1ff}.legend b.bed{color:#f8b879}
+#view-controls{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.control-card{display:flex;flex-direction:column;justify-content:space-between;gap:8px}.control-card .detail{font-size:13px}.control-card a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;border:1px solid #3e6b89;border-radius:9px;background:#224460;color:#fff;text-decoration:none;font-weight:650}
+nav{display:flex;gap:9px;align-items:center;justify-content:center;background:#152638;border:1px solid #2e445c;border-radius:10px;padding:5px}nav button{flex:1;max-width:250px}
+#login{position:fixed;inset:0;background:#07111be8;display:none;place-items:center;z-index:20;padding:20px}#login.visible{display:grid}#login form{max-width:460px;width:100%;padding:25px;background:#172b40;border:1px solid #476780;border-radius:14px;display:grid;gap:13px}#login input{min-height:50px;padding:10px;background:#0d1b29;color:#fff;border:1px solid #476780;border-radius:9px}#login p{margin:0;color:#b6cddd;font-size:14px}#login-error{color:#ffaaaa!important}
+@media(max-width:950px){.topdata{gap:10px;font-size:13px}.brand{font-size:13px}#view-overview{grid-template-columns:1.15fr 1fr 1fr}.tile{padding:10px}.hero{font-size:25px}.value{font-size:20px}.detail{font-size:12px}.model{flex-basis:220px}}
+@media(max-height:330px){#app{grid-template-rows:42px minmax(0,1fr) 48px;gap:5px;padding:5px}button,nav button{min-height:40px}.tile{padding:8px}}
+</style>
+</head>
+<body>
+<div id="app">
+<header><span class="brand">NEPTUNE · HMI</span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span></div></header>
+<main>
+<section id="view-overview" class="view active" aria-label="Printer overview">
+ <article class="tile"><h2 class="heading">Current print</h2><div id="job-state" class="hero">Waiting for telemetry</div><div id="job-file" class="filename muted">No verified job</div><progress id="progress" value="0" max="100"></progress><div id="job-meta" class="detail">Progress not reported</div></article>
+ <article class="tile"><h2 class="heading">Printer state</h2><div id="printer-state" class="hero">—</div><div id="printer-source" class="detail">Status source unavailable</div><div id="observed" class="detail">No observations received</div></article>
+ <article class="tile"><h2 class="heading">Temperature</h2><div class="value">Nozzle <span id="nozzle-large">—</span></div><div class="value">Bed <span id="bed-large">—</span></div><div class="detail">Observed telemetry · read only</div></article>
+</section>
+<section id="view-models" class="view" aria-label="Models and print files">
+ <div class="models-head"><h2 class="heading">Swipe to browse print files</h2><span id="model-count" class="muted">Loading cached index…</span><button id="refresh-files" type="button">Refresh listing</button></div>
+ <div id="models" aria-label="Horizontally scrollable file previews" tabindex="0"><div class="tile">Loading files…</div></div>
+</section>
+<section id="view-observations" class="view" aria-label="Printer observations">
+ <article class="tile"><div class="observations-head"><h2 class="heading">Temperature observations</h2><span class="legend"><b>●</b> Nozzle &nbsp; <b class="bed">●</b> Bed</span></div><div class="graph-wrap"><svg id="chart" viewBox="0 0 700 230" preserveAspectRatio="none" role="img" aria-label="Observed nozzle and bed temperature history"><text x="28" y="118" fill="#abc1d2">Waiting for observed temperature samples</text></svg></div></article>
+ <article class="tile"><h2 class="heading">Observation integrity</h2><div id="integrity" class="hero">Waiting</div><div id="observations-note" class="detail">Only samples reported by the Observatory are charted. Missing data are not simulated.</div></article>
+</section>
+<section id="view-controls" class="view" aria-label="Operations">
+ <article class="tile control-card"><div><h2 class="heading">Machine operations</h2><p class="detail">Use the existing Observatory controls for authorization, Operator Mode, and per-operation confirmation.</p></div><a href="/" aria-label="Open full Observatory controls">Open Observatory</a></article>
+ <article class="tile control-card"><div><h2 class="heading">File selection</h2><p id="selected-file" class="detail">Select a print file in Models. The HMI never starts a print on selection.</p></div><button type="button" data-go="models">Browse models</button></article>
+ <article class="tile control-card"><div><h2 class="heading">Source and safety</h2><p class="detail">This screen only reads API state. No automatic print commands, polling-induced motion, or file uploads.</p></div><button type="button" data-go="observations">View observations</button></article>
+</section>
+</main>
+<nav aria-label="HMI views"><button data-go="overview" aria-current="page">Overview</button><button data-go="models">Models</button><button data-go="observations">Observations</button><button data-go="controls">Controls</button></nav>
+</div>
+<div id="login"><form id="login-form"><strong>Neptune Observatory authentication</strong><p>Use your existing Observatory access token. Credentials are exchanged for the existing HttpOnly session cookie and are not stored by this HMI.</p><input id="token" type="password" autocomplete="current-password" required aria-label="Observatory access token"><p id="login-error" role="alert"></p><button type="submit">Connect</button></form></div>
+<script src="/static/hmi.js" defer></script>
+</body></html>
