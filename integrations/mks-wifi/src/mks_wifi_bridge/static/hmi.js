@@ -28,7 +28,7 @@
   const job=s.print_job||{};
   text("job-state",job.status||"Unknown");
   text("job-file",job.filename||job.file||job.name||"No verified job filename");
-  const percent=number(job.progress_percent??job.progress?.completion??job.progress);
+  const percent=number(job.progress_percent??job.progress?.completion??(typeof job.progress==="number"?job.progress:null));
   $("progress").value=percent===null?0:Math.max(0,Math.min(100,percent));
   text("job-meta",percent===null?"Progress not reported":percent.toFixed(1)+"% reported");
   text("printer-state",online?(t.printer_state?.value??job.status??"Connected"):"Unverified");
