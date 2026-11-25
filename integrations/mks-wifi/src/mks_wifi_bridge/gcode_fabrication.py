@@ -3,6 +3,7 @@
 Produces shaded isometric SVGs and a sampled Three.js-compatible geometry feed.
 Never talks to the printer, writes into source directories, or asserts CAD fidelity.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -87,8 +88,10 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
             continue
         if family != "G" or operation not in (0, 1, 2, 3, 92):
             continue
-        args = {axis.upper(): float(value) * units
-                for axis, value in PARAMETER.findall(code[cmd.end():])}
+        args = {
+            axis.upper(): float(value) * units
+            for axis, value in PARAMETER.findall(code[cmd.end() :])
+        }
         if any(not math.isfinite(v) or abs(v) > 10000 for v in args.values()):
             continue
         if operation == 92:
@@ -115,8 +118,11 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
             radius = math.hypot(old["X"] - cx, old["Y"] - cy)
             begin = math.atan2(old["Y"] - cy, old["X"] - cx)
             finish = math.atan2(end[1] - cy, end[0] - cx)
-            sweep = ((finish - begin) % (2 * math.pi) if operation == 3
-                     else -((begin - finish) % (2 * math.pi)))
+            sweep = (
+                (finish - begin) % (2 * math.pi)
+                if operation == 3
+                else -((begin - finish) % (2 * math.pi))
+            )
             if abs(sweep) < 1e-8:
                 sweep = (2 * math.pi) * (1 if operation == 3 else -1)
             if radius > 0.00001:
@@ -124,9 +130,13 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
                 for n in range(1, steps):
                     fraction = n / steps
                     angle = begin + fraction * sweep
-                    points.append((cx + radius * math.cos(angle),
-                                   cy + radius * math.sin(angle),
-                                   start[2] + (end[2] - start[2]) * fraction))
+                    points.append(
+                        (
+                            cx + radius * math.cos(angle),
+                            cy + radius * math.sin(angle),
+                            start[2] + (end[2] - start[2]) * fraction,
+                        )
+                    )
         elif operation in (2, 3):
             chord_arcs += 1  # R-arcs: only straight chord, disclosed in stats.
         points.append(end)
@@ -138,8 +148,7 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
                 minimum[i] = min(minimum[i], a[i], b[i])
                 maximum[i] = max(maximum[i], a[i], b[i])
             if emitted % stride == 0:
-                segments.append([*(round(v, 3) for v in a + b),
-                                 round(width, 3), kind])
+                segments.append([*(round(v, 3) for v in a + b), round(width, 3), kind])
                 if len(segments) > MAX_SEGMENTS:
                     segments = segments[::2]
                     stride *= 2
@@ -200,40 +209,42 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
         'stop-opacity="0"/></radialGradient></defs>',
         '<rect width="960" height="720" fill="url(#bg)"/>',
         f'<ellipse cx="480" cy="{floor:.1f}" '
-        f'rx="{min(410, max(75, dx * zoom * .68)):.1f}" '
+        f'rx="{min(410, max(75, dx * zoom * 0.68)):.1f}" '
         'ry="38" fill="url(#shadow)"/>',
     ]
-    ordered = sorted(model["segments"], key=lambda s: (
-        (s[2] + s[5]) / 2, (s[0] + s[3] + s[1] + s[4]) / 4
-    ))
+    ordered = sorted(
+        model["segments"], key=lambda s: ((s[2] + s[5]) / 2, (s[0] + s[3] + s[1] + s[4]) / 4)
+    )
     paths: dict[tuple[int, int], list[str]] = defaultdict(list)
     for n, seg in enumerate(ordered):
         a, b = screen(project(seg[:3])), screen(project(seg[3:6]))
         category = int(seg[7]) % len(COLORS)
-        paths[(n // 170, category)].append(
-            f'M{a[0]:.1f},{a[1]:.1f}L{b[0]:.1f},{b[1]:.1f}'
-        )
+        paths[(n // 170, category)].append(f"M{a[0]:.1f},{a[1]:.1f}L{b[0]:.1f},{b[1]:.1f}")
     for (_, category), lines in paths.items():
         path = " ".join(lines)
-        output.extend([
-            f'<path d="{path}" stroke="#152a3c" '
-            f'stroke-width="{thickness + 1.4:.2f}" stroke-linecap="round" fill="none"/>',
-            f'<path d="{path}" stroke="{COLORS[category]}" '
-            f'stroke-width="{thickness:.2f}" stroke-linecap="round" fill="none"/>',
-            f'<path d="{path}" stroke="#f5fcff" '
-            f'stroke-width="{max(.35, thickness * .18):.2f}" '
-            'stroke-linecap="round" fill="none" opacity=".24"/>',
-        ])
+        output.extend(
+            [
+                f'<path d="{path}" stroke="#152a3c" '
+                f'stroke-width="{thickness + 1.4:.2f}" stroke-linecap="round" fill="none"/>',
+                f'<path d="{path}" stroke="{COLORS[category]}" '
+                f'stroke-width="{thickness:.2f}" stroke-linecap="round" fill="none"/>',
+                f'<path d="{path}" stroke="#f5fcff" '
+                f'stroke-width="{max(0.35, thickness * 0.18):.2f}" '
+                'stroke-linecap="round" fill="none" opacity=".24"/>',
+            ]
+        )
     sizes = [b - a for a, b in zip(lo, hi, strict=True)]
-    output.extend([
-        '<path d="M22 662 H938" stroke="#3b5971" opacity=".5"/>',
-        '<text x="31" y="39" fill="#daeffe" font-family="sans-serif" '
-        'font-size="18" font-weight="700">G-CODE / DEPOSITED GEOMETRY</text>',
-        f'<text x="31" y="691" fill="#a4c1d5" font-family="monospace" '
-        f'font-size="16">{sizes[0]:.1f} × {sizes[1]:.1f} × {sizes[2]:.1f} mm'
-        f' | {escape(view.upper())} | {model["stats"]["rendered_segments"]:,} sampled paths</text>',
-        '</svg>',
-    ])
+    output.extend(
+        [
+            '<path d="M22 662 H938" stroke="#3b5971" opacity=".5"/>',
+            '<text x="31" y="39" fill="#daeffe" font-family="sans-serif" '
+            'font-size="18" font-weight="700">G-CODE / DEPOSITED GEOMETRY</text>',
+            f'<text x="31" y="691" fill="#a4c1d5" font-family="monospace" '
+            f'font-size="16">{sizes[0]:.1f} × {sizes[1]:.1f} × {sizes[2]:.1f} mm'
+            f" | {escape(view.upper())} | {model['stats']['rendered_segments']:,} sampled paths</text>",
+            "</svg>",
+        ]
+    )
     return "".join(output).encode("utf-8")
 
 
@@ -248,9 +259,13 @@ class FabricationPreviewService:
         if self.source_dir is None or not relative or "\\" in relative or "\x00" in relative:
             raise ModelPreviewError("No valid G-code source was configured")
         path = PurePosixPath(relative)
-        if (path.is_absolute() or path.as_posix() != relative or not path.parts
-                or any(p in ("..", ".") for p in relative.split("/"))
-                or path.suffix.lower() != ".gcode"):
+        if (
+            path.is_absolute()
+            or path.as_posix() != relative
+            or not path.parts
+            or any(p in ("..", ".") for p in relative.split("/"))
+            or path.suffix.lower() != ".gcode"
+        ):
             raise ModelPreviewError("Invalid G-code file path")
         try:
             directory = os.open(self.source_dir, os.O_RDONLY | os.O_DIRECTORY)
@@ -258,8 +273,9 @@ class FabricationPreviewService:
             raise FileNotFoundError("Configured G-code volume is unavailable") from exc
         try:
             for name in path.parts[:-1]:
-                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                dir_fd=directory)
+                child = os.open(
+                    name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory
+                )
                 os.close(directory)
                 directory = child
             fd = os.open(path.parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
@@ -276,8 +292,7 @@ class FabricationPreviewService:
     def _prune(self) -> None:
         if not self.cache_dir:
             return
-        files = sorted(self.cache_dir.glob("*.json"),
-                       key=lambda f: f.stat().st_mtime, reverse=True)
+        files = sorted(self.cache_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
         size = 0
         for path in files:
             size += path.stat().st_size
@@ -287,9 +302,11 @@ class FabricationPreviewService:
     def geometry(self, relative: str) -> dict[str, Any]:
         fd, info = self._open(relative)
         try:
-            fingerprint = "\0".join(map(str, (
-                CACHE_VERSION, relative, info.st_size, info.st_mtime_ns, info.st_ctime_ns
-            )))
+            fingerprint = "\0".join(
+                map(
+                    str, (CACHE_VERSION, relative, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                )
+            )
             key = hashlib.sha256(fingerprint.encode()).hexdigest()
             target = self.cache_dir / (key + ".json") if self.cache_dir else None
             if target and target.is_file():
@@ -304,7 +321,9 @@ class FabricationPreviewService:
                 model = reconstruct(source)
             after = os.fstat(fd)
             if (info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (
-                after.st_size, after.st_mtime_ns, after.st_ctime_ns
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
             ):
                 raise ModelPreviewError("G-code source changed during reconstruction")
             model["version"] = CACHE_VERSION
@@ -313,8 +332,7 @@ class FabricationPreviewService:
                 try:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with tempfile.NamedTemporaryFile(
-                        mode="w", dir=target.parent, suffix=".tmp",
-                        encoding="utf-8", delete=False
+                        mode="w", dir=target.parent, suffix=".tmp", encoding="utf-8", delete=False
                     ) as output:
                         json.dump(model, output, separators=(",", ":"))
                         temporary = Path(output.name)
