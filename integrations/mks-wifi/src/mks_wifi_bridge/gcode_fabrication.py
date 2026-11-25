@@ -241,7 +241,8 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
             'font-size="18" font-weight="700">G-CODE / DEPOSITED GEOMETRY</text>',
             f'<text x="31" y="691" fill="#a4c1d5" font-family="monospace" '
             f'font-size="16">{sizes[0]:.1f} × {sizes[1]:.1f} × {sizes[2]:.1f} mm'
-            f" | {escape(view.upper())} | {model['stats']['rendered_segments']:,} sampled paths</text>",
+            f" | {escape(view.upper())} | "
+            f"{model['stats']['rendered_segments']:,} sampled paths</text>",
             "</svg>",
         ]
     )
