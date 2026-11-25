@@ -115,7 +115,9 @@ jobs:
           cat /tmp/observatory-browser.log
           exit 1
       - name: Verify every dashboard sidebar view in Chromium
-        run: node scripts/test-dashboard-navigation.cjs
+        run: |
+          node scripts/test-dashboard-navigation.cjs
+          node scripts/test-hmi-navigation.cjs
 
   octoprint-plugin-image:
     runs-on: ubuntu-latest

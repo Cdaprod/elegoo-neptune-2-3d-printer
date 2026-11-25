@@ -1,6 +1,6 @@
 # Print Bay and Manufacturing as Code
 
-Print Bay is part of Observatory at `/print-bay`, linked from its sidebar. It uses the existing FastAPI authentication, static assets, Three.js/OrbitControls, OctoPrint backend and Compose stack. No additional web/controller service is required. The native Mac worker runs CAD and Orca; the optional Pi agent copies source snapshots and staged artifacts over the authenticated build-node API into its own local filesystem and SQLite registry. SQLite is never shared over LAN.
+Print Bay is part of Observatory at `/print-bay`, linked from its sidebar and the native Waveshare `/hmi` header. It uses the existing FastAPI authentication, static assets, Three.js/OrbitControls, OctoPrint backend and Compose stack. No additional web/controller service is required. The native Mac worker runs CAD and Orca; the optional Pi agent copies source snapshots and staged artifacts over the authenticated build-node API into its own local filesystem and SQLite registry. SQLite is never shared over LAN.
 
 ## Manifest contract
 
@@ -54,6 +54,8 @@ OpenAPI is available at `/docs`; the following routes use Observatory authentica
 | `POST …/artifacts/{id}/export-sd` | Explicit SD copy; `{confirmation: "EXPORT <id>"}` |
 
 Job actions are `build`, `slice`, `build-slice`, `slice-stage`, `build-slice-stage`, and `reconcile`. `slice`/`slice-stage` require current validated geometry; they never silently initiate a CAD build. The watcher runs building first when authorized by `autoBuild`. Physical deployment is never a job action.
+
+Every slice generates a deterministic 320×320 PNG from the transformed plate meshes and embeds it as comments in G-code, because the installed headless Orca CLI did not emit its GUI PNG previews. This leaves printer instructions intact and is idempotent during cache reuse.
 
 Artifacts include immutable G-code, reconciled 3MF, selected-object STL previews, BREP validation results, SHA-256 sidecar, source parameters, manifest, input identities and slicer version. Versions are monotonically allocated per project. `build.outputDirectory` is relative to the registry storage root. The geometry cache records checksums for native build output; artifact checksums are verified again before staging/deployment. Geometry-equivalent edits reuse G-code while creating a new provenance revision, preserving historical receipts. Plate fingerprints include selected meshes, relevant CAD parameters, membership, transformations, effective object settings/modifiers, embedded printer/process/filament settings and slicer version. Other plate geometry is excluded.
 

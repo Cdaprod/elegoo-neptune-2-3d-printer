@@ -82,5 +82,26 @@
     "valid_png": 19,
     "legacy_tft_markers": 0
   },
-  "unaffected_mesh_hashes": "Saddle, keeper and crossbar STL hashes identical between 3 mm and 4 mm builds"
+  "unaffected_mesh_hashes": "Saddle, keeper and crossbar STL hashes identical between 3 mm and 4 mm builds",
+  "activeOrcaProject": {
+    "file": "display-mount-truss-v2.3mf",
+    "updatedInPlace": true,
+    "guiReloaded": true,
+    "checkpoint": "display-mount-truss-v2-before-print-bay.3mf",
+    "changedArchiveEntries": 2,
+    "unchangedArchiveEntries": 23,
+    "locatorsPerBracket": 2,
+    "locatorDiameter_mm": 5.8,
+    "locatorDepth_mm": 1.5,
+    "driverAccessDiameter_mm": 4
+  },
+  "cadqueryAdapter": {
+    "version": "2.8.0",
+    "validSolids": 1,
+    "volume_mm3": 400,
+    "exports": [
+      "STEP",
+      "STL"
+    ]
+  }
 }

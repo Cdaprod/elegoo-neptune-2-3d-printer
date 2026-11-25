@@ -11,6 +11,7 @@
 #app{width:100vw;height:100dvh;min-height:280px;display:grid;grid-template-rows:48px minmax(0,1fr) 59px;gap:8px;padding:8px}
 header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 14px;background:#152638;border:1px solid #2e445c;border-radius:10px;white-space:nowrap;min-width:0}
 .brand{font-weight:800;letter-spacing:.05em}.muted{color:#acc1d2}.topdata{display:flex;align-items:center;gap:21px;font-size:16px;min-width:0}.topdata span{white-space:nowrap}
+header a{color:#89dbff;text-decoration:none;border:1px solid #35536c;border-radius:8px;padding:8px 12px}
 #health[data-state="live"]{color:#63e6ad}#health[data-state="offline"]{color:#ff9f9f}#health[data-state="stale"]{color:#fbd078}
 main{min-height:0;overflow:hidden}.view{height:100%;display:none;min-height:0}.view.active{display:grid}
 #view-overview{grid-template-columns:1.3fr 1fr 1fr;gap:10px}.tile{background:#142437;border:1px solid #2c4359;border-radius:12px;padding:14px;min-width:0;overflow:hidden}
@@ -34,7 +35,7 @@ nav{display:flex;gap:9px;align-items:center;justify-content:center;background:#1
 </head>
 <body>
 <div id="app">
-<header><span class="brand">NEPTUNE · HMI</span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span></div></header>
+<header><span class="brand">NEPTUNE · HMI</span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span><a href="/print-bay">Print Bay ↗</a></div></header>
 <main>
 <section id="view-overview" class="view active" aria-label="Printer overview">
  <article class="tile"><h2 class="heading">Current print</h2><div id="job-state" class="hero">Waiting for telemetry</div><div id="job-file" class="filename muted">No verified job</div><progress id="progress" value="0" max="100"></progress><div id="job-meta" class="detail">Progress not reported</div></article>
