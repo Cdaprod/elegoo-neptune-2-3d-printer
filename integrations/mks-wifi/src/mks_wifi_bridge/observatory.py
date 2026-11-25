@@ -39,8 +39,8 @@ from .executor import (
 )
 from .gcode_thumbnail import extract_gcode_thumbnail
 from .jobs import print_job_summary
-from .local_gcode_index import LocalGcodeIndexer
 from .gcode_fabrication import FabricationPreviewService, ModelPreviewError
+from .local_gcode_index import LocalGcodeIndexer
 from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
 from .motion import AXES, build_motion_sample, query_m114
