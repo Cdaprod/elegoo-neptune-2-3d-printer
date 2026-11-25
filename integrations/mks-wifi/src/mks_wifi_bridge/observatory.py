@@ -37,9 +37,9 @@ from .executor import (
     _require_fresh_state,
     _required_printer_state,
 )
+from .gcode_fabrication import FabricationPreviewService, ModelPreviewError
 from .gcode_thumbnail import extract_gcode_thumbnail
 from .jobs import print_job_summary
-from .gcode_fabrication import FabricationPreviewService, ModelPreviewError
 from .local_gcode_index import LocalGcodeIndexer
 from .mks_http_status import MksHttpStatusError, MksHttpStatusReader
 from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_upload
