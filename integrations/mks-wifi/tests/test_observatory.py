@@ -1286,3 +1286,53 @@ def test_waveshare_hmi_route_uses_same_app_without_control_side_effects() -> Non
         login = client.post("/api/auth/session",json={"token":"hmi-secret"},headers={"Origin":"http://testserver"})
         assert login.status_code == 200
         assert client.get("/api/printer/status").status_code == 200
+
+
+def test_waveshare_3d_model_apis_share_auth_and_do_not_send_printer_commands(tmp_path) -> None:
+    source = tmp_path / "prints"
+    source.mkdir()
+    (source / "bracket.gcode").write_text(
+        "G90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 E0.5\n"
+        "G1 X10 Y10 E0.5\nG1 X0 Y10 E0.5\nG1 X0 Y0 E0.5\n"
+    )
+    timeline = MotionTimeline(tmp_path / "history.sqlite3")
+    indexer = LocalGcodeIndexer(source, timeline)
+    service = make_service(interval=30.0)
+    app = create_app(
+        service,
+        timeline=timeline,
+        local_gcode_indexer=indexer,
+        bind_host="0.0.0.0",
+        auth_token="hmi-sample-token",
+    )
+    with TestClient(app) as client:
+        before = FakeClient.calls
+        assert client.get(
+            "/api/hmi/model-preview", params={"path": "bracket.gcode"}
+        ).status_code == 401
+        login = client.post(
+            "/api/auth/session",
+            json={"token": "hmi-sample-token"},
+            headers={"Origin": "http://testserver"},
+        )
+        assert login.status_code == 200
+        preview = client.get(
+            "/api/hmi/model-preview", params={"path": "bracket.gcode"}
+        )
+        assert preview.status_code == 200
+        assert preview.headers["content-type"].startswith("image/svg+xml")
+        assert b"G-CODE / DEPOSITED GEOMETRY" in preview.content
+        geometry = client.get(
+            "/api/hmi/model-geometry", params={"path": "bracket.gcode"}
+        )
+        assert geometry.status_code == 200
+        assert geometry.json()["source"] == "reconstructed_gcode_extrusion"
+        assert geometry.json()["stats"]["extrusion_segments"] == 4
+        assert client.get(
+            "/api/hmi/model-preview", params={"path": "../other.gcode"}
+        ).status_code == 422
+        assert client.get(
+            "/api/hmi/model-preview",
+            params={"path": "bracket.gcode", "view": "unsupported"},
+        ).status_code == 422
+        assert FakeClient.calls <= before + 1  # No preview-induced printer I/O.
