@@ -130,7 +130,7 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
         elif operation in (2, 3):
             chord_arcs += 1  # R-arcs: only straight chord, disclosed in stats.
         points.append(end)
-        for a, b in zip(points, points[1:]):
+        for a, b in zip(points, points[1:], strict=False):
             if not 0.00001 < math.dist(a, b) <= 5000:
                 continue
             emitted += 1
@@ -165,7 +165,7 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
     if view not in ("iso", "top", "front"):
         raise ModelPreviewError("Unsupported model camera view")
     lo, hi = model["bounds"]
-    cx, cy, cz = [(a + b) / 2 for a, b in zip(lo, hi)]
+    cx, cy, cz = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
 
     def project(p: list[float] | tuple[float, ...]) -> tuple[float, float]:
         x, y, z = p[0] - cx, p[1] - cy, p[2] - cz
@@ -177,7 +177,7 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
 
     coords = [project(s[:3]) for s in model["segments"]]
     coords.extend(project(s[3:6]) for s in model["segments"])
-    xs, ys = zip(*coords)
+    xs, ys = zip(*coords, strict=True)
     xmin, ymin = min(xs), min(ys)
     dx, dy = max(xs) - xmin, max(ys) - ymin
     zoom = min(804 / max(dx, 0.1), 558 / max(dy, 0.1), 32)
@@ -224,7 +224,7 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
             f'stroke-width="{max(.35, thickness * .18):.2f}" '
             'stroke-linecap="round" fill="none" opacity=".24"/>',
         ])
-    sizes = [b - a for a, b in zip(lo, hi)]
+    sizes = [b - a for a, b in zip(lo, hi, strict=True)]
     output.extend([
         '<path d="M22 662 H938" stroke="#3b5971" opacity=".5"/>',
         '<text x="31" y="39" fill="#daeffe" font-family="sans-serif" '
