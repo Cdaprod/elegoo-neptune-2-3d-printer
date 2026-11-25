@@ -38,13 +38,13 @@ The HMI is designed to occupy the browser's actual viewport, not scale the deskt
 - Compact persistent live connection/nozzle/bed header.
 - Swipeable Overview / Models / Observations / Controls views, plus explicit large nav buttons.
 - Independently horizontally scrollable model cards with touch scroll snapping.
-- Existing mounted-directory G-code cache with embedded OrcaSlicer PNG/JPEG thumbnails.
+- Shaded G-code-derived 3D geometry thumbnails for mounted files (with cached OrcaSlicer PNG/JPEG fallback), plus a touch-friendly interactive Three.js inspector.
 - Existing printer SD cached listing and thumbnail endpoint, with source indications.
 - Read-only observed nozzle/bed history plots with no fabricated samples.
 - Offline, stale, and authentication feedback.
 - Safe handoff to full Observatory for operator-gated machine controls.
 
-**Important limitations:** Model thumbnails are displayed only when the existing G-code thumbnail indexer has a valid embedded preview. This change does not add STEP/STL/3MF rendering, arbitrary mounted file browsing, camera integration, or printer-control shortcuts. No print is started from a model card. When the source volume is absent, cached entries may be stale.
+**Important limitations:** The 3D gallery reconstructs an approximation of extruded filament from **locally mounted G-code**. Without local G-code bytes, printer SD listings still rely on the old thumbnail fallback. No original STEP/STL/3MF meshes, arbitrary mounted file browser, camera integration, or printer-control shortcuts are added. Selecting a model never starts a print. For rendering limitations, authentication, mount configuration and caching, see [G-code fabrication gallery](gcode-fabrication-gallery.md).
 
 To ingest local G-code previews, mount a read-only directory at `/mnt/neptune-source` in the existing `neptune-observatory` container, as documented in the existing storage/setup guides. Avoid storing runtime files in the repository.
 
