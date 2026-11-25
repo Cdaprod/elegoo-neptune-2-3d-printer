@@ -40,7 +40,7 @@ jobs:
       - name: Lint and formatting
         run: |
           uv run --no-sync ruff check src tests
-          uv run --no-sync ruff format --check src tests
+          uv run --no-sync ruff format --check --diff src tests
       - name: Compile dashboard JavaScript
         run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests
@@ -116,6 +116,20 @@ jobs:
           exit 1
       - name: Verify every dashboard sidebar view in Chromium
         run: node scripts/test-dashboard-navigation.cjs
+      - name: Verify Waveshare 3D HMI at 1280 by 400
+        env:
+          HMI_SCREENSHOT: /tmp/neptune-hmi-models-1280x400.png
+        run: |
+          node scripts/test-hmi-navigation.cjs
+          node scripts/test-hmi-3d-gallery.cjs
+      - name: Upload HMI geometry gallery screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neptune-hmi-3d-gallery-1280x400
+          path: /tmp/neptune-hmi-models-1280x400.png
+          if-no-files-found: ignore
+
 
   octoprint-plugin-image:
     runs-on: ubuntu-latest
