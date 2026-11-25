@@ -14,10 +14,14 @@ dev = [
 web = [
     "fastapi>=0.115,<0.142",
     "uvicorn[standard]>=0.34,<1",
+    "PyYAML>=6,<7",
+    "Pillow>=11,<13",
 ]
 
 [project.scripts]
 mks-wifi-probe = "mks_wifi_bridge.client:main"
+neptune-printer-agent = "mks_wifi_bridge.manufacturing.sync:main"
+neptune-manufacturing = "mks_wifi_bridge.manufacturing.worker:main"
 neptune-observatory = "mks_wifi_bridge.observatory:main"
 
 [tool.uv]

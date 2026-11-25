@@ -20,7 +20,7 @@ MAX_FILES_PER_SCAN = 2000
 MAX_CACHED_PREVIEWS = 200
 SCAN_TIME_LIMIT_SECONDS = 20.0
 MAX_METADATA_HEADER_BYTES = 512 * 1024
-SAFE_FIRMWARE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,199}\.gcode", re.I)
+SAFE_FIRMWARE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,199}\.(?:gcode|gco|gc|g)", re.I)
 METADATA_PATTERNS = {
     "estimated_print_time": re.compile(
         r"^;\s*(?:estimated printing time(?: \(normal mode\))?|TIME)\s*[=:]\s*(.+)$", re.I
@@ -105,7 +105,11 @@ class LocalGcodeIndexer:
             )
             for filename in sorted(filenames):
                 candidate = Path(directory) / filename
-                if candidate.suffix.lower() != ".gcode" or candidate.is_symlink():
+                if (
+                    candidate.name.startswith(".")
+                    or candidate.suffix.lower() not in {".gcode", ".gco", ".gc", ".g"}
+                    or candidate.is_symlink()
+                ):
                     continue
                 paths.append(candidate)
                 if (

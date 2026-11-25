@@ -1069,6 +1069,10 @@ def create_app(
         if origin and not _origin_matches(request.headers.get("host", ""), origin):
             raise HTTPException(status_code=403, detail="Request origin is not allowed")
 
+    from .manufacturing.api import install as install_print_bay
+
+    install_print_bay(app, require_auth, require_control_token, printer)
+
     def request_requires_auth(request: Request) -> bool:
         peer = request.client.host if request.client else ""
         return auth_required or not _is_loopback(peer)

@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-25",
+  "source": "Active V016 native FreeCAD workspace (outside Git checkout)",
+  "freecad": "1.1.1",
+  "orca": "2.5.0-rc",
+  "plate": "Brackets",
+  "artifact": "4cca6613255f442aa08d9a8ab0962cfe",
+  "checksum": "e2c658e399ee69df75c2ac5991557a43d4644b842a1d5dc242e6f3dcc3d4f2ce",
+  "output": "DISPMNT01.gcode",
+  "staged": true,
+  "uploaded": false,
+  "printed": false,
+  "comparison": {
+    "LeftBracketTrussV2": {
+      "removed_volume": 390.202494586717,
+      "added_volume": 0.0,
+      "valid3": true,
+      "valid4": true,
+      "removed_bounds": [
+        -58.95,
+        26.08341895101506,
+        -31.675000000000015,
+        -54.95,
+        68.00000000000021,
+        31.674999999999994
+      ],
+      "bearing_region_symmetric_difference_mm3": 0.0
+    },
+    "RightBracketTrussV2": {
+      "removed_volume": 390.20249459145333,
+      "added_volume": 0.0,
+      "valid3": true,
+      "valid4": true,
+      "removed_bounds": [
+        54.95,
+        26.083418951015027,
+        -31.675000000000015,
+        58.95,
+        68.00000000000033,
+        31.674999999999994
+      ],
+      "bearing_region_symmetric_difference_mm3": 0.0
+    },
+    "SaddleModular": {
+      "removed_volume": 0.0,
+      "added_volume": 0.0,
+      "valid3": true,
+      "valid4": true
+    },
+    "RemovableKeeper": {
+      "removed_volume": 0.0,
+      "added_volume": 0.0,
+      "valid3": true,
+      "valid4": true
+    },
+    "RightCrossbarDrilling": {
+      "removed_volume": 0.0,
+      "added_volume": 0.0,
+      "valid3": true,
+      "valid4": true
+    }
+  },
+  "source3mf_preservation": "All ZIP entries except the two mapped bracket meshes preserved byte-for-byte",
+  "sd": "Mounted /Volumes/NEPTUNE; existing DISPMNT01.gcode differs and was preserved",
+  "revision": "V003",
+  "previews": {
+    "embedded": true,
+    "tft": "missing",
+    "width": 320,
+    "height": 320,
+    "mime": "image/png"
+  },
+  "slicingMetadata": {
+    "layer_height_mm": 0.2,
+    "first_layer_height_mm": 0.2,
+    "filament_used_mm": 14553.01,
+    "estimated_print_time": "3h 36m 56s"
+  },
+  "native_cli_adapter": "Verified recompute, validation and export of all five mapped solids through configured FreeCADCmd",
+  "sd_previews": {
+    "files": 19,
+    "valid_png": 19,
+    "legacy_tft_markers": 0
+  },
+  "unaffected_mesh_hashes": "Saddle, keeper and crossbar STL hashes identical between 3 mm and 4 mm builds"
+}
