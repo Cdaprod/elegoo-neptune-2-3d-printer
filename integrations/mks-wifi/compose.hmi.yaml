@@ -1,0 +1,8 @@
+# Optional Waveshare kiosk port; shares the existing Observatory app and its data.
+# Use: docker compose -f compose.yaml -f compose.hmi.yaml up -d --build
+# Note: root compose.yaml uses include; the Observatory service is declared by that include.
+# The HMI itself is always available on /hmi at the regular port 8000.
+services:
+  neptune-observatory:
+    ports:
+      - "${NEPTUNE_HMI_PORT:-8001}:8000"
