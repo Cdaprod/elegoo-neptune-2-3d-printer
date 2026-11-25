@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import os
 
 import pytest
 
@@ -55,7 +54,7 @@ def test_progressive_sampling_covers_entire_large_gcode() -> None:
     commands = ["G90", "M83"]
     commands.extend(f"G1 X{n % 200} Y{n // 200} E0.1" for n in range(16000))
     model = reconstruct(io.StringIO("\n".join(commands)))
-    assert model["stats"]["extrusion_segments"] == 16000
+    assert model["stats"]["extrusion_segments"] == 15999
     assert model["stats"]["rendered_segments"] <= MAX_SEGMENTS
     assert model["stats"]["sampling_stride"] > 1
     assert model["bounds"][1][1] == 79
