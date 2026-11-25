@@ -52,22 +52,114 @@
    segments.forEach(segment=>node("polyline",{points:segment.join(" "),fill:"none",stroke:color,"stroke-width":3,"stroke-linejoin":"round","stroke-linecap":"round"}));
   }
  }
+
+ let inspectorViewer=null;
+ let inspectorEpoch=0;
+ let inspected=null;
+ const modelUrl=(file,view="iso")=>"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
+ const legacyPreview=(file,source)=>source==="local"
+   ?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path)
+   :"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
+ function setPreviewImage(img,file,source){
+   img.loading="lazy";
+   img.alt="Shaded extrusion geometry for "+(file.filename||file.name);
+   if(source==="local"&&file.source_present!==false) {
+     img.src=modelUrl(file);
+     img.onerror=()=>{
+       img.onerror=null;
+       if(file.preview_available)img.src=legacyPreview(file,source);
+       else img.replaceWith(Object.assign(document.createElement("div"),{className:"model-placeholder",textContent:"▧"}));
+     };
+   }else if(file.preview_available){
+     img.src=legacyPreview(file,source);
+     img.onerror=()=>img.replaceWith(Object.assign(document.createElement("div"),{className:"model-placeholder",textContent:"▧"}));
+   }else{
+     img.replaceWith(Object.assign(document.createElement("div"),{className:"model-placeholder",textContent:"▧"}));
+   }
+ }
+ function closeInspector(){
+   inspectorEpoch++;
+   if(inspectorViewer){inspectorViewer.dispose();inspectorViewer=null;}
+   $("model-viewer-host").replaceChildren();
+   $("model-viewer-host").hidden=true;
+   $("inspector-image").hidden=false;
+   const dialog=$("model-inspector");
+   if(dialog.open)dialog.close();
+ }
+ $("inspector-close").addEventListener("click",closeInspector);
+ $("model-inspector").addEventListener("cancel",e=>{e.preventDefault();closeInspector();});
+ document.querySelectorAll("[data-view-angle]").forEach(button=>button.addEventListener("click",()=>{
+   const view=button.dataset.viewAngle;
+   if(inspectorViewer)inspectorViewer.setView(view);
+   else if(inspected?.source==="local"&&inspected.file.source_present!==false) $("inspector-image").src=modelUrl(inspected.file,view);
+ }));
+ async function openInspector(file,source){
+   closeInspector();
+   const epoch=++inspectorEpoch;
+   inspected={file,source};
+   text("inspector-title",file.filename||file.name);
+   text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
+   text("inspector-status",source==="local"?"Loading 3D extrusion…":"No local G-code geometry available; showing cached slicer preview.");
+   const preview=$("inspector-image");
+   preview.hidden=false;
+   preview.onerror=null;
+   if(source==="local"&&file.source_present!==false){
+     preview.src=modelUrl(file);
+     preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
+   }else if(file.preview_available)preview.src=legacyPreview(file,source);
+   else preview.removeAttribute("src");
+   $("model-inspector").showModal();
+   if(source!=="local"||file.source_present===false)return;
+   try{
+     const geometry=await api("/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path));
+     if(epoch!==inspectorEpoch)return;
+     const module=await import("/static/hmi_model_viewer.js");
+     if(epoch!==inspectorEpoch)return;
+     const host=$("model-viewer-host");
+     host.hidden=false;
+     inspectorViewer=module.mountViewer(host,geometry);
+     preview.hidden=true;
+     const stats=geometry.stats||{};
+     const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
+     const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
+     text("inspector-details",dims+" mm · "+(stats.rendered_segments||0)+" rendered extrusion segments");
+     text("inspector-status","Interactive 3D · sampled from "+(stats.extrusion_segments||0)+" extrusion moves"+
+       (stats.arcs_represented_as_chords?" · "+stats.arcs_represented_as_chords+" arcs approximated":""));
+   }catch(err){
+     if(epoch!==inspectorEpoch)return;
+     $("model-viewer-host").hidden=true;
+     preview.hidden=false;
+     text("inspector-status","3D inspector unavailable: "+err.message+" · still-image fallback");
+   }
+ }
  function card(file,source){
-  const button=document.createElement("div");button.className="model";button.tabIndex=0;button.setAttribute("role","button");
-  button.setAttribute("aria-label","Select "+(file.filename||file.name));
-  const img=file.preview_available?document.createElement("img"):document.createElement("div");
-  if(file.preview_available){
-   img.loading="lazy";img.alt="Cached G-code preview for "+(file.filename||file.name);
-   img.src=source==="local"?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path):"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
-   img.onerror=()=>{img.replaceWith(Object.assign(document.createElement("div"),{className:"model-placeholder",textContent:"▧"}));};
-  }else{img.className="model-placeholder";img.textContent="▧";}
-  const name=document.createElement("strong");name.textContent=file.filename||file.name;
-  const info=document.createElement("small");const meta=file.metadata||file.local_metadata?.metadata||{};
-  info.textContent=(source==="local"?"Mounted G-code":"Printer listing")+(meta.estimated_print_time?" · "+meta.estimated_print_time:"")+(file.source_present===false?" · cached/offline":"");
-  button.append(img,name,info);
-  const select=()=>{document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));button.classList.add("selected");state.selected=file;text("selected-file",(file.relative_path||file.name)+" · preview only; open full Observatory for guarded actions");};
-  button.addEventListener("click",select);button.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
-  return button;
+   const button=document.createElement("div");
+   button.className="model";button.tabIndex=0;button.setAttribute("role","button");
+   button.setAttribute("aria-label","Inspect 3D print "+(file.filename||file.name));
+   const image=document.createElement("img");
+   const name=document.createElement("strong");name.textContent=file.filename||file.name;
+   const info=document.createElement("small");
+   const meta=file.metadata||file.local_metadata?.metadata||{};
+   info.textContent=(source==="local"?"Local G-code geometry":"Printer SD listing")+
+     (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
+     (file.source_present===false?" · cached/offline":"");
+   button.append(image,name,info);
+   setPreviewImage(image,file,source);
+   if(source==="local"&&file.source_present!==false){
+     const pill=document.createElement("span");pill.className="render-pill";pill.textContent="3D G-CODE";button.append(pill);
+   }
+   const select=()=>{
+     document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));
+     button.classList.add("selected");
+     state.selected=file;
+     text("selected-file",(file.relative_path||file.name)+" · read-only model inspection");
+     openInspector(file,source);
+   };
+   button.addEventListener("click",select);
+   button.addEventListener("keydown",e=>{
+     if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}
+   });
+   return button;
  }
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
