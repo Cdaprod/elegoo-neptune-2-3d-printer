@@ -13,7 +13,7 @@ export function createVisualStore({externalHistory=false}={}){
  return {get state(){return state;},subscribe(fn){listeners.add(fn);fn(state);return()=>listeners.delete(fn);},dispose(){disposed=true;controller.abort();clearTimeout(retry);clearInterval(historyTimer);socket?.close();listeners.clear();window.removeEventListener('hmi:telemetry',telemetry);window.removeEventListener('hmi:temperatures',temperatures);document.removeEventListener('visibilitychange',visibility);}};
 }
 export async function activeGeometry(state,signal){
- if(!state.job.active||!state.job.filename)return null;
+ if(!(state.job.active||state.phase==='completed')||!state.job.filename)return null;
  const response=await fetch('/api/printer/sdcard',{credentials:'same-origin',signal});if(!response.ok)return null;
  const listing=await response.json(),name=state.job.filename.toLowerCase(),base=name.split('/').at(-1);
  const files=(listing.local_index?.files||[]).filter(f=>f.source_present!==false&&(f.relative_path?.toLowerCase()===name||f.filename?.toLowerCase()===base));
