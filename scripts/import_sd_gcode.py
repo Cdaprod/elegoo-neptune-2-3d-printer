@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 from urllib.request import Request, build_opener
 from authorize_octoprint import NoRedirects, local_url
@@ -56,7 +57,10 @@ def main():
         if p.stat().st_size > MAX_BYTES:
             print("Skipped oversized:", p.name)
             continue
-        data = p.read_bytes()
+        with os.fdopen(os.open(p, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                continue
+            data = stream.read(MAX_BYTES + 1)
         if len(data) > MAX_BYTES:
             raise RuntimeError("File changed during read")
         # Preserve firmware-compatible root names when possible. Never overwrite.
