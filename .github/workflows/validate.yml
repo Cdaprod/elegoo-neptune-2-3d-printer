@@ -40,7 +40,8 @@ jobs:
           docker build -t neptune-observatory-manufacturing-ci .
           docker run --rm --network none --mount type=volume,dst=/data/manufacturing --entrypoint python neptune-observatory-manufacturing-ci -c "import os; from pathlib import Path; from mks_wifi_bridge.manufacturing.controller import Controller; assert os.getuid() != 0; c=Controller(Path('/data/manufacturing'),Path('/data/manufacturing/projects')); assert c.discover() == []; print('Non-root manufacturing registry initialized on fresh Docker volume')"
       - name: Validate flag-free SD rebuild and failure recovery
-        run: python ../../scripts/test_neptune_sd_rebuild.py -q
+        run: |
+          python ../../scripts/test_neptune_sd_rebuild.py -q
           python ../../scripts/test_appliance_config.py -q
       - name: Lint and formatting
         run: |
