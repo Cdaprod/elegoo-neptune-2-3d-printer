@@ -134,10 +134,13 @@ jobs:
         env:
           HMI_SCREENSHOT: /tmp/neptune-hmi-models-1280x400.png
           HMI_SCREENSHOT_DIR: /tmp/neptune-appliance-screenshots
+          SCULPTURE_SCREENSHOT_DIR: /tmp/neptune-sculpture-previews
         run: |
           node scripts/test-hmi-navigation.cjs
           node scripts/test-hmi-3d-gallery.cjs
           node scripts/test-appliance-hmi.cjs
+          node scripts/test-hmi-cinematic.cjs
+          node scripts/test-sculpture-browser.cjs
       - name: Upload HMI geometry gallery screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -146,6 +149,7 @@ jobs:
           path: |
             /tmp/neptune-hmi-models-1280x400.png
             /tmp/neptune-appliance-screenshots/*.png
+            /tmp/neptune-sculpture-previews/*.png
           if-no-files-found: ignore
 
 

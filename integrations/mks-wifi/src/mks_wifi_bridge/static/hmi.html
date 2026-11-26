@@ -55,6 +55,11 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
 </head>
 <body>
 <div id="hmi-ambience" aria-hidden="true"></div>
+<div id="idle-overlay" hidden aria-hidden="true" aria-label="Cinematic machine study">
+ <div class="cinema-brand">NEPTUNE OBSERVATORY <span>Machine study · schematic</span></div>
+ <div class="cinema-caption"><span class="cinema-kicker">FORM / MOTION / FABRICATION</span><strong id="cinema-shot">The architecture of motion</strong><span id="cinema-telemetry">Telemetry unavailable</span></div>
+ <button id="cinema-wake" type="button">Touch to return to your workspace <span>↗</span></button>
+</div>
 <div id="app">
 <header><span class="brand"><svg class="brandmark" viewBox="0 0 40 44" aria-hidden="true"><path d="M20 3v36M20 17 7 8v20a13 13 0 0 0 26 0V8L20 17Z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m20 3-5 8h10l-5-8Z" fill="currentColor"/></svg><span>Neptune Observatory<small>Printer workspace</small></span></span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span><a href="/">Desktop ↗</a></div></header>
 <main>
@@ -92,4 +97,5 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
 </dialog>
 <script src="/static/hmi.js" defer></script>
 <script type="module" src="/static/hmi_ambience.js"></script>
+<script type="module" src="/static/hmi_idle.js"></script>
 </body></html>

@@ -1,28 +1,14 @@
-/* Decorative schematic; never used as evidence of actual printer position. */
-import * as THREE from '/static/vendor/three.module.js';
-import {makeMachine} from '/static/digital_twin.js';
+/* Adapter: existing HMI lifecycle + authenticated shared telemetry, one renderer. */
+import {createSculpture} from '/static/sculpture/scene.js';
+import {createVisualStore,activeGeometry} from '/static/sculpture/store.js';
 const host=document.getElementById('hmi-ambience');
 try{
- const renderer=new THREE.WebGLRenderer({antialias:false,alpha:true,powerPreference:'low-power'});
- renderer.setPixelRatio(Math.min(devicePixelRatio,1));host.append(renderer.domElement);
- const scene=new THREE.Scene();scene.add(new THREE.HemisphereLight(0x73c9ff,0x07111e,2));
- const light=new THREE.DirectionalLight(0x8ee8ff,3);light.position.set(200,500,250);scene.add(light);
- const machine=makeMachine(scene);machine.setMachinePosition(110,110,85);
- const camera=new THREE.PerspectiveCamera(38,1,1,3000),focus=new THREE.Vector3(25,165,0);
- const reduce=matchMedia('(prefers-reduced-motion: reduce)');
- let last=0,phase=0,frame=0,disposed=false,painted=false;
- reduce.addEventListener("change",()=>{painted=false;});
- addEventListener("resize",()=>{painted=false;});
- function draw(now){
-  if(disposed)return;frame=requestAnimationFrame(draw);
-  if(document.hidden||(reduce.matches&&painted)||now-last<1000/20)return;
-  const delta=last?Math.min(now-last,100):0;last=now;if(!reduce.matches)phase+=delta*.000035;
-  const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
-  if(renderer.domElement.width!==w||renderer.domElement.height!==h)renderer.setSize(w,h,false);
-  camera.aspect=w/h;camera.updateProjectionMatrix();
-  camera.position.set(focus.x+Math.sin(.65+phase)*430,260+Math.sin(phase*.4)*20,Math.cos(.65+phase)*430);
-  camera.lookAt(focus);renderer.render(scene,camera);painted=true;
- }
- frame=requestAnimationFrame(draw);host.dataset.renderer='ready';
- addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frame);scene.traverse(o=>{o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();});renderer.dispose();},{once:true});
-}catch{host.dataset.renderer='unavailable';}
+ const store=createVisualStore({externalHistory:true});let engine,artifactKey=null,request=null,cinematic=false,inFlight=false,artifactAttempt=0;
+ let savedProfile='balanced';try{savedProfile=localStorage.getItem('neptune-visual-profile')||'balanced';}catch{}
+ engine=createSculpture(host,{profile:savedProfile,onMode:(id,mode)=>{const caption=document.getElementById('cinema-shot');if(caption)caption.textContent=mode.title;const kicker=document.querySelector('.cinema-kicker');if(kicker)kicker.textContent=mode.subtitle;},onMetrics:m=>{host.dataset.fps=m.fps.toFixed(1);host.dataset.profile=m.profile;}});
+ const unsubscribe=store.subscribe(state=>{engine.setState(state);const key=(state.job.active||state.phase==='completed')?state.job.filename:null;if(key===artifactKey&&(engine.geometryCount||inFlight||Date.now()-artifactAttempt<30000))return;artifactKey=key;artifactAttempt=Date.now();request?.abort();if(!key){engine.setGeometry(null);return;}request=new AbortController();inFlight=true;const expected=key;activeGeometry(state,request.signal).then(model=>{if(artifactKey===expected)engine.setGeometry(model);}).catch(()=>{}).finally(()=>{if(artifactKey===expected)inFlight=false;});});
+ const transition=e=>{cinematic=e.detail.active;engine.setCinematic(cinematic);};window.addEventListener('hmi:cinematic',transition);
+ const profileChange=e=>{if(e.key==='neptune-visual-profile')engine.setProfile(e.newValue);};window.addEventListener('storage',profileChange);
+ host.dataset.renderer='ready';
+ addEventListener('pagehide',event=>{if(event.persisted)return;request?.abort();unsubscribe();store.dispose();window.removeEventListener('hmi:cinematic',transition);window.removeEventListener('storage',profileChange);engine.dispose();});
+}catch(error){host.dataset.renderer='unavailable';console.warn('Sculpture renderer unavailable',error.message);}

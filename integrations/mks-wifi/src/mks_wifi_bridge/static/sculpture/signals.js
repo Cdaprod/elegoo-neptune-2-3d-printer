@@ -1,0 +1,23 @@
+import * as T from '/static/vendor/three.module.js';
+export function createSignals(parent,u){
+ const group=new T.Group();parent.add(group);const historyGroup=new T.Group();group.add(historyGroup);let signature='',received=-1,pulseAt=-100,lastPosition=new Float32Array(3),hasPosition=false,trailCount=0;
+ const path=new T.CatmullRomCurve3([new T.Vector3(-230,42,170),new T.Vector3(-340,70,80),new T.Vector3(-310,150,-220),new T.Vector3(50,220,-310),new T.Vector3(350,110,-240)]);
+ const geometry=new T.BufferGeometry().setFromPoints(path.getPoints(160));geometry.setAttribute('fraction',new T.Float32BufferAttribute(Array.from({length:161},(_,i)=>i/160),1));
+ const pulseUniforms={...u,pulseAt:{value:-100},latency:{value:1}};
+ const material=new T.ShaderMaterial({uniforms:pulseUniforms,vertexShader:'attribute float fraction;varying float f;void main(){f=fraction;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float f;uniform float time,pulseAt,latency,signal,intelligence;void main(){float t=(time-pulseAt)/latency;float pulse=exp(-pow((f-t)*17.,2.))*step(0.,t)*step(t,1.3);gl_FragColor=vec4(.25,.82,1.,(.04+pulse*.95)*signal*intelligence);}',transparent:true,depthWrite:false,blending:T.AdditiveBlending});group.add(new T.Line(geometry,material));
+ const trailArray=new Float32Array(64*3),trailTime=new Float32Array(64),trailGeometry=new T.BufferGeometry();trailGeometry.setAttribute('position',new T.BufferAttribute(trailArray,3));trailGeometry.setAttribute('stamp',new T.BufferAttribute(trailTime,1));
+ const trail=new T.Line(trailGeometry,new T.ShaderMaterial({uniforms:{...u,speed:{value:0}},vertexShader:'attribute float stamp;varying float age;uniform float time;void main(){age=time-stamp;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float age;uniform float signal,speed,architecture;void main(){gl_FragColor=vec4(.2,.85,1.,max(0.,1.-age/8.)*signal*speed*architecture);}',transparent:true,depthWrite:false,blending:T.AdditiveBlending}));trail.frustumCulled=false;group.add(trail);
+ function clearHistory(){historyGroup.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});historyGroup.clear();}
+ function rebuild(rows){clearHistory();const keys=[['nozzle',0xffa356,3.2],['nozzleTarget',0xffe5bb,.8],['bed',0x57d6d0,3.2],['bedTarget',0xb1fff0,.8]];
+  for(const [key,color,radius] of keys){let points=[];const flush=()=>{if(points.length>1){const curve=new T.CatmullRomCurve3(points);const mesh=new T.Mesh(new T.TubeGeometry(curve,Math.min(128,points.length*2),radius,4,false),new T.MeshBasicMaterial({color,transparent:true,opacity:1}));mesh.layers.enable(1);historyGroup.add(mesh);}points=[];};for(let i=0;i<rows.length;i++){if(rows[i][key]===null){flush();continue;}points.push(new T.Vector3(-420+i/Math.max(1,rows.length-1)*840,45+rows[i][key]*.72+Math.sin(i/Math.max(1,rows.length-1)*Math.PI)*70,-240-(key.startsWith('bed')?45:0)-Math.sin(i/Math.max(1,rows.length-1)*Math.PI)*85));}flush();}
+ }
+ function update(state,time,weight,signal){group.visible=weight>.005||u.architecture.value>.005;
+
+  if(state.observedAt!==received&&state.signal>.1){received=state.observedAt;pulseAt=time;}pulseUniforms.pulseAt.value=pulseAt;pulseUniforms.latency.value=state.latency.value===null?1:Math.max(.5,Math.min(3,state.latency.value/100+1));
+  historyGroup.visible=weight>.005;historyGroup.traverse(o=>{if(o.material)o.material.opacity=weight*(.2+.8*signal);});
+  const axes=state.axes,valid=axes.x.value!==null&&axes.y.value!==null&&axes.z.value!==null&&axes.x.fresh&&axes.y.fresh&&axes.z.fresh;
+  if(valid&&state.feed.value!==null&&signal>.3){const x=axes.x.value-110,y=38+axes.z.value,z=110-axes.y.value;if(!hasPosition||Math.hypot(x-lastPosition[0],y-lastPosition[1],z-lastPosition[2])>.05){if(trailCount===64){trailArray.copyWithin(0,3);trailTime.copyWithin(0,1);trailCount--;}trailArray.set([x,y,z],trailCount*3);trailTime[trailCount]=time;trailCount++;lastPosition[0]=x;lastPosition[1]=y;lastPosition[2]=z;hasPosition=true;trailGeometry.attributes.position.needsUpdate=true;trailGeometry.attributes.stamp.needsUpdate=true;}}
+  trailGeometry.setDrawRange(0,trailCount);trail.material.uniforms.speed.value=state.feed.value===null?0:Math.min(1,state.feed.value/3000);trail.visible=state.feed.value!==null;
+ }
+ return {group,update,setState(state){const key=state.history.length+':'+JSON.stringify(state.history.at(-1));if(key!==signature){signature=key;rebuild(state.history);}},dispose(){clearHistory();group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});group.removeFromParent();}};
+}

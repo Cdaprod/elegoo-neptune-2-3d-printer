@@ -21,3 +21,23 @@ body{background:radial-gradient(ellipse at 70% -20%,#1a3451,transparent 65%),var
 #view-controls.active{display:block!important;overflow:hidden}
 #operations-frame{width:100%;height:100%;border:0;border-radius:15px}
 @media(prefers-reduced-motion:reduce){#hmi-ambience{filter:none;opacity:.15}}
+/* One scene evolves from workspace ambience into a machine study. */
+#app{transform-origin:50% 45%;transition:opacity 1.2s ease,transform 1.8s cubic-bezier(.2,.8,.2,1),filter 1.3s ease}
+#hmi-ambience{transition:opacity 1.8s ease,filter 1.8s ease}
+body:is([data-idle-phase=entering],[data-idle-phase=cinematic]) #app{opacity:0;transform:perspective(1200px) translate3d(0,-16px,-100px) scale(.95);filter:blur(9px);pointer-events:none}
+body:is([data-idle-phase=entering],[data-idle-phase=cinematic]) #hmi-ambience{opacity:1;filter:blur(0) saturate(1.15)}
+#idle-overlay{position:fixed;inset:0;z-index:10;display:block;background:radial-gradient(ellipse at 50% 45%,transparent 30%,#040c18b8 100%);color:var(--text);opacity:0;transition:opacity 1.4s ease;touch-action:none;user-select:none}
+#idle-overlay[hidden]{display:none}
+body:is([data-idle-phase=entering],[data-idle-phase=cinematic]) #idle-overlay{opacity:1}
+.cinema-brand{position:absolute;left:34px;top:27px;font-size:11px;letter-spacing:.22em;color:#9fddf4}.cinema-brand span{display:block;font-size:10px;letter-spacing:.07em;color:var(--muted);margin-top:7px}
+.cinema-caption{position:absolute;left:34px;bottom:35px;display:grid;gap:10px;max-width:65%}.cinema-kicker{font-size:9px;letter-spacing:.25em;color:#7ac9e7}.cinema-caption strong{font-size:30px;letter-spacing:-.035em;font-weight:550;text-shadow:0 3px 20px #000}.cinema-caption>span:last-child{font-size:12px;color:#b3c8dc}
+#cinema-wake{position:absolute;right:30px;bottom:30px;min-height:48px;background:#0a1728a6;border-color:#4c75904d;backdrop-filter:blur(10px);font-size:12px;color:#b7cddd}#cinema-wake span{margin-left:12px;color:var(--cyan)}
+#app .tile,#app .model{transition:border-color .25s ease,box-shadow .3s ease,background .3s ease}
+#app nav button{transition:background .3s ease,color .3s ease,box-shadow .3s ease,transform .22s cubic-bezier(.16,1,.3,1)}
+#app button:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){#app,#hmi-ambience,#idle-overlay,#app nav button,#app .tile,#app .model{transition:none!important}body:is([data-idle-phase=entering],[data-idle-phase=cinematic]) #app{transform:none;filter:none}}
+
+#app main{position:relative}
+body[data-idle-phase=waking] #app{transition-duration:.65s,.95s,.65s}
+body[data-idle-phase=waking] #hmi-ambience{transition-duration:1s}
+body[data-idle-phase=waking] #idle-overlay{transition-duration:.7s}

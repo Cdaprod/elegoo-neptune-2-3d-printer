@@ -1,0 +1,6 @@
+import * as T from '/static/vendor/three.module.js';
+export function createCamera(){
+ const camera=new T.PerspectiveCamera(37,3.2,1,3000),curve=new T.CatmullRomCurve3([[650,360,800],[400,280,650],[280,200,450],[-280,210,450],[300,210,400],[-600,330,850]].map(p=>new T.Vector3(...p)),true,'catmullrom',.25),targetCurve=new T.CatmullRomCurve3([[0,175,0],[0,195,-20],[0,90,0],[0,90,0],[0,70,0],[0,180,-80]].map(p=>new T.Vector3(...p)),true,'catmullrom',.25),position=new T.Vector3(),target=new T.Vector3(),ambient=new T.Vector3(),home=new T.Vector3(0,175,0);
+ let mix=0;
+ return {camera,update(time,delta,cinematic,width,height,mode,reduced=false,snap=false,ambientTime=time){mix+=(Number(cinematic)-mix)*(1-Math.exp(-delta/(cinematic?.85:.35)));const t=reduced?.07:(time%90)/90;curve.getPoint(t,position);targetCurve.getPoint(t,target);ambient.set(480*Math.sin(.7+ambientTime*.009),300,480*Math.cos(.7+ambientTime*.009));if(reduced||snap)mix=Number(cinematic);camera.position.copy(ambient).lerp(position,mix);target.lerp(home,1-mix);camera.lookAt(target);camera.aspect=width/height;camera.fov+=(37-(mode==='thermodynamics'?2:0)*mix-camera.fov)*(1-Math.exp(-delta*2));camera.updateProjectionMatrix();},reset(){camera.position.set(650,360,800);camera.lookAt(0,175,0);}};
+}

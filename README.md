@@ -253,3 +253,7 @@ See [Pi deployment and remaining hardware acceptance](deploy/raspberry-pi/README
 [HMI interactions and rendered screenshots](docs/waveshare-hmi.md), and
 [fabrication gallery](docs/gcode-fabrication-gallery.md). Physical commands are never
 part of UI validation; print submission keeps its existing operator gates.
+
+The HMI also supports a continuous cinematic idle experience after 2½ minutes:
+its shared Three.js scene becomes a full-width machine study, and a consumed wake
+gesture transitions back to the same panel. See [HMI motion and idle behavior](docs/waveshare-hmi.md#continuous-cinematic-idle-mode).

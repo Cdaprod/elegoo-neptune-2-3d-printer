@@ -1342,3 +1342,26 @@ def test_waveshare_3d_model_apis_share_auth_and_do_not_send_printer_commands(tmp
             == 422
         )
         assert FakeClient.calls <= before + 1  # No preview-induced printer I/O.
+
+
+def test_visualization_lab_is_a_simulation_shell_with_existing_auth_boundaries() -> None:
+    service = make_service(interval=30.0)
+    app = create_app(service, bind_host="0.0.0.0", auth_token="lab-test")
+    with TestClient(app) as client:
+        response = client.get("/visual-lab")
+        assert response.status_code == 200
+        assert "SIMULATION" in response.text
+        assert "/static/sculpture/lab.js" in response.text
+        assert client.get("/static/sculpture/state.js").status_code == 200
+        assert client.get("/api/printer/status").status_code == 401
+        assert client.get("/api/hmi/model-geometry?path=anything.gcode").status_code == 401
+
+
+def test_history_retains_reported_temperature_targets_for_spatial_regulation_ribbons() -> None:
+    service = make_service(interval=30.0)
+    asyncio.run(service.poll_once())
+    sample = service.temperatures_payload()["history"][-1]
+    assert sample["nozzle_c"] == 24.0
+    assert sample["bed_c"] == 23.0
+    assert sample["nozzle_target_c"] == 0.0
+    assert sample["bed_target_c"] == 0.0

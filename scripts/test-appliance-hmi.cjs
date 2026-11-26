@@ -59,7 +59,24 @@ const path=require('node:path');
   await page.locator('nav [data-go="models"]').tap();
   await page.locator('.model').first().waitFor();
   const first=page.locator('.model').first();
-  await page.locator('.model img').evaluateAll(images=>Promise.all(images.map(img=>img.decode())));
+  // Exercise every real fixture thumbnail, including offscreen lazy images.
+  // Wait for the route transition before decoding; do not swallow broken images.
+  await page.locator('#view-models').evaluate(async panel=>{
+   await Promise.all(panel.getAnimations().map(animation=>animation.finished));
+  });
+  assert.equal(await page.locator('.model').count(),5,'Expected all five local G-code fixtures');
+  for(let i=0;i<5;i++){
+   const model=page.locator('.model').nth(i);
+   const img=model.locator('img');
+   await img.scrollIntoViewIfNeeded();
+   await img.evaluate(async image=>{
+    image.loading='eager';
+    try{await image.decode();}
+    catch(error){throw new Error('Thumbnail decode failed: '+image.currentSrc+' ('+error.message+')');}
+    if(!image.naturalWidth||!image.naturalHeight)throw new Error('Empty thumbnail: '+image.currentSrc);
+   });
+  }
+  await page.locator('#models').evaluate(e=>e.scrollLeft=0);
   if(screenshots)await page.screenshot({path:screenshots+'/hmi-gallery-1280x400.png'});
   const before=await page.locator('#models').evaluate(e=>e.scrollLeft);
   await swipe(900,180,-220,0);

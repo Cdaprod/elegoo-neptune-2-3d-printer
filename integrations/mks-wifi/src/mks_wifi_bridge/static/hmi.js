@@ -11,14 +11,20 @@
    if(!res.ok){let body=await res.json().catch(()=>({}));throw new Error(body.detail||"Request failed: "+res.status);}
    return res.json();
  }
- function route(view){if(!["overview","print-bay","models","observations","controls"].includes(view))return;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
+ let routeAnimation=null,leaveAnimation=null,departingPanel=null;
+ function finishDeparture(){if(departingPanel){for(const key of ['display','position','inset','zIndex','pointerEvents'])departingPanel.style[key]='';departingPanel.inert=false;departingPanel=null;}}
+ function route(view){if(!["overview","print-bay","models","observations","controls"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
  document.querySelector("main").addEventListener("pointerdown",e=>{if(e.pointerType==="touch"&&!e.target.closest("#models,button,a,input,canvas,dialog,iframe"))gesture={x:e.clientX,y:e.clientY};});
  document.querySelector("main").addEventListener("pointerup",e=>{if(!gesture)return;const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;gesture=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.6){const views=["overview","print-bay","models","observations","controls"];route(views[Math.max(0,Math.min(4,views.indexOf(state.view)+(dx<0?1:-1)))]);}});
+ let previouslyLive=false,previouslyError=false;
  function renderStatus(s){
+  window.dispatchEvent(new CustomEvent('hmi:telemetry',{detail:s}));
   const online=Boolean(s.connection?.connected)&&!s.stale;
+  const machineError=/error|fault/i.test(s.telemetry?.printer_state?.value||'');if((previouslyLive&&!online)||(machineError&&!previouslyError))window.dispatchEvent(new CustomEvent('hmi:interrupt'));previouslyLive=online;previouslyError=machineError;
+  const cinema=$('cinema-telemetry');if(cinema)cinema.textContent=(online?'Live':'Telemetry '+(s.stale?'stale':'unavailable'))+' · Nozzle '+value(s.telemetry?.nozzle_temperature)+' · Bed '+value(s.telemetry?.bed_temperature);
   const stateName=online?"live":s.stale?"stale":"offline";
   $("health").dataset.state=stateName;
   text("health","● "+(online?"Connected":s.stale?"Stale / unavailable":"Offline"));
@@ -182,7 +188,7 @@
  async function refresh(){
   if(document.hidden||state.login)return;
   try{const s=await api("/api/printer/status");renderStatus(s);}catch(err){if(err.message!=="Authentication required"){text("health","● API unavailable");$("health").dataset.state="offline";text("integrity","Unavailable");text("observations-note",err.message);}}
-  try{renderChart(await api("/api/printer/temperatures"));}catch(err){if(err.message!=="Authentication required")text("observations-note","Temperature history unavailable: "+err.message);}
+  try{const temperatures=await api("/api/printer/temperatures");renderChart(temperatures);window.dispatchEvent(new CustomEvent('hmi:temperatures',{detail:temperatures}));}catch(err){if(err.message!=="Authentication required")text("observations-note","Temperature history unavailable: "+err.message);}
  }
  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
  refresh();state.interval=setInterval(refresh,5000);
