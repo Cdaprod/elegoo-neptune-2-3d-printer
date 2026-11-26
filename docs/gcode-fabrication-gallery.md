@@ -99,3 +99,23 @@ uses bounded G-code extrusion reconstruction. The model inspector now resolves
 bundled Three.js imports explicitly. Model orbit and pinch do not navigate panels;
 carousel swipes do not accidentally select a model. See the [integrated HMI guide](waveshare-hmi.md)
 for actual 1280×400 fixture screenshots and deployment acceptance limits.
+
+## Import a physical SD card on the Pi
+
+Insert the card into a USB reader attached to the Pi (not its boot slot). Use
+`lsblk -o NAME,TRAN,FSTYPE,LABEL,MOUNTPOINTS` to identify its mounted path.
+With the printer idle, preview the import and then explicitly apply it:
+
+```sh
+make sd-import SD_MOUNT="/media/$USER/NEPTUNE"
+make sd-import SD_MOUNT="/media/$USER/NEPTUNE" APPLY=1
+```
+
+The importer copies supported G-code files into OctoPrint local storage via its
+existing authenticated API, with select and print disabled. It skips existing
+names rather than intentionally replacing them; avoid concurrent uploads during
+import. The original card is not modified. Refresh the HMI Fabrication gallery
+after import. The existing indexer and preview service then read the local copies.
+This is explicit import, not automatic hotplug discovery. Printer-slot-only SD
+entries still cannot supply raw geometry through M20; matching names alone do
+not prove identical contents. Inspect the actual file before printing.
