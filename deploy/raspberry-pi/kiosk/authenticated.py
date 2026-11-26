@@ -27,6 +27,7 @@ def main():
             executable_path="/usr/bin/chromium",
             headless=False,
             no_viewport=True,
+            chromium_sandbox=True,
             ignore_default_args=["--enable-automation"],
             args=["--ozone-platform=wayland", "--kiosk", "--no-first-run",
                   "--no-default-browser-check", "--password-store=basic"],
@@ -50,6 +51,28 @@ def main():
                 button.click()
                 field.wait_for(state="hidden", timeout=15000)
                 print("Kiosk access dialog dismissed.", flush=True)
+            # Enforce native fullscreen after authentication.
+            cdp = context.new_cdp_session(page)
+            window = cdp.send("Browser.getWindowForTarget")
+
+            cdp.send("Browser.setWindowBounds", {
+                "windowId": window["windowId"],
+                "bounds": {"windowState": "fullscreen"},
+            })
+
+            print("Native fullscreen requested.", flush=True)
+
+            print(
+                "Display geometry:",
+                page.evaluate("""() => ({
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                    screenWidth: screen.width,
+                    screenHeight: screen.height
+                })"""),
+                flush=True,
+            )
+
             while not page.is_closed():
                 time.sleep(1)
         finally:
