@@ -5,7 +5,17 @@ services:
     depends_on:
       octoprint:
         condition: service_started
+    volumes:
+      - type: volume
+        source: octoprint-data
+        target: /mnt/octoprint
+        read_only: true
     environment:
+      NEPTUNE_GCODE_SOURCE_DIR: /mnt/octoprint/octoprint/uploads
+      NEPTUNE_HMI_PREVIEW_CACHE_DIR: /data/hmi-previews
+      NEPTUNE_BUILD_NODE_URL: ${NEPTUNE_BUILD_NODE_URL:-}
+      NEPTUNE_BUILD_NODE_TOKEN: ${NEPTUNE_BUILD_NODE_TOKEN:-}
+      NEPTUNE_MANUFACTURING_UPLOAD_ENABLED: ${NEPTUNE_MANUFACTURING_UPLOAD_ENABLED:-false}
       NEPTUNE_PRINTER_BACKEND: octoprint
       OCTOPRINT_BASE_URL: http://octoprint:80
       OCTOPRINT_API_KEY: ${OCTOPRINT_API_KEY:?Set OCTOPRINT_API_KEY in the root .env for the combined stack}
@@ -20,6 +30,7 @@ services:
 
 # Preserve the existing standalone Observatory data volume across project names.
 volumes:
+  octoprint-data:
   commissioning-data:
     name: mks-wifi_commissioning-data
     external: true

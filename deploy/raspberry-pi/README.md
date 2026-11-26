@@ -1,52 +1,110 @@
-# Raspberry Pi appliance prerequisites
+# Commissioned Raspberry Pi appliance
 
-Run `bash deploy/raspberry-pi/provision.sh` on Raspberry Pi OS ARM64.
+The deployment uses one Observatory backend, OctoPrint, and the dedicated `/hmi`
+presentation at localhost:8000. Desktop/mobile clients keep `/`. Run all Make
+commands as the commissioned desktop user, not root. Production updates need
+read access to GitHub, no GitHub write credentials or separate frontend deployment.
 
-## Display
+## Update the commissioned Pi
 
-Run as the desktop user, not root:
+Inspect and preserve any local changes first (`git status --short`). Then:
 
-- `bash deploy/raspberry-pi/rotate-display.sh --list`
-- `bash deploy/raspberry-pi/rotate-display.sh 90` for a temporary test.
-- `bash deploy/raspberry-pi/rotate-display.sh 90 --persist` after checking touch corners.
-- Use 270 for the opposite orientation or normal to restore portrait, with --persist to save that choice.
+```sh
+cd ~/elegoo-neptune-2-3d-printer
+git pull --ff-only origin main
+make deploy
+```
 
-Persistence uses a dedicated XDG desktop autostart entry, without replacing labwc configuration. Remove `~/.config/autostart/neptune-display.desktop` (or the equivalent XDG_CONFIG_HOME path) to disable it. Verify after reboot; desktop startup ordering has not yet been physically tested.
+`make deploy` applies the hardware profile, installs the pinned Playwright runtime,
+reuses the existing OctoPrint application key and Observatory token, builds the
+existing Compose services, installs desktop autostart, and restarts the managed
+kiosk. Existing Docker volumes and the browser profile are retained. Sudo may be
+needed for the journald drop-in. First provisioning still uses `provision.sh` and
+the documented one-time OctoPrint authorization workflow; updates do not reset it.
+Never run `docker compose down -v` as part of an update.
 
-The observed preferred HDMI-A-1 mode is 400x1280 at 60.234001 Hz, scale 1, with a successful 90-degree session transform. The profile retains legacy timings for reference only. No boot files are changed.
+## Physically validated baseline
 
-Cage does not inherit desktop autostart. Its future launcher must consume the same profile and apply the output transform through a compositor-supported mechanism before enabling production mode. Cage rotation and touch mapping remain unverified.
+`74fe9cf`, `a5d955e`, `2bd105a`, and **`c585943`** record commissioning.
+The exact fullscreen implementation is captured at `c585943`; earlier statements
+that its diff was uncaptured or native touch/fullscreen was pending are obsolete.
 
-## Application
+- Raspberry Pi 4, Raspberry Pi OS Desktop ARM64 Trixie, host `cda-rpi-4-printer`.
+- Wayland/labwc 0.20.2, HDMI-A-1 native 400×1280, transform 90 → logical 1280×400.
+- USB 0712:000a, hid-multitouch, actual device name discovered from sysfs on deploy.
+- Touch maps to HDMI-A-1, matrix `0 1 0 -1 0 1`, `mouseEmulation="no"`.
+- Operator confirmed fullscreen, tapping, and one-finger scrolling without text selection.
+- Dedicated persistent Chromium profile, Playwright authentication, systemd user
+  lifecycle, CDP native fullscreen, and persistent tmux journal viewer are retained.
 
-Follow the root README and `make up` authorization workflow; do not bypass OctoPrint application key approval. If using Docker without sudo, explicitly grant your trusted account docker group membership and reconnect; this is root-equivalent access. No automatic printer motion or kiosk activation is performed.
+`authenticated.py` retains no fixed viewport, omits `--enable-automation`, and
+requests `Browser.setWindowBounds` fullscreen after authentication. The Waveshare
+profile now selects `/hmi`; `NEPTUNE_KIOSK_PATH=/` is the explicit diagnostic fallback.
+No Cage compositor or replacement kiosk is introduced.
 
-## Pi 4 commissioning (2026-11-26)
+## Idempotent host configuration
 
-Raspberry Pi OS Desktop ARM64 (Trixie), native Wayland desktop, HDMI-A-1 at 400x1280 transformed 90 degrees to 1280x400. USB touch enumerates as 0712:000a, WaveShare WaveShare, using hid-multitouch and libinput touch capability. A replacement data-capable USB cable resolved absent enumeration. The observed feature-report mismatch warning did not prevent touch interaction. No custom driver or boot overlay was required. Corner accuracy and reboot persistence remain unverified.
+`configure-appliance.sh` and `configure_appliance.py` are called by `make deploy`.
+They discover the touchscreen by vendor/product rather than event number or USB
+port. Existing labwc namespace, unrelated elements and comments are preserved;
+a single `rc.xml.pre-neptune` checkpoint is retained. Malformed XML or ambiguous/
+absent touchscreen identity stops deployment rather than guessing. Only matching
+WaveShare entries are reconciled; matrix and native touch values come from the
+validated profile. Changes reload the running labwc user process.
 
-Use `lsusb -d 0712:000a`, `sudo libinput list-devices` and `sudo dmesg --follow-new --human` to diagnose touch. Do not hardcode event4. If enumeration is absent, test a known data cable and USB port before changing calibration.
+Display rotation uses the existing `rotate-display.sh 90 --persist` desktop
+autostart mechanism. Working EDID/boot settings are not replaced.
 
-Run `make up` over SSH; approve the one-time app-key URL in a graphical browser on the LAN, replacing loopback with the Pi hostname/address. Keep the command running. `BROWSER=true make up` was verified as a workaround. The key is saved in private .env; use `make token` locally for the separate Observatory dashboard token. Never commit either credential. Finish OctoPrint's first-run wizard before authorization.
+A dedicated `/etc/systemd/journald.conf.d/60-neptune.conf` sets:
 
-Both containers built and started, and LAN dashboard authentication was verified. OctoPrint should use RAW TCP to the configured MKS WiFi endpoint (port 8080), not RFC2217. Live telemetry and print submission remain unverified. Do not run a competing raw TCP client.
+```ini
+[Journal]
+Storage=persistent
+SplitMode=uid
+SystemMaxUse=128M
+MaxRetentionSec=14day
+```
 
-Use `make kiosk` from the active desktop account (or SSH with the active Wayland socket). Persistent kiosk startup and restricted local authentication are follow-up work; retain LAN token enforcement and machine-control safety gates. Do not expose the HTTP services publicly.
+Other journal configuration is preserved. Inspect effective settings with
+`systemd-analyze cat-config systemd/journald.conf`; host-specific later drop-ins
+can override these values. `make kiosk-logs` attaches to the existing tmux viewer;
+Ctrl+B then D detaches. `make kiosk-status`, `make kiosk-restart`, `make kiosk-stop`
+and `make kiosk-disable` retain their existing meanings. Desktop auto-login remains
+necessary for unattended user-session startup.
 
-OctoPrint Python 3.10.18 is end-of-life. The observed working subset is Pillow 12.0.0, Slicer-Thumbnails 1.2.3, gcode-thumbnail-tool 0.1.4, OctoPrint-SpoolManager 1.7.8, Print-Job-History 1.17.5; pip check passed. Slicer-Thumbnails 1.2.4 failed resolving Pillow >=13.0.0. Avoid UI plugin upgrades; migrate to a supported Python base through tested ARM64/AMD64 builds, preserving the persistent volume. Full dependency locking and migration validation remain outstanding.
+## Unified HMI, Print Bay and fabrication gallery
 
-## Managed keyboard-free kiosk
+The HMI has persistent machine status and horizontal Overview, Print Bay,
+Fabrication gallery, Observations and Controls navigation. Print Bay reuses its
+existing page in a same-origin compact presentation, with the same authentication
+cookie and API; no duplicate app or backend is started. Plate previews use exported
+STL meshes. Automatic build/slice/stage runs on the configured Mac worker; Pi-local
+staged artifacts remain available offline. Configure the existing manufacturing
+agent overlay if synchronizing from a Mac; no build-node credentials are invented
+or required merely to deploy the appliance UI.
 
-Run `make kiosk-setup` once, then `make kiosk-enable` to install the user service and desktop autostart. Requires desktop auto-login for unattended boot. `make kiosk` starts in background, `make kiosk-status` checks systemd, `make kiosk-logs` attaches to a dedicated tmux journal viewer (Ctrl+B then D detaches), `make kiosk-stop` stops until next start/login, `make kiosk-disable` removes autostart and stops. `make kiosk-debug` is foreground only; stop managed service first. systemd owns the browser process, tmux is recreated at desktop login. Journal retention across reboot depends on journald storage configuration. Physical reboot validation pending. Existing LAN authentication remains required. The kiosk uses a dedicated browser profile with basic password storage; do not save unrelated passwords there.
+The root stack now exposes the existing OctoPrint volume read-only to Observatory;
+only `/mnt/octoprint/octoprint/uploads` is indexed for fabrication geometry. Source files are
+never modified. The standalone optional read-only host-directory overlay remains
+available. Cached reconstruction lives in the existing Observatory data volume.
+A remote printer SD filename alone cannot provide geometry without G-code bytes.
 
-## Commissioning handoff — 2026-11-26
+File selection never prints. Machine controls use the existing desktop control
+flow, authentication, Operator Mode, readiness checks, and explicit confirmation.
+Uploads and physical actions remain explicit. No motion, heating, uploads or print
+submission are part of application validation.
 
-Physical operator validation: Chromium now opens fullscreen under the managed kiosk service; touch taps and one-finger scrolling work without selecting text. The previous browser window showed automation chrome despite --kiosk. The repository launcher now requests no fixed Playwright viewport and omits --enable-automation; compare against the Pi-local patch before replacing it. The exact local launcher diff was not captured.
+## Verification and remaining acceptance
 
-The working labwc rc.xml uses the Openbox namespace, a touch entry with deviceName `WaveShare WaveShare (USB 1-1.4)`, mapToOutput `HDMI-A-1`, mouseEmulation `no`, and a libinput device category matching that name with calibrationMatrix `0 1 0 -1 0 1`. USB topology is observed, not portable. Backups rc.xml.pre-calibration and rc.xml.pre-native-touch exist locally. Reload from SSH with `pkill -HUP -u "$(id -u)" -x labwc` (labwc --reconfigure failed because LABWC_PID was absent). Preserve unrelated XML and discover device name on each host. Profile values are recorded but automatic application is still pending.
+Browser regressions exercise exactly 1280×400, native CDP touch swipes, independent
+horizontal gallery scrolling, isolated orbit gestures, document overflow, shared
+login cookies, WebGL rendering and desktop/mobile parity. Screenshots in
+`docs/screenshots/hmi-*-1280x400.png` are actual Chromium renders with synthetic
+fixtures, not production telemetry or photographed CAD. CI builds/import-checks the
+Observatory image on native ARM64, alongside backend/browser and OctoPrint image tests.
 
-### Next development: recover ultrawide HMI
-
-The currently displayed localhost:8000 page is the standard desktop dashboard, not the dedicated 1280x400 HMI. Recover `feat/waveshare-79-hmi` and `feat/gcode-3d-fabrication-gallery` against current main; inspect ancestry and reconcile overlapping backend changes rather than blindly merging stale branches. Reuse existing hmi.html, hmi.js, hmi_model_viewer.js, gcode_fabrication.py and tests. Select the dedicated HMI route from the Waveshare kiosk profile, preserve shared backend and token enforcement, prioritize horizontal navigation and 3D model gallery, test 1280x400 overflow and touch gestures, and generate actual screenshots. Preserve desktop/mobile UI. No printer motion or heating during UI validation.
-
-Before pulling on the Pi, inspect git status and diff; preserve local launcher edits and labwc backups. Reboot persistence, corner accuracy, live printer telemetry and print submission remain unverified. Do not reset local changes or commit .env.
+This software integration has not been installed on the physical Pi by Codex.
+Reboot persistence, touch corner accuracy and performance of the integrated gallery
+on its GPU remain on-device acceptance checks. Physical printing is not exercised.
+The existing OctoPrint base/plugin Python migration remains separate work; no plugin
+upgrade is performed by this integration. Keep HTTP services on a trusted LAN.

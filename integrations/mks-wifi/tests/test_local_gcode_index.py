@@ -169,3 +169,18 @@ def test_symlinked_gcode_files_are_not_read(tmp_path: Path) -> None:
 
     assert indexed["files_seen"] == 0
     assert indexed["files"] == []
+
+
+def test_short_sd_extensions_are_indexed_without_appledouble_files(tmp_path: Path) -> None:
+    source = tmp_path / "volume"
+    source.mkdir()
+    (source / "BRACKET.GCO").write_bytes(_gcode())
+    (source / "OTHER.GC").write_bytes(_gcode())
+    (source / "._BRACKET.GCO").write_bytes(_gcode())
+    timeline = MotionTimeline(tmp_path / "timeline.sqlite3")
+    indexer = LocalGcodeIndexer(source, timeline)
+    indexed = indexer.scan()
+    assert indexed["files_with_previews"] == 2
+    matched = indexer.match_entries([{"name": "BRACKET.GCO", "kind": "file"}], indexed)
+    assert matched[0]["preview_available"] is True
+    assert matched[0]["local_match"] == "unambiguous"

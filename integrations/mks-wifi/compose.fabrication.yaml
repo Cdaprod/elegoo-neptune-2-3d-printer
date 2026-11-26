@@ -1,0 +1,11 @@
+# Optional read-only mounted G-code directory for the existing Observatory.
+# Use with integrations/mks-wifi/compose.yaml (do not run a second printer client).
+services:
+  neptune-observatory:
+    volumes:
+      - type: bind
+        source: ${NEPTUNE_GCODE_HOST_DIR:?Set NEPTUNE_GCODE_HOST_DIR to an absolute local G-code folder}
+        target: /mnt/neptune-source
+        read_only: true
+    environment:
+      NEPTUNE_HMI_PREVIEW_CACHE_DIR: /data/hmi-previews

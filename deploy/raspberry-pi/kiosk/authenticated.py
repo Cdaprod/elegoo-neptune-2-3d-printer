@@ -20,7 +20,12 @@ def main():
     token = parse_env(env.read_text()).get("NEPTUNE_OBSERVATORY_TOKEN", "")
     if not token or token.startswith("replace-with-"):
         raise SystemExit("Run make setup first")
-    url = "http://localhost:8000"
+    origin = "http://localhost:8000"
+    route = os.environ.get("NEPTUNE_KIOSK_PATH", "/hmi")
+    if route not in ("/", "/hmi"):
+        raise SystemExit("Unsupported kiosk presentation")
+    url = origin + route
+    expected = url.rstrip("/")
     with sync_playwright() as playwright:
         context = playwright.chromium.launch_persistent_context(
             str(Path.home() / ".config/neptune-kiosk"),
@@ -35,17 +40,17 @@ def main():
         try:
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(url, wait_until="domcontentloaded")
-            if page.url.rstrip("/") != url:
+            if page.url.rstrip("/") != expected:
                 raise RuntimeError("Unexpected kiosk navigation")
-            field = page.get_by_label("Access token", exact=True)
-            button = page.get_by_role("button", name="Connect dashboard", exact=True)
+            field = page.get_by_label("Observatory access token" if route == "/hmi" else "Access token", exact=True)
+            button = page.get_by_role("button", name="Connect" if route == "/hmi" else "Connect dashboard", exact=True)
             # Existing authenticated sessions may not display the dialog.
             try:
                 field.wait_for(state="visible", timeout=10000)
             except Exception:
                 print("No access dialog detected; verify dashboard on display.", flush=True)
             else:
-                if page.url.rstrip("/") != url:
+                if page.url.rstrip("/") != expected:
                     raise RuntimeError("Unexpected kiosk origin")
                 field.fill(token)
                 button.click()

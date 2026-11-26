@@ -51,8 +51,9 @@ rotate-token:
 sd-rebuild:
 	@$(PYTHON) scripts/neptune_sd_rebuild.py
 
-deploy: kiosk-setup up
-	@$(MAKE) kiosk
+deploy: appliance-config kiosk-setup up
+	@bash deploy/raspberry-pi/kiosk/manage.sh enable
+	@$(MAKE) kiosk-restart
 
 kiosk:
 	@bash deploy/raspberry-pi/kiosk/manage.sh start
@@ -68,3 +69,7 @@ kiosk-stop kiosk-restart kiosk-status kiosk-logs kiosk-enable kiosk-disable:
 kiosk-setup:
 	@$(PYTHON) -m venv "$$HOME/.local/share/neptune-kiosk/venv"
 	@"$$HOME/.local/share/neptune-kiosk/venv/bin/python" -m pip install "playwright==1.56.0"
+
+.PHONY: appliance-config
+appliance-config:
+	@bash deploy/raspberry-pi/configure-appliance.sh

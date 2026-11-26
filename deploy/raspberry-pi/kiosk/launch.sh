@@ -12,6 +12,8 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
 fi
 url="http://localhost:8000"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/../profiles/waveshare-7.9.env"
+export NEPTUNE_KIOSK_PATH="${NEPTUNE_KIOSK_PATH:-$KIOSK_PATH}"
 venv="$HOME/.local/share/neptune-kiosk/venv"
 [[ -x "$venv/bin/python" ]] || { echo "Run make kiosk-setup first" >&2; exit 1; }
 echo "Waiting for Observatory on $WAYLAND_DISPLAY..."

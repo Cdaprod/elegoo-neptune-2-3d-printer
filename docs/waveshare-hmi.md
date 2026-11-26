@@ -1,62 +1,57 @@
 # Waveshare 7.9-inch Neptune HMI
 
-The same Neptune Observatory container now exposes two frontends:
+The existing Observatory serves `/` for desktop/mobile and `/hmi` for the actual
+1280×400 Waveshare viewport. Both use one backend, authentication cookie, telemetry,
+file management and guarded machine-control implementation.
 
-- `/` — existing desktop/mobile Observatory including authenticated printer controls.
-- `/hmi` — 1280 × 400 landscape, touch-first, **read-only** Waveshare interface.
+Deploy the commissioned Pi with `git pull --ff-only origin main && make deploy`.
+See [appliance deployment](../deploy/raspberry-pi/README.md) for hardware settings,
+credentials, systemd lifecycle and physical acceptance limits. The validated
+`c585943` fullscreen sequence is retained; no independent Chromium launch is needed.
+The profile explicitly selects `/hmi` using the existing persistent browser profile.
 
-The display is mounted vertically, facing the operator, on the top stationary chassis extrusion. The UI itself is landscape, with no tilt compensation or scaled desktop widgets.
+## Interaction
 
-## Deployment (no additional app or backend)
+Persistent status remains above horizontal Overview / Print Bay / Fabrication
+gallery / Observations / Controls navigation. Swipe on noninteractive panel space
+changes views. Swipe inside a carousel scrolls its models. Orbit/pinch gestures are
+captured by the 3D canvas and do not navigate the HMI. Vertical scrolling is confined
+to deliberate content panels; the 1280×400 document itself does not scroll vertically.
 
-The HMI is included in the existing Observatory image and is already served on the regular Observatory port (`http://<pi-host>:8000/hmi`). No separate frontend service, Quantum File Browser container, new credentials, or additional printer connection is required.
+Print Bay reuses `/print-bay?presentation=hmi` in a same-origin frame to preserve
+its existing implementation and authentication. Exported STL plate models are
+interactive. Automatic preparation happens before **Ready to send**; stale or invalid
+artifacts are not deliverable. Upload and SD export remain explicit operations.
+The desktop Print Bay keeps recovery/history controls. Existing machine controls
+remain in Observatory with Operator Mode, readiness and confirmation gates; selecting
+a gallery model does not submit or start a print.
 
-To also publish an optional dedicated HMI port, use the standalone Observatory compose:
+The fabrication gallery reconstructs deposited filament from locally available
+G-code, with a shaded geometry preview and a bundled Three.js orbit inspector.
+The root stack reads existing OctoPrint uploads through a read-only volume; no manual
+extra port or frontend service is needed. See [gallery details](gcode-fabrication-gallery.md).
 
-```sh
-docker compose -f integrations/mks-wifi/compose.yaml -f integrations/mks-wifi/compose.hmi.yaml up -d --build
-```
-
-Open `http://<docker-host>:8001/hmi` for the same backend, or use port 8000. To use the root OctoPrint-combined stack, run `docker compose up -d --build` from the root directory and open `http://<docker-host>:8000/hmi`; do not launch a second independent Observatory against the same persistent volume.
-
-The Compose overlay only changes published ports. It does not change how the application accesses OctoPrint, the MKS printer, credentials, the history database, or the existing Docker volume.
-
-## Waveshare kiosk
-
-Set the HDMI display to its physical landscape native mode **1280 × 400**, and configure touch orientation to match. On Raspberry Pi OS, enable proper multitouch rather than pointer-only emulation when swipe gestures are desired. In a kiosk session already configured with an unlocked local browser profile, launch:
-
-```sh
-chromium --kiosk --no-first-run --disable-session-crashed-bubble http://127.0.0.1:8000/hmi
-```
-
-When the Observatory runs elsewhere, use its reachable hostname instead of localhost. The kiosk does not embed a token in the URL or environment; log in using the Observatory token over a trusted network. Use HTTPS through a reverse proxy when clients connect over an untrusted network. Authentication uses the existing 12-hour HttpOnly session cookie.
-
-The HMI is designed to occupy the browser's actual viewport, not scale the desktop dashboard. Avoid OS/browser scaling that makes 1280 × 400 physical pixels different from the CSS viewport. Test touch-target size on the real panel.
-
-## Features
-
-- Compact persistent live connection/nozzle/bed header.
-- Swipeable Overview / Models / Observations / Controls views, plus explicit large nav buttons.
-- Independently horizontally scrollable model cards with touch scroll snapping.
-- Existing mounted-directory G-code cache with embedded OrcaSlicer PNG/JPEG thumbnails.
-- Existing printer SD cached listing and thumbnail endpoint, with source indications.
-- Read-only observed nozzle/bed history plots with no fabricated samples.
-- Offline, stale, and authentication feedback.
-- Safe handoff to full Observatory for operator-gated machine controls.
-
-**Important limitations:** Model thumbnails are displayed only when the existing G-code thumbnail indexer has a valid embedded preview. This change does not add STEP/STL/3MF rendering, arbitrary mounted file browsing, camera integration, or printer-control shortcuts. No print is started from a model card. When the source volume is absent, cached entries may be stale.
-
-To ingest local G-code previews, mount a read-only directory at `/mnt/neptune-source` in the existing `neptune-observatory` container, as documented in the existing storage/setup guides. Avoid storing runtime files in the repository.
-
-## Smoke test
-
-Run the API tests and JavaScript syntax checks in the existing development environment:
+## Validation
 
 ```sh
 cd integrations/mks-wifi
-uv run --extra web pytest tests/test_observatory.py -q
+uv sync --locked --extra dev --extra web
+uv run pytest -q
 cd ../..
-node --check integrations/mks-wifi/src/mks_wifi_bridge/static/hmi.js
+python3 scripts/test_appliance_config.py -q
+python3 scripts/hmi_browser_fixture.py
+# Start an isolated Observatory on port 8000 with printer controls disabled,
+# NEPTUNE_GCODE_SOURCE_DIR=/tmp/neptune-hmi-browser, and writable cache paths.
+node scripts/test-hmi-navigation.cjs
+node scripts/test-hmi-3d-gallery.cjs
+HMI_SCREENSHOT_DIR=docs/screenshots node scripts/test-appliance-hmi.cjs
 ```
 
-With Chromium and Playwright available, run `node scripts/test-hmi-navigation.cjs` against a locally running Observatory on port 8000. The browser script verifies 1280 × 400 geometry, touch nav, and that the existing dashboard remains available. It does not dispatch printer commands.
+These rendered screenshots use synthetic fixtures and unavailable printer telemetry:
+
+![Print Bay at 1280×400](screenshots/hmi-print-bay-1280x400.png)
+![Fabrication gallery at 1280×400](screenshots/hmi-gallery-1280x400.png)
+
+CI also verifies shared authentication, desktop/mobile parity, isolated touch/orbit
+interaction, and absence of automatic printer writes. Physical Pi GPU performance
+and reboot acceptance remain to be checked on the commissioned appliance.
