@@ -84,7 +84,7 @@ agent overlay if synchronizing from a Mac; no build-node credentials are invente
 or required merely to deploy the appliance UI.
 
 The root stack now exposes the existing OctoPrint volume read-only to Observatory;
-only `/mnt/octoprint/uploads` is indexed for fabrication geometry. Source files are
+only `/mnt/octoprint/octoprint/uploads` is indexed for fabrication geometry. Source files are
 never modified. The standalone optional read-only host-directory overlay remains
 available. Cached reconstruction lives in the existing Observatory data volume.
 A remote printer SD filename alone cannot provide geometry without G-code bytes.

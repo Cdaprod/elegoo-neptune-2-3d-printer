@@ -77,6 +77,10 @@ jobs:
           assert env["NEPTUNE_CONTROL_EXECUTION_ENABLED"] == "false"
           assert env["OCTOPRINT_API_KEY"] == "validation-only-not-a-secret"
           assert "octoprint" in observer["depends_on"]
+          assert env["NEPTUNE_GCODE_SOURCE_DIR"] == "/mnt/octoprint/octoprint/uploads"
+          upload_mount = next(v for v in observer["volumes"] if v["target"] == "/mnt/octoprint")
+          assert upload_mount["read_only"] is True
+          assert upload_mount["source"] == services["octoprint"]["volumes"][0]["source"]
           printer = services["octoprint"]["environment"]
           assert printer["OCTOPRINT_MKS_WIFI_HOST"] == "printer.example.invalid"
           assert str(printer["OCTOPRINT_MKS_WIFI_PORT"]) == "8080"

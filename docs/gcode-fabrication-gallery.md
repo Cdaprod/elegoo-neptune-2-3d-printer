@@ -67,7 +67,7 @@ transport or controls. `compose.hmi.yaml` can additionally publish port 8001.
 
 For the **root OctoPrint-combined deployment**, `make deploy` builds the existing
 Observatory and OctoPrint services. Observatory receives the existing OctoPrint data
-volume read-only at `/mnt/octoprint` and indexes only `/mnt/octoprint/uploads`.
+volume read-only at `/mnt/octoprint` and indexes only `/mnt/octoprint/octoprint/uploads`.
 The existing volume identity and contents are preserved. No additional mount,
 frontend port, printer connection or application instance is required. Files that
 exist only on the physical printer SD still need local bytes for reconstruction.

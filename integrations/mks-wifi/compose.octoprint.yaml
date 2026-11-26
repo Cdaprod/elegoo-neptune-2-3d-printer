@@ -11,7 +11,7 @@ services:
         target: /mnt/octoprint
         read_only: true
     environment:
-      NEPTUNE_GCODE_SOURCE_DIR: /mnt/octoprint/uploads
+      NEPTUNE_GCODE_SOURCE_DIR: /mnt/octoprint/octoprint/uploads
       NEPTUNE_HMI_PREVIEW_CACHE_DIR: /data/hmi-previews
       NEPTUNE_BUILD_NODE_URL: ${NEPTUNE_BUILD_NODE_URL:-}
       NEPTUNE_BUILD_NODE_TOKEN: ${NEPTUNE_BUILD_NODE_TOKEN:-}
