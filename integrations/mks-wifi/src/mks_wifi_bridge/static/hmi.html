@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#09131e">
 <title>Neptune Observatory · Waveshare HMI</title>
+<link rel="stylesheet" href="/static/observatory_theme.css">
+<link rel="stylesheet" href="/static/hmi_theme.css">
 <style>
-:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#09131e;color:#edf6ff;font-synthesis:none}
 *{box-sizing:border-box}body{margin:0;overflow:hidden}button,input{font:inherit}button{cursor:pointer;min-height:48px;border:1px solid #35536c;background:#172b40;color:#eef7ff;border-radius:11px;padding:6px 15px;touch-action:manipulation}button:focus-visible,a:focus-visible{outline:3px solid #6bcbff;outline-offset:2px}button[aria-current="page"]{background:#25557b;border-color:#60b8f5}
 #app{width:100vw;height:100dvh;min-height:280px;display:grid;grid-template-rows:48px minmax(0,1fr) 59px;gap:8px;padding:8px}
 header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 14px;background:#152638;border:1px solid #2e445c;border-radius:10px;white-space:nowrap;min-width:0}
@@ -53,28 +54,25 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
 <script type="importmap">{"imports":{"three":"/static/vendor/three.module.js"}}</script>
 </head>
 <body>
+<div id="hmi-ambience" aria-hidden="true"></div>
 <div id="app">
-<header><span class="brand">NEPTUNE · HMI</span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span><a href="/">Desktop ↗</a></div></header>
+<header><span class="brand"><svg class="brandmark" viewBox="0 0 40 44" aria-hidden="true"><path d="M20 3v36M20 17 7 8v20a13 13 0 0 0 26 0V8L20 17Z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m20 3-5 8h10l-5-8Z" fill="currentColor"/></svg><span>Neptune Observatory<small>Printer workspace</small></span></span><div class="topdata"><span id="health" data-state="offline">● Connecting</span><span>Nozzle <b id="nozzle">—</b></span><span>Bed <b id="bed">—</b></span><span id="age" class="muted">No observation</span><a href="/">Desktop ↗</a></div></header>
 <main>
 <section id="view-overview" class="view active" aria-label="Printer overview">
- <article class="tile"><h2 class="heading">Current print</h2><div id="job-state" class="hero">Waiting for telemetry</div><div id="job-file" class="filename muted">No verified job</div><progress id="progress" value="0" max="100"></progress><div id="job-meta" class="detail">Progress not reported</div></article>
- <article class="tile"><h2 class="heading">Printer state</h2><div id="printer-state" class="hero">—</div><div id="printer-source" class="detail">Status source unavailable</div><div id="observed" class="detail">No observations received</div></article>
- <article class="tile"><h2 class="heading">Temperature</h2><div class="value">Nozzle <span id="nozzle-large">—</span></div><div class="value">Bed <span id="bed-large">—</span></div><div class="detail">Observed telemetry · read only</div></article>
+ <article class="card tile"><h2 class="heading">Current print</h2><div id="job-state" class="hero">Waiting for telemetry</div><div id="job-file" class="filename muted">No verified job</div><progress id="progress" value="0" max="100"></progress><div id="job-meta" class="detail">Progress not reported</div></article>
+ <article class="card tile"><h2 class="heading">Printer state</h2><div id="printer-state" class="hero">—</div><div id="printer-source" class="detail">Status source unavailable</div><div id="observed" class="detail">No observations received</div></article>
+ <article class="card tile"><h2 class="heading">Temperature</h2><div class="value">Nozzle <span id="nozzle-large">—</span></div><div class="value">Bed <span id="bed-large">—</span></div><div class="detail">Observed telemetry · read only</div></article>
 </section>
 <section id="view-print-bay" class="view" aria-label="Staged manufacturing artifacts"><iframe id="print-bay-frame" title="Print Bay staged 3D models" src="/print-bay?presentation=hmi"></iframe></section>
 <section id="view-models" class="view" aria-label="Models and print files">
  <div class="models-head"><h2 class="heading">Swipe to browse print files</h2><span id="model-count" class="muted">Loading cached index…</span><button id="refresh-files" type="button">Refresh listing</button></div>
- <div id="models" aria-label="Horizontally scrollable file previews" tabindex="0"><div class="tile">Loading files…</div></div>
+ <div id="models" aria-label="Horizontally scrollable file previews" tabindex="0"><div class="card tile">Loading files…</div></div>
 </section>
 <section id="view-observations" class="view" aria-label="Printer observations">
- <article class="tile"><div class="observations-head"><h2 class="heading">Temperature observations</h2><span class="legend"><b>●</b> Nozzle &nbsp; <b class="bed">●</b> Bed</span></div><div class="graph-wrap"><svg id="chart" viewBox="0 0 700 230" preserveAspectRatio="none" role="img" aria-label="Observed nozzle and bed temperature history"><text x="28" y="118" fill="#abc1d2">Waiting for observed temperature samples</text></svg></div></article>
- <article class="tile"><h2 class="heading">Observation integrity</h2><div id="integrity" class="hero">Waiting</div><div id="observations-note" class="detail">Only samples reported by the Observatory are charted. Missing data are not simulated.</div></article>
+ <article class="card tile"><div class="observations-head"><h2 class="heading">Temperature observations</h2><span class="legend"><b>●</b> Nozzle &nbsp; <b class="bed">●</b> Bed</span></div><div class="graph-wrap"><svg id="chart" viewBox="0 0 700 230" preserveAspectRatio="none" role="img" aria-label="Observed nozzle and bed temperature history"><text x="28" y="118" fill="#abc1d2">Waiting for observed temperature samples</text></svg></div></article>
+ <article class="card tile"><h2 class="heading">Observation integrity</h2><div id="integrity" class="hero">Waiting</div><div id="observations-note" class="detail">Only samples reported by the Observatory are charted. Missing data are not simulated.</div></article>
 </section>
-<section id="view-controls" class="view" aria-label="Operations">
- <article class="tile control-card"><div><h2 class="heading">Machine operations</h2><p class="detail">Use the existing Observatory controls for authorization, Operator Mode, and per-operation confirmation.</p></div><a href="/" aria-label="Open full Observatory controls">Open Observatory</a></article>
- <article class="tile control-card"><div><h2 class="heading">File selection</h2><p id="selected-file" class="detail">Select a print file in Models. The HMI never starts a print on selection.</p></div><button type="button" data-go="models">Browse models</button></article>
- <article class="tile control-card"><div><h2 class="heading">Source and safety</h2><p class="detail">This screen only reads API state. No automatic print commands, polling-induced motion, or file uploads.</p></div><button type="button" data-go="observations">View observations</button></article>
-</section>
+<section id="view-controls" class="view" aria-label="Machine operations and file management"><iframe id="operations-frame" title="Shared Observatory machine controls and files"></iframe></section>
 </main>
 <nav aria-label="HMI views"><button data-go="overview" aria-current="page">Overview</button><button data-go="print-bay">Print Bay</button><button data-go="models">Fabrication gallery</button><button data-go="observations">Observations</button><button data-go="controls">Controls</button></nav>
 </div>
@@ -87,10 +85,11 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
    <p id="inspector-details">G-code-derived filament representation; not a CAD solid.</p>
    <p id="inspector-status" role="status">Loading geometry…</p>
    <div class="inspector-actions"><button type="button" data-view-angle="iso">Isometric</button><button type="button" data-view-angle="top">Top</button><button type="button" data-view-angle="front">Front</button></div>
-   <p>Drag to orbit · pinch to zoom. Printer commands remain in Observatory.</p>
+   <p>Drag to orbit · pinch to zoom. Selection never starts a print.</p><button id="manage-model" type="button">Manage files &amp; print</button>
    <button id="inspector-close" type="button">Close</button>
   </div>
  </div>
 </dialog>
 <script src="/static/hmi.js" defer></script>
+<script type="module" src="/static/hmi_ambience.js"></script>
 </body></html>

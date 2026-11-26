@@ -45,7 +45,7 @@ function makeHomeSwitch(parent, x, y, z, label) {
   return switchBody;
 }
 
-function makeMachine(scene) {
+export function makeMachine(scene) {
   const root = new THREE.Group();
   scene.add(root);
   const frame = new THREE.Group();
