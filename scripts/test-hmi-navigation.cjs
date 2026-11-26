@@ -9,7 +9,7 @@ const { chromium } = require("playwright");
   await page.locator("#view-overview").waitFor();
   const metrics=await page.locator("#app").evaluate(e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height}));
   if(metrics.w!==1280||metrics.h!==400)throw Error("Unexpected HMI viewport "+JSON.stringify(metrics));
-  for(const name of ["models","observations","controls","overview"]) {
+  for(const name of ["models","observations","controls","settings","overview"]) {
     await page.locator('nav [data-go="'+name+'"]').click();
     const ok=await page.locator("#view-"+name).evaluate(e=>getComputedStyle(e).display!=="none");
     if(!ok)throw Error("Cannot navigate to "+name);

@@ -27,6 +27,7 @@ for(const b of document.querySelectorAll('[data-preview-mode]')){
  b.addEventListener('click',()=>launch(b.dataset.previewMode));
 }
 $('model-filter')?.addEventListener('input',()=>window.dispatchEvent(new Event('hmi:filter-models')));
+$('overview-observations')?.addEventListener('click',()=>document.querySelector('nav [data-go="observations"]')?.click());
 const diagnostic=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
 window.addEventListener('hmi:renderer-metrics',event=>{
  const m=event.detail||{};
