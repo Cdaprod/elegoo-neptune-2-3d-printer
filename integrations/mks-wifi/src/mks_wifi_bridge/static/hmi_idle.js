@@ -3,7 +3,7 @@ export function createIdleExperience(win=window, idleMs=150000) {
  const doc=win.document, app=doc.getElementById('app'), overlay=doc.getElementById('idle-overlay');
  const reduced=()=>win.matchMedia('(prefers-reduced-motion: reduce)').matches;
  let phase='active',timer,transition,lastActivity=Date.now(),releaseAt=0,disposed=false,restoreFocus=null;
- const pointers=new Set(),keys=new Set(),bound=new Map(),frameObservers=[];
+ const pointers=new Set(),keys=new Set(),bound=new Map(),frameObservers=new Map();
  const clock=()=>Date.now();
  function setPhase(value){phase=value;doc.body.dataset.idlePhase=value;win.dispatchEvent(new win.CustomEvent('hmi:cinematic',{detail:{active:value==='entering'||value==='cinematic',phase:value}}));}
  function schedule(delay=idleMs){win.clearTimeout(timer);timer=win.setTimeout(check,delay);}
@@ -26,9 +26,9 @@ export function createIdleExperience(win=window, idleMs=150000) {
   lastActivity=clock();schedule();
  }
  const events=['pointerdown','pointerup','pointercancel','pointermove','click','keydown','keyup','wheel','input'];
- function bind(d){if(!d||bound.has(d))return;for(const event of events)d.addEventListener(event,activity,{capture:true,passive:false});bound.set(d,true);if(d!==doc){const observer=new win.MutationObserver(()=>{if(phase!=='active'&&blocked())wake();});observer.observe(d,{subtree:true,attributes:true,attributeFilter:['open','class']});frameObservers.push(observer);}}
+ function bind(d){if(!d||bound.has(d))return;for(const event of events)d.addEventListener(event,activity,{capture:true,passive:false});bound.set(d,true);if(d!==doc){const observer=new win.MutationObserver(()=>{if(phase!=='active'&&blocked())wake();});observer.observe(d,{subtree:true,attributes:true,attributeFilter:['open','class']});frameObservers.set(d,observer);}}
  bind(doc);const frames=[...doc.querySelectorAll('iframe')];const loads=[];
- for(const frame of frames){const handler=()=>{try{bind(frame.contentDocument);}catch{}};frame.addEventListener('load',handler);loads.push([frame,handler]);handler();}
+ for(const frame of frames){let previous=null;const handler=()=>{try{const current=frame.contentDocument;if(previous&&previous!==current){for(const event of events)previous.removeEventListener(event,activity,true);bound.delete(previous);frameObservers.get(previous)?.disconnect();frameObservers.delete(previous);}bind(current);previous=current;}catch{}};frame.addEventListener('load',handler);loads.push([frame,handler]);handler();}
  function visibility(){if(doc.hidden){if(phase!=='active')wake();}else{lastActivity=clock();if(phase==='active')schedule();}}
  function interrupt(){wake();}
  doc.addEventListener('visibilitychange',visibility);win.addEventListener('hmi:interrupt',interrupt);
@@ -36,6 +36,6 @@ export function createIdleExperience(win=window, idleMs=150000) {
  const observer=new win.MutationObserver(()=>{if(phase!=='active'&&blocked())wake();});
  observer.observe(doc,{subtree:true,attributes:true,attributeFilter:['open','class']});
  setPhase('active');schedule();
- return {get phase(){return phase;},get snapshot(){return {phase,idleFor:clock()-lastActivity,heldPointers:pointers.size,heldKeys:keys.size,blocked:blocked(),hidden:doc.hidden};},dispose(){disposed=true;win.clearTimeout(timer);win.clearTimeout(transition);observer.disconnect();frameObservers.forEach(o=>o.disconnect());for(const d of bound.keys())for(const e of events)d.removeEventListener(e,activity,true);for(const [f,h] of loads)f.removeEventListener('load',h);doc.removeEventListener('visibilitychange',visibility);win.removeEventListener('hmi:interrupt',interrupt);app.inert=false;overlay.hidden=true;}};
+ return {get phase(){return phase;},get snapshot(){return {phase,idleFor:clock()-lastActivity,heldPointers:pointers.size,heldKeys:keys.size,blocked:blocked(),hidden:doc.hidden};},dispose(){disposed=true;win.clearTimeout(timer);win.clearTimeout(transition);observer.disconnect();frameObservers.forEach(o=>o.disconnect());for(const d of bound.keys())for(const e of events)d.removeEventListener(e,activity,true);for(const [f,h] of loads)f.removeEventListener('load',h);doc.removeEventListener('visibilitychange',visibility);win.removeEventListener('hmi:interrupt',interrupt);app.inert=false;overlay.hidden=true;overlay.setAttribute('aria-hidden','true');setPhase('active');}};
 }
 export const idleExperience=typeof window!=='undefined'&&document.getElementById('idle-overlay')?createIdleExperience():null;

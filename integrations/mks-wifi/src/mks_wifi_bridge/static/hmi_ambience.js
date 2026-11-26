@@ -39,5 +39,5 @@ try{
   renderer.render(scene,camera);painted=true;
  }
  frame=requestAnimationFrame(draw);host.dataset.renderer='ready';
- addEventListener('pagehide',()=>{disposed=true;cancelAnimationFrame(frame);scene.traverse(o=>{o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();});renderer.dispose();},{once:true});
+ addEventListener('pagehide',event=>{if(event.persisted)return;disposed=true;cancelAnimationFrame(frame);scene.traverse(o=>{o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();});renderer.dispose();});
 }catch{host.dataset.renderer='unavailable';}
