@@ -26,6 +26,8 @@ def main():
             str(Path.home() / ".config/neptune-kiosk"),
             executable_path="/usr/bin/chromium",
             headless=False,
+            no_viewport=True,
+            ignore_default_args=["--enable-automation"],
             args=["--ozone-platform=wayland", "--kiosk", "--no-first-run",
                   "--no-default-browser-check", "--password-store=basic"],
         )
