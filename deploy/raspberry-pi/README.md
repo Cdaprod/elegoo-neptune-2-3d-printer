@@ -38,3 +38,15 @@ OctoPrint Python 3.10.18 is end-of-life. The observed working subset is Pillow 1
 ## Managed keyboard-free kiosk
 
 Run `make kiosk-setup` once, then `make kiosk-enable` to install the user service and desktop autostart. Requires desktop auto-login for unattended boot. `make kiosk` starts in background, `make kiosk-status` checks systemd, `make kiosk-logs` attaches to a dedicated tmux journal viewer (Ctrl+B then D detaches), `make kiosk-stop` stops until next start/login, `make kiosk-disable` removes autostart and stops. `make kiosk-debug` is foreground only; stop managed service first. systemd owns the browser process, tmux is recreated at desktop login. Journal retention across reboot depends on journald storage configuration. Physical reboot validation pending. Existing LAN authentication remains required. The kiosk uses a dedicated browser profile with basic password storage; do not save unrelated passwords there.
+
+## Commissioning handoff — 2026-11-26
+
+Physical operator validation: Chromium now opens fullscreen under the managed kiosk service; touch taps and one-finger scrolling work without selecting text. The previous browser window showed automation chrome despite --kiosk. The repository launcher now requests no fixed Playwright viewport and omits --enable-automation; compare against the Pi-local patch before replacing it. The exact local launcher diff was not captured.
+
+The working labwc rc.xml uses the Openbox namespace, a touch entry with deviceName `WaveShare WaveShare (USB 1-1.4)`, mapToOutput `HDMI-A-1`, mouseEmulation `no`, and a libinput device category matching that name with calibrationMatrix `0 1 0 -1 0 1`. USB topology is observed, not portable. Backups rc.xml.pre-calibration and rc.xml.pre-native-touch exist locally. Reload from SSH with `pkill -HUP -u "$(id -u)" -x labwc` (labwc --reconfigure failed because LABWC_PID was absent). Preserve unrelated XML and discover device name on each host. Profile values are recorded but automatic application is still pending.
+
+### Next development: recover ultrawide HMI
+
+The currently displayed localhost:8000 page is the standard desktop dashboard, not the dedicated 1280x400 HMI. Recover `feat/waveshare-79-hmi` and `feat/gcode-3d-fabrication-gallery` against current main; inspect ancestry and reconcile overlapping backend changes rather than blindly merging stale branches. Reuse existing hmi.html, hmi.js, hmi_model_viewer.js, gcode_fabrication.py and tests. Select the dedicated HMI route from the Waveshare kiosk profile, preserve shared backend and token enforcement, prioritize horizontal navigation and 3D model gallery, test 1280x400 overflow and touch gestures, and generate actual screenshots. Preserve desktop/mobile UI. No printer motion or heating during UI validation.
+
+Before pulling on the Pi, inspect git status and diff; preserve local launcher edits and labwc backups. Reboot persistence, corner accuracy, live printer telemetry and print submission remain unverified. Do not reset local changes or commit .env.
