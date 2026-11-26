@@ -57,6 +57,21 @@ def install(app, require_auth, require_mutation, printer):
     def projects():
         return controller().discover()
 
+    @router.get("/worker")
+    def worker_status():
+        state = controller().worker_status()
+        if os.getenv("NEPTUNE_BUILD_NODE_URL"):
+            try:
+                state = BuildNode().request("/worker", timeout=3)
+            except ValueError:
+                state = {"online": False, "state": "build_node_unreachable", "last_seen": None}
+        state["delivery"] = {
+            "upload_enabled": os.getenv("NEPTUNE_MANUFACTURING_UPLOAD_ENABLED", "false") == "true"
+            and printer.backend is not None,
+            "sd_mounted": os.path.ismount(os.getenv("NEPTUNE_SD_MOUNT", "/Volumes/NEPTUNE")),
+        }
+        return state
+
     @router.get("/projects/{project}/snapshot")
     def project_snapshot(project: str):
         try:
@@ -122,7 +137,7 @@ def install(app, require_auth, require_mutation, printer):
     def jobs():
         if os.getenv("NEPTUNE_BUILD_NODE_URL"):
             try:
-                return BuildNode().request("/jobs")
+                return BuildNode().request("/jobs", timeout=3)
             except ValueError:
                 return controller().jobs()
         return controller().jobs()

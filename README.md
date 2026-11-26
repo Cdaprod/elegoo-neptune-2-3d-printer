@@ -223,10 +223,10 @@ Released under the [MIT License](LICENSE).
 
 ## Print Bay: declarative CAD-to-print builds
 
-Observatory now includes `/print-bay`: named manufacturing plates, interactive geometry previews, queued native CAD builds, preservation-focused Orca project reconciliation, selective slicing, immutable artifact revisions, checksums, staging, explicit OctoPrint upload and collision-safe SD export. A small Pi agent caches staged artifacts over the authenticated Mac API; it does not need CAD or slicing runtimes. Existing monitoring and Compose services remain in place.
+Observatory now includes `/print-bay`: automatically prepared named plates, interactive geometry previews, background native CAD builds, preservation-focused Orca project reconciliation, selective slicing, immutable artifact revisions, checksums, staging, explicit OctoPrint upload and collision-safe SD export. A small Pi agent caches staged artifacts over the authenticated Mac API; it does not need CAD or slicing runtimes. Existing monitoring and Compose services remain in place.
 
 See the [API, manifest, worker and deployment guide](integrations/mks-wifi/docs/print-bay.md), [versioned JSON schema](schemas/manufacturing.schema.json), [display mount manifest](examples/manufacturing/manufacturing.yaml), and [real integration evidence](docs/print-bay-integration.json). The integration used the active native FreeCAD workspace associated with the display-mount project, outside its Git checkout; source content hashes and a native build snapshot identify that input without claiming a CAD commit that does not exist.
 
-![Print Bay with real bracket geometry on a portrait viewport](docs/print-bay-preview.png)
+![Print Bay with prepared bracket geometry on the Waveshare widescreen layout](docs/print-bay-preview.png)
 
 Build, slice, stage, upload and print remain separate. The feature never starts a physical print. Existing SD contents and firmware were not changed during verification. The current Neptune TFT needs its legacy image encoding; embedded PNG previews and the Waveshare/Observatory 3D interface are independent of that requirement. `.GCO` SD filenames now participate in the existing read-only preview index.

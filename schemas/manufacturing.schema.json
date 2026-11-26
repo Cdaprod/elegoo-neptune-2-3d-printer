@@ -28,17 +28,17 @@
       "additionalProperties": false,
       "properties": {
         "autoBuild": {
-          "default": false,
+          "default": true,
           "title": "Autobuild",
           "type": "boolean"
         },
         "autoSlice": {
-          "default": false,
+          "default": true,
           "title": "Autoslice",
           "type": "boolean"
         },
         "autoStage": {
-          "default": false,
+          "default": true,
           "title": "Autostage",
           "type": "boolean"
         },

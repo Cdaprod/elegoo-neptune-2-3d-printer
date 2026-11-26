@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import {preparationState} from '/static/print_bay_state.js';
 import {OrbitControls} from '/static/vendor/OrbitControls.js';
 const $ = id => document.getElementById(id);
 const text = (tag, value) => {const e=document.createElement(tag);e.textContent=value;return e;};
-let projects=[], artifacts=[], selectedPlate=null, views=[], generation=0;
+let projects=[], artifacts=[], selectedPlate=null, views=[], generation=0, worker={online:false}, jobs=[], renderKey=null, refreshing=false, deliveryInFlight=false;
 async function api(path, body) {
   const r=await fetch('/api/manufacturing'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok){let j;try{j=await r.json();}catch{}throw Error(j?.detail||`Request failed (${r.status})`);}return r.json();
+  if(!r.ok){let j;try{j=await r.json();}catch{}const error=Error(j?.detail||`Request failed (${r.status})`);error.status=r.status;throw error;}return r.json();
 }
 function message(value){$('message').textContent=value;}
 function project(){return projects.find(p=>p.name===$('projects').value);}
@@ -42,53 +43,74 @@ async function preview(canvas, plate, artifact){
   }catch(e){canvas.replaceWith(text('p',e.message));}
 }
 function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();}views=[];}
+function stateFor(plate){return preparationState(project(),plate,artifacts,jobs,worker);}
+function selected(){return project()?.plates.find(p=>p.name===selectedPlate);}
 function renderPlates(){
-  dispose();$('plates').replaceChildren();const p=project();$('empty').hidden=!!p;$('selected').hidden=!p;
-  if(!p)return;$('project-name').textContent=p.name;$('repository').textContent=p.repository;
-  for(const plate of p.plates){
-    const a=artifacts.find(a=>a.project===p.name&&a.plate===plate.name), card=text('div','');card.className='plate'+(plate.name===selectedPlate?' selected':'');card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Select '+plate.name);
-    const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',plate.name+' interactive 3D preview');card.append(canvas,text('h3',plate.name));
-    const status=text('span',a?(a.fresh?(a.staged?'Staged':'Ready'):'Source changed'):(p.geometryAvailable?'Geometry validated':'Build required'));status.className='badge';card.append(status);
-    card.onclick=()=>{if(selectedPlate!==plate.name){selectedPlate=plate.name;renderPlates();}};card.onkeydown=e=>{if(e.key==='Enter')card.click();};$('plates').append(card);preview(canvas,plate,a);
-  }
-  const plate=p.plates.find(x=>x.name===selectedPlate)||p.plates[0];selectedPlate=plate.name;
-  const a=artifacts.find(x=>x.project===p.name&&x.plate===plate.name);
-  $('plate-name').textContent=plate.name;$('output').textContent=plate.output;$('revision').textContent=a?.revision||'Not built';$('state').textContent=a?(a.fresh?(a.staged?'Staged':'Ready to stage'):'Source changed'):(p.geometryAvailable?'Geometry validated':'Build required');
-}
-async function artifactAction(a,action){
-  try{
-    let body={};
-    if(action==='deploy'||action==='export-sd'){
-      const operation=action==='deploy'?'UPLOAD':'EXPORT';
-      if(!confirm(`${operation} ${a.revision} · ${a.plate}?\nSHA-256: ${a.checksum}\n${action==='deploy'?'Uploads to OctoPrint without starting a print.':'Writes to the mounted NEPTUNE SD card; existing files are preserved.'}`))return;
-      body={confirmation:`${operation} ${a.id}`};
+  const p=project();$('empty').hidden=!!p;$('selected').hidden=!p;$('build-details').hidden=!p;
+  if(!p){dispose();$('plates').replaceChildren();renderKey=null;return;}
+  $('project-name').textContent=p.name;$('repository').textContent=p.repository;
+  const key=JSON.stringify([p.name,p.source,selectedPlate,artifacts.map(a=>[a.id,a.fresh,a.staged])]);
+  if(key!==renderKey){
+    renderKey=key;dispose();$('plates').replaceChildren();
+    for(const plate of p.plates){
+      const state=stateFor(plate),a=state.artifact||artifacts.find(a=>a.project===p.name&&a.plate===plate.name);
+      const card=text('div','');card.className='plate'+(plate.name===selectedPlate?' selected':'');card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Select '+plate.name);card.dataset.plate=plate.name;
+      const canvas=document.createElement('canvas');canvas.setAttribute('aria-label',plate.name+' interactive 3D preview');card.append(canvas,text('h3',plate.name));
+      const status=text('span',state.label);status.className='badge';card.append(status);
+      card.onclick=()=>{if(selectedPlate!==plate.name){selectedPlate=plate.name;renderPlates();}};card.onkeydown=e=>{if(e.key==='Enter')card.click();};$('plates').append(card);preview(canvas,plate,a);
     }
-    const result=await api(`/artifacts/${a.id}/${action}`,body);message(JSON.stringify(result,null,2));await refresh();
-  }catch(e){message(e.message);}
+  }
+  for(const card of $('plates').children){const plate=p.plates.find(x=>x.name===card.dataset.plate);card.querySelector('.badge').textContent=stateFor(plate).label;}
+  renderSelected();
+}
+function renderSelected(){
+  const plate=selected();if(!plate)return;
+  const state=stateFor(plate), a=state.artifact;
+  $('plate-name').textContent=plate.name;$('output').textContent=plate.output;$('revision').textContent=a?.revision||'';
+  $('state').textContent=state.label;$('readiness-dot').className='status-dot '+state.kind;$('preparation-detail').textContent=state.detail;
+  $('delivery-actions').hidden=!a;$('retry').hidden=state.kind!=='failed';$('retry').disabled=!worker.online;
+  $('deploy').disabled=deliveryInFlight||!worker.delivery?.upload_enabled;$('deploy').title=worker.delivery?.upload_enabled?'Upload this prepared revision without starting a print':'Configure and enable the OctoPrint upload connection';
+  $('export-sd').disabled=deliveryInFlight||!worker.delivery?.sd_mounted;$('export-sd').title=worker.delivery?.sd_mounted?'Export this prepared revision':'Insert the configured SD card';
+  $('delivery-note').textContent=a?'Uploading does not start a print. SD export preserves existing files.':'Building, validation, slicing, previews and staging run in the background.';
+  $('automation-status').textContent=(state.automatic?'Automatic build, slice and stage enabled.':'This project has manual preparation policies.')+' '+(worker.online?'Build worker connected.':'Build worker offline.');
+}
+async function artifactAction(action){
+  const a=stateFor(selected()).artifact;if(!a||deliveryInFlight)return;
+  const operation=action==='deploy'?'UPLOAD':'EXPORT';
+  if(!confirm(`${operation} ${a.revision} · ${a.plate}?\n${action==='deploy'?'Uploads to OctoPrint without starting a print.':'Writes to the mounted SD card; existing files are preserved.'}`))return;
+  deliveryInFlight=true;renderSelected();
+  try{
+    const result=await api(`/artifacts/${a.id}/${action}`,{confirmation:`${operation} ${a.id}`});
+    message(action==='deploy'?'Uploaded to OctoPrint. No print was started.':`SD export ${result.status==='already_present'?'already verified':'complete'}: ${result.filename}`);
+  }catch(e){message(e.message);}finally{deliveryInFlight=false;await refresh();}
 }
 function renderArtifacts(){
-  const table=document.createElement('table'),head=document.createElement('tr');['Revision / Plate','State','Actions'].forEach(x=>head.append(text('th',x)));table.append(head);
+  const table=document.createElement('table'),head=document.createElement('tr');['Revision / Plate','State','Files'].forEach(x=>head.append(text('th',x)));table.append(head);
   for(const a of artifacts.filter(a=>a.project===project()?.name)){
-    const tr=document.createElement('tr'),info=document.createElement('td');info.append(text('strong',`${a.revision} · ${a.plate}`),document.createElement('br'),text('code',a.checksum.slice(0,16)+'…'));const preview=a.receipt.previews;if(preview){info.append(document.createElement('br'),text('small',`${preview.embedded?'PNG/JPEG preview':'No embedded preview'} · TFT: ${preview.tft}`));}tr.append(info,text('td',a.fresh?(a.staged?'Staged':'Ready'):'Stale'));
-    const actions=document.createElement('td');actions.className='row';
-    for(const [label,action] of [['Stage','stage'],['Deploy to Printer','deploy'],['Export to SD Card','export-sd']]){const b=text('button',label);b.disabled=!a.fresh||(action!=='stage'&&!a.staged);b.onclick=()=>artifactAction(a,action);actions.append(b);}
-    const link=text('a','G-code ↓');link.href=fileUrl(a,a.receipt.output);link.download=a.receipt.output;actions.append(link);tr.append(actions);table.append(tr);
+    const tr=document.createElement('tr'),info=document.createElement('td');info.append(text('strong',`${a.revision} · ${a.plate}`),document.createElement('br'),text('code',a.checksum));
+    const preview=a.receipt.previews;if(preview){info.append(document.createElement('br'),text('small',`${preview.embedded?'PNG/JPEG preview':'No embedded preview'} · TFT: ${preview.tft}`));}
+    tr.append(info,text('td',a.fresh?(a.staged?'Prepared':'Not staged'):'Superseded'));
+    const files=document.createElement('td'),link=text('a','Download G-code');link.href=fileUrl(a,a.receipt.output);link.download=a.receipt.output;files.append(link);tr.append(files);table.append(tr);
   }
-  $('artifacts').replaceChildren(table);if(!artifacts.length)$('artifacts').append(text('p','No artifacts yet. Build and slice a plate to create the first revision.'));
+  $('artifacts').replaceChildren(table);if(!artifacts.length)$('artifacts').append(text('p','No prepared revisions yet.'));
 }
 async function refresh(){
+  if(refreshing)return;refreshing=true;
   try{
-    const [ps,as,js]=await Promise.all([api('/projects'),api('/artifacts'),api('/jobs')]);projects=ps.filter(p=>!p.error);artifacts=as;$('login').hidden=true;
+    const [ps,as,js,ws]=await Promise.all([api('/projects'),api('/artifacts'),api('/jobs'),api('/worker')]);projects=ps.filter(p=>!p.error);artifacts=as;jobs=js;worker=ws;$('login').hidden=true;
     const prior=$('projects').value;$('projects').replaceChildren(...projects.map(p=>{const o=text('option',p.name);o.value=p.name;return o;}));if(projects.some(p=>p.name===prior))$('projects').value=prior;
     if(!selectedPlate||!project()?.plates.some(p=>p.name===selectedPlate))selectedPlate=project()?.plates[0]?.name;
-    renderPlates();renderArtifacts();$('jobs').replaceChildren(...js.map(j=>text('p',`${j.plate} · ${j.action} · ${j.status}${j.result?' — '+j.result:''}`)));
-    if(!js.length)$('jobs').append(text('p','No queued builds.'));
+    renderPlates();renderArtifacts();$('jobs').replaceChildren(...js.map(j=>{let r={};try{r=JSON.parse(j.result||'{}');}catch{}return text('p',`${j.plate} · ${r.phase||j.status}${r.error?' — '+r.error:''}`);}));
+    if(!js.length)$('jobs').append(text('p','No preparation jobs recorded.'));
     const invalid=ps.filter(p=>p.error);if(invalid.length)message(invalid.map(p=>p.name+': '+p.error).join('\n'));
-  }catch(e){message(e.message);}
+  }catch(e){if(e.status===401)$('login').hidden=false;message(e.message);}finally{refreshing=false;}
+}
+async function queue(action){
+  try{await api(`/projects/${encodeURIComponent(project().name)}/jobs`,{plate:selectedPlate,action});message('Preparation queued. This plate will become ready automatically.');await refresh();}catch(e){message(e.message);}
 }
 $('login').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/auth/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:$('token').value})});if(!r.ok)throw Error('Sign-in failed');$('token').value='';$('login').hidden=true;message('Signed in');await refresh();}catch(e){message(e.message);}};
-$('projects').onchange=()=>{selectedPlate=null;selectedPlate=project()?.plates[0]?.name;renderPlates();renderArtifacts();};$('refresh').onclick=refresh;
-for(const button of document.querySelectorAll('[data-action]'))button.onclick=async()=>{button.disabled=true;try{const r=await api(`/projects/${encodeURIComponent(project().name)}/jobs`,{plate:selectedPlate,action:button.dataset.action});message(`Job ${r.job} queued. The build worker will process it.`);await refresh();}catch(e){message(e.message);}finally{button.disabled=false;}};
-document.querySelector('details').addEventListener('toggle',async e=>{if(e.target.open)try{const rows=await api('/inventory');$('inventory').replaceChildren(...rows.map(r=>text('p',`${r.root}/${r.file} · ${r.status}`)));if(!rows.length)$('inventory').textContent='No inventory roots configured or no candidate files found.';}catch(err){message(err.message);}});
-function animate(){requestAnimationFrame(animate);for(const v of views){const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(v.renderer.domElement.width!==w*Math.min(devicePixelRatio,2))v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();v.controls.update();v.renderer.render(v.scene,v.camera);}}animate();refresh();
-setInterval(async()=>{try{const jobs=await api('/jobs');if(jobs.some(j=>j.status==='running'||j.status==='queued')){$('jobs').replaceChildren(...jobs.map(j=>text('p',`${j.plate} · ${j.action} · ${j.status}`)));}else if(jobs.length&&jobs[0].id!==window.lastFinishedJob){window.lastFinishedJob=jobs[0].id;await refresh();}}catch{}},3000);
+$('projects').onchange=()=>{selectedPlate=project()?.plates[0]?.name;renderPlates();renderArtifacts();};$('refresh').onclick=refresh;
+$('retry').onclick=()=>queue('build-slice-stage');$('deploy').onclick=()=>artifactAction('deploy');$('export-sd').onclick=()=>artifactAction('export-sd');
+for(const button of document.querySelectorAll('[data-action]'))button.onclick=()=>queue(button.dataset.action);
+$('inventory-panel').addEventListener('toggle',async e=>{if(e.target.open)try{const rows=await api('/inventory');$('inventory').replaceChildren(...rows.map(r=>text('p',`${r.root}/${r.file} · ${r.status}`)));if(!rows.length)$('inventory').textContent='No inventory roots configured or no candidate files found.';}catch(err){message(err.message);}});
+function animate(){requestAnimationFrame(animate);for(const v of views){const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(v.renderer.domElement.width!==w*Math.min(devicePixelRatio,2))v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();v.controls.update();v.renderer.render(v.scene,v.camera);}}animate();refresh();setInterval(refresh,3000);

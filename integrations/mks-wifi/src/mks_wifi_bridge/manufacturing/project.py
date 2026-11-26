@@ -71,9 +71,9 @@ class Staging(Model):
 
 
 class Deployment(Model):
-    autoBuild: bool = False
-    autoSlice: bool = False
-    autoStage: bool = False
+    autoBuild: bool = True
+    autoSlice: bool = True
+    autoStage: bool = True
     autoPrint: Literal[False] = False
     requireApproval: Literal[True] = True
 
@@ -102,6 +102,8 @@ class Manifest(Model):
 
     @model_validator(mode="after")
     def unique(self):
+        if self.spec.deployment.autoStage and not self.spec.staging.enabled:
+            raise ValueError("Automatic staging requires staging.enabled")
         plates = self.spec.plates
         objects = [o for p in plates for o in p.objects]
         for values in (

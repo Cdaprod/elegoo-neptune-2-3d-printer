@@ -76,6 +76,10 @@ class Controller:
               UNIQUE(project,plate,fingerprint), UNIQUE(project,revision));
             CREATE TABLE IF NOT EXISTS desired (
               project TEXT, plate TEXT, fingerprint TEXT, PRIMARY KEY(project,plate));
+            CREATE TABLE IF NOT EXISTS automation (
+              project TEXT PRIMARY KEY, signature TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS worker (
+              id INTEGER PRIMARY KEY, last_seen TEXT NOT NULL, state TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS jobs (
               id TEXT PRIMARY KEY, project TEXT NOT NULL, plate TEXT NOT NULL,
               action TEXT NOT NULL, status TEXT NOT NULL, result TEXT, created TEXT NOT NULL);
@@ -97,7 +101,10 @@ class Controller:
         for root in self.roots():
             if not root.resolve().is_relative_to(self.projects):
                 continue
-            manifest = load(root)
+            try:
+                manifest = load(root)
+            except Exception:
+                continue
             if manifest.metadata.name == name:
                 matches.append((root, manifest))
         if len(matches) != 1:
@@ -116,6 +123,7 @@ class Controller:
                         "plates": [p.model_dump() for p in m.spec.plates],
                         "source": source_identity(root, m),
                         "geometryAvailable": self.geometry(root, m).is_dir(),
+                        "automation": m.spec.deployment.model_dump(),
                         "error": None,
                     }
                 )
@@ -258,7 +266,8 @@ class Controller:
             finally:
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
-    def execute(self, project, plate_name, action):
+    def execute(self, project, plate_name, action, progress=None):
+        progress = progress or (lambda phase: None)
         if action not in {
             "build",
             "slice",
@@ -271,14 +280,18 @@ class Controller:
         with self.exclusive():
             root, m = self.project(project)
             plate = self.plate(m, plate_name)
+            if action in {"slice-stage", "build-slice-stage"} and not m.spec.staging.enabled:
+                raise ValueError("Staging disabled by manifest")
             before = self.inputs(root, m)
             geometry = self.geometry(root, m)
             if action in {"build", "build-slice", "build-slice-stage", "reconcile"}:
+                progress("Building and validating geometry")
                 geometry = self.build(root, m)
             if action == "build":
                 return {"status": "validated", "source": source_identity(root, m)}
             if not geometry.exists():
                 raise ValueError("Geometry is stale or missing; rebuild geometry first")
+            progress("Checking geometry")
             self.validate_geometry(geometry, m)
             hashes = json.loads((geometry / "hashes.json").read_text())
             if any(filehash(geometry / n) != h for n, h in hashes.items()):
@@ -306,8 +319,10 @@ class Controller:
                 # Geometry-equivalent source edits retain the immutable G-code; create a
                 # fresh provenance revision instead of mutating its original receipt.
                 if self.fresh(row):
+                    progress("Verifying cached artifact")
                     self.verified(row["id"])
                     if action in {"slice-stage", "build-slice-stage"}:
+                        progress("Staging verified artifact")
                         self.stage(row["id"])
                     return {"artifact": row["id"], "cached": True, "status": "ready"}
                 # Old source fingerprint is equivalent; verify bytes and reuse G-code below.
@@ -321,12 +336,14 @@ class Controller:
             destination = self.storage / "artifacts" / project / artifact_id
             destination.mkdir(parents=True)
             try:
+                progress("Updating slicer project")
                 reconciled = destination / "project.3mf"
                 changed = project3mf.reconcile(plate, geometry, reconciled)
                 if old:
                     shutil.copyfile(old / plate.output, destination / plate.output)
                 else:
                     index, _ = project3mf.plate(plate)
+                    progress("Slicing plate")
                     gcode = self.slicer(executable, reconciled, index, destination, profiles)
                     if gcode != destination / plate.output:
                         gcode.rename(destination / plate.output)
@@ -340,6 +357,7 @@ class Controller:
 
                 from .preview import embed_png, render
 
+                progress("Generating preview and checksums")
                 render(project3mf, plate, geometry, destination / "preview.png")
                 embed_png(destination / plate.output, destination / "preview.png")
                 from ..gcode_thumbnail import extract_gcode_thumbnail_details
@@ -405,6 +423,7 @@ class Controller:
                         ),
                     )
                 if action in {"slice-stage", "build-slice-stage"}:
+                    progress("Staging verified artifact")
                     self.stage(artifact_id)
                 return {"artifact": artifact_id, "cached": bool(old), "status": "ready"}
             except Exception:
@@ -447,7 +466,15 @@ class Controller:
                 return False
             db.execute("UPDATE jobs SET status='running' WHERE id=?", (row["id"],))
         try:
-            result = self.execute(row["project"], row["plate"], row["action"])
+
+            def progress(phase):
+                with self.connect() as status_db:
+                    status_db.execute(
+                        "UPDATE jobs SET result=? WHERE id=?",
+                        (json.dumps({"phase": phase}), row["id"]),
+                    )
+
+            result = self.execute(row["project"], row["plate"], row["action"], progress=progress)
             status = "succeeded"
         except Exception as exc:
             result, status = {"error": str(exc)}, "failed"
@@ -457,3 +484,19 @@ class Controller:
                 (status, json.dumps(result), row["id"]),
             )
         return True
+
+    def heartbeat(self, state="watching"):
+        with self.connect() as db:
+            db.execute("INSERT OR REPLACE INTO worker VALUES(1,?,?)", (now(), state))
+
+    def worker_status(self):
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM worker WHERE id=1").fetchone()
+        if row is None:
+            return {"online": False, "state": "not_connected", "last_seen": None}
+        age = (datetime.now(UTC) - datetime.fromisoformat(row["last_seen"])).total_seconds()
+        return {
+            "online": 0 <= age < 20 and row["state"] != "stopped",
+            "state": row["state"],
+            "last_seen": row["last_seen"],
+        }

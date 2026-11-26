@@ -371,3 +371,90 @@ def test_geometry_preview_is_embedded_and_commands_are_preserved(engine):
     assert thumbnail and thumbnail.width == 320 and thumbnail.height == 320
     embed_png(gcode, path / "preview.png")
     assert gcode.read_bytes() == original
+
+
+def test_background_reconciliation_prepares_all_plates_without_ui_actions(engine):
+    from mks_wifi_bridge.manufacturing.worker import reconcile_once
+
+    c, root, calls = engine
+    assert load(root).spec.deployment.autoBuild
+    assert load(root).spec.deployment.autoSlice
+    assert load(root).spec.deployment.autoStage
+    assert reconcile_once(c) == 2
+    assert reconcile_once(c) == 0
+    assert c.work_once() and c.work_once()
+    assert calls == [1, 2]
+    assert all(a["staged"] and a["fresh"] for a in c.list_artifacts())
+    # Simulate a scheduler restart: current staged revisions do not produce new jobs.
+    with c.connect() as db:
+        db.execute("DELETE FROM automation")
+    assert reconcile_once(c) == 0
+    manifest = yaml.safe_load((root / "manufacturing.yaml").read_text())
+    manifest["spec"]["source"]["parameters"]["Params.Access"] = 4
+    (root / "manufacturing.yaml").write_text(yaml.safe_dump(manifest))
+    assert reconcile_once(c) == 2
+    assert c.work_once() and c.work_once()
+    assert calls == [1, 2, 1]  # Crossbar G-code is reused for the changed source revision.
+    latest = {a["plate"]: a for a in reversed(c.list_artifacts())}
+    assert all(a["fresh"] and a["staged"] for a in latest.values())
+
+
+def test_automatic_failure_is_recorded_once_until_source_changes_or_operator_retries(engine):
+    from mks_wifi_bridge.manufacturing.worker import reconcile_once
+
+    c, root, _ = engine
+    c.builder = lambda *_: (_ for _ in ()).throw(ValueError("Native model is invalid"))
+    assert reconcile_once(c) == 2
+    assert c.work_once() and c.work_once()
+    assert all(j["status"] == "failed" for j in c.jobs())
+    assert reconcile_once(c) == 0
+    assert len(c.jobs()) == 2
+    assert c.list_artifacts() == []
+    c.enqueue(root.name, "Brackets", "build-slice-stage")
+    assert len(c.jobs()) == 3
+
+
+def test_explicit_manual_policy_is_not_automatically_prepared(engine):
+    from mks_wifi_bridge.manufacturing.worker import reconcile_once
+
+    c, root, calls = engine
+    manifest = yaml.safe_load((root / "manufacturing.yaml").read_text())
+    manifest["spec"]["deployment"] = {"autoBuild": False, "autoSlice": False, "autoStage": False}
+    (root / "manufacturing.yaml").write_text(yaml.safe_dump(manifest))
+    assert reconcile_once(c) == 0
+    assert c.jobs() == [] and calls == []
+
+
+def test_job_reports_actual_preparation_phase_and_worker_liveness(engine):
+    c, root, _ = engine
+    builder, slicer = c.builder, c.slicer
+
+    def checked_builder(*args):
+        assert json.loads(c.jobs()[0]["result"])["phase"] == "Building and validating geometry"
+        return builder(*args)
+
+    def checked_slicer(*args):
+        assert json.loads(c.jobs()[0]["result"])["phase"] == "Slicing plate"
+        return slicer(*args)
+
+    c.builder, c.slicer = checked_builder, checked_slicer
+    assert not c.worker_status()["online"]
+    c.heartbeat()
+    assert c.worker_status()["online"]
+    c.enqueue(root.name, "Brackets", "build-slice-stage")
+    assert c.work_once()
+    assert c.jobs()[0]["status"] == "succeeded"
+    c.heartbeat("stopped")
+    assert not c.worker_status()["online"]
+
+
+def test_idle_watching_does_not_relaunch_slicer_every_poll(engine):
+    from mks_wifi_bridge.manufacturing.worker import reconcile_once
+
+    c, _, _ = engine
+    probes = []
+    c.version = lambda executable: probes.append(executable) or "test-version"
+    assert reconcile_once(c) == 2
+    assert reconcile_once(c) == 0
+    assert reconcile_once(c) == 0
+    assert len(probes) == 1

@@ -24,7 +24,7 @@ uv run neptune-observatory --host 127.0.0.1 --port 8000
 uv run neptune-manufacturing
 ```
 
-Use `--once` to process one queued job; `--watch` additionally applies each manifest's `autoBuild`, `autoSlice`, and `autoStage` policies. Polling watches content rather than mtimes. Slicer version changes invalidate the plate cache. Both CLI paths are configurable, checked at execution and never invented MCP commands. Missing CAD/slicer runtimes fail jobs while read-only monitoring continues. `CADQUERY_PYTHON` selects an interpreter with CadQuery installed. Native CAD saves a build copy, never the authoritative source document.
+The worker watches for changes by default, and new manifests default to automatic building, slicing and staging. Use `--once` for one scheduling/processing pass or `--no-watch` to process only explicitly queued jobs. Explicit `false` manifest policies remain an opt-out. Polling watches content rather than mtimes. Slicer version changes invalidate the plate cache. Both CLI paths are configurable, checked at execution and never invented MCP commands. Missing CAD/slicer runtimes fail jobs while read-only monitoring continues. `CADQUERY_PYTHON` selects an interpreter with CadQuery installed. Native CAD saves a build copy, never the authoritative source document.
 
 For LAN access, bind Observatory to the Mac's LAN interface and configure its existing `NEPTUNE_OBSERVATORY_TOKEN`. The agent must have that build-node token; keep it in private environment configuration. Use a trusted LAN or TLS reverse proxy. The token authorizes source snapshots containing CAD source and job submission.
 
@@ -46,6 +46,7 @@ OpenAPI is available at `/docs`; the following routes use Observatory authentica
 | `GET /api/manufacturing/inventory` | List unimported CAD/Orca candidates |
 | `GET /api/manufacturing/projects/{name}/snapshot` | Declared source inputs as a ZIP for the deployment cache |
 | `POST /api/manufacturing/projects/{name}/jobs` | Queue `{plate, action}`; never run expensive work in the request |
+| `GET /api/manufacturing/worker` | Build worker heartbeat and local delivery availability |
 | `GET /api/manufacturing/jobs` | Queued/running/succeeded/failed build results |
 | `GET /api/manufacturing/artifacts?project=…` | Revisions, freshness, checksums and provenance |
 | `GET /api/manufacturing/artifacts/{id}/files/{filename}` | G-code, geometry, project, logs and metadata |
@@ -63,7 +64,7 @@ Reconciliation replaces mapped normal-part meshes only, applying the original so
 
 Upload additionally requires `NEPTUNE_MANUFACTURING_UPLOAD_ENABLED=true`, explicit per-artifact confirmation, configured OctoPrint, fresh idle telemetry, and Observatory's existing serialized OctoPrint control lock. It submits `select=false` and `print=false`. Upload acknowledgment is not physical completion; ambiguous uploads are never automatically retried. Starting a print remains a separate explicit operator action in OctoPrint. No endpoint in this feature starts a print.
 
-A worker crash leaves its claimed job `running`; it is never automatically retried. Review logs and submit a new explicit build job. Source changes mid-build/slice, validation errors, checksum corruption and missing mounts prevent registration/deployment.
+One worker owns each registry. After a crash, its abandoned build jobs become failed on restart; failed input signatures are not automatically retried. The operator can retry preparation from the main card, with manual tools under Preparation details & recovery. Source changes mid-build/slice, validation errors, checksum corruption and missing mounts prevent registration/deployment.
 
 ## Verification
 
@@ -74,3 +75,9 @@ Run `uv run --extra web --extra dev pytest -q`, `ruff check src tests`, `ruff fo
 On 2026-11-25, all 19 non-hidden G-code files read from the mounted NEPTUNE card contained valid 320×320 PNG thumbnails. None contained the legacy `simage`/`gimage` TFT encoding. This explains why the slicer preview setting can be enabled while the current printer display still shows no thumbnail. [Elegoo links the compatible converter](https://wiki.elegoo.com/en/machines/neptune/maintenance/neptune-4-series/cura-prusa-orca-slice-print-file-thumbnail-plugins); the [postprocessor documentation](https://github.com/Molodos/ElegooNeptuneThumbnails-Prusa#installation) separately requires PNG thumbnail generation and post-processing, and explicitly supports Neptune 2. Firmware has not been changed and TFT display behavior has not been physically verified.
 
 Observatory's existing PNG/JPEG extractor reads these previews without firmware changes. Its `.GCO` indexing omission is corrected here, including uppercase short SD filenames and exclusion of AppleDouble `._` files. With the mounted card configured as its local source, the updated index found all 19 previews read-only. The manufacturing provenance additionally records embedded image dimensions and whether legacy TFT markers are present. Marker presence is reported as unverified, not proof of a working TFT preview. No existing SD files were rewritten and no converter was silently installed. A tested target-specific postprocessor remains necessary before promising stock-TFT thumbnail compatibility; interactive Waveshare/Observatory previews use the actual STL geometry independently.
+
+## Ready-first operation
+
+Print Bay is an artifact arrival point. The main card presents a fresh, validated and staged revision with explicit upload/SD delivery choices. Geometry rebuilds, slicing, preview/checksum generation and staging happen before that state in the native worker. The UI polls progress automatically without resetting interactive model cameras. Preparation phases, worker disconnection and failures are visible; a stale or unstaged revision never enables delivery. Build tools, logs and older revisions are available in collapsed diagnostic sections.
+
+Automatic reconciliation is persisted in SQLite, so worker restarts neither create duplicate preparation jobs for current artifacts nor repeatedly retry failed inputs. A changed source/configuration or slicer version creates new preparation work and reuses unaffected G-code. Automation never uploads, exports to removable storage or starts a print. The worker must be running for new changes to become prepared; cached staged revisions remain available offline.

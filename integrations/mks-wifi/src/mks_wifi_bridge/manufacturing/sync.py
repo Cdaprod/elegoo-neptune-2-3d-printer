@@ -80,7 +80,7 @@ class BuildNode:
             raise ValueError("Build-node URL must be an origin")
         self.opener = build_opener(_NoRedirects())
 
-    def request(self, path, body=None, *, binary=False):
+    def request(self, path, body=None, *, binary=False, timeout=30):
         request = Request(
             self.url + "/api/manufacturing" + path,
             data=None if body is None else json.dumps(body).encode(),
@@ -88,7 +88,7 @@ class BuildNode:
             method="GET" if body is None else "POST",
         )
         try:
-            with self.opener.open(request, timeout=30) as response:
+            with self.opener.open(request, timeout=timeout) as response:
                 raw = response.read(MAX_BUNDLE + 1)
             if len(raw) > MAX_BUNDLE:
                 raise ValueError("Build-node response exceeds limit")

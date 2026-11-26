@@ -103,5 +103,45 @@
       "STEP",
       "STL"
     ]
+  },
+  "automaticPreparation": {
+    "defaultEnabled": true,
+    "foregroundBuildActionsUsed": false,
+    "prepared": [
+      {
+        "plate": "Cross Bodies",
+        "revision": "V005",
+        "artifact": "2383fda0636d4949a972e4a9e07f2351",
+        "checksum": "cc4cd48810c22dc6d1f94784d67d96c2d8fc004501949bc2ce646b621b392ad8"
+      },
+      {
+        "plate": "Brackets",
+        "revision": "V004",
+        "artifact": "3daa102a0875425f84fa92f4157efba0",
+        "checksum": "e2c658e399ee69df75c2ac5991557a43d4644b842a1d5dc242e6f3dcc3d4f2ce"
+      }
+    ],
+    "jobs": [
+      {
+        "plate": "Cross Bodies",
+        "status": "succeeded",
+        "result": {
+          "artifact": "2383fda0636d4949a972e4a9e07f2351",
+          "cached": false,
+          "status": "ready"
+        }
+      },
+      {
+        "plate": "Brackets",
+        "status": "succeeded",
+        "result": {
+          "artifact": "3daa102a0875425f84fa92f4157efba0",
+          "cached": true,
+          "status": "ready"
+        }
+      }
+    ],
+    "operatorView": "Ready to send; manual tools collapsed under preparation details",
+    "deliveryAutomatic": false
   }
 }

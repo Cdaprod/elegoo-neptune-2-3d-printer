@@ -74,9 +74,9 @@ spec:
     generatePreview: true
     generateChecksum: true
   deployment:
-    autoBuild: false
-    autoSlice: false
-    autoStage: false
+    autoBuild: true
+    autoSlice: true
+    autoStage: true
     autoPrint: false
     requireApproval: true
   fallback:
