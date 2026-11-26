@@ -20,8 +20,8 @@ COPY src ./src
 RUN uv sync --locked --extra web --no-editable \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /nonexistent app \
-    && mkdir -p /data \
-    && chown app:app /data
+    && mkdir -p /data/manufacturing/projects \
+    && chown -R app:app /data
 
 ENV PATH="/opt/venv/bin:${PATH}"
 

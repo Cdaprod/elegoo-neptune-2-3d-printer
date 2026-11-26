@@ -1,0 +1,27 @@
+# Optional Pi deployment-agent overlay. The Mac runs the native build worker.
+# docker compose -f compose.yaml -f compose.manufacturing.yaml --profile manufacturing-agent up -d
+services:
+  neptune-observatory:
+    volumes:
+      - manufacturing-cache:/data/manufacturing
+    environment:
+      NEPTUNE_MANUFACTURING_STORAGE: /data/manufacturing
+      NEPTUNE_MANUFACTURING_PROJECTS: /data/manufacturing/projects
+      NEPTUNE_BUILD_NODE_URL: ${NEPTUNE_BUILD_NODE_URL:-}
+      NEPTUNE_BUILD_NODE_TOKEN: ${NEPTUNE_BUILD_NODE_TOKEN:-}
+      NEPTUNE_MANUFACTURING_UPLOAD_ENABLED: ${NEPTUNE_MANUFACTURING_UPLOAD_ENABLED:-false}
+      NEPTUNE_SD_MOUNT: /mnt/NEPTUNE
+  printer-agent:
+    image: neptune-observatory:local
+    profiles: [manufacturing-agent]
+    command: [neptune-printer-agent]
+    restart: unless-stopped
+    volumes:
+      - manufacturing-cache:/data/manufacturing
+    environment:
+      NEPTUNE_MANUFACTURING_STORAGE: /data/manufacturing
+      NEPTUNE_MANUFACTURING_PROJECTS: /data/manufacturing/projects
+      NEPTUNE_BUILD_NODE_URL: ${NEPTUNE_BUILD_NODE_URL:-}
+      NEPTUNE_BUILD_NODE_TOKEN: ${NEPTUNE_BUILD_NODE_TOKEN:-}
+volumes:
+  manufacturing-cache:

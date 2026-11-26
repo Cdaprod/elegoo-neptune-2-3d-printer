@@ -37,6 +37,7 @@ from .executor import (
     _require_fresh_state,
     _required_printer_state,
 )
+from .gcode_fabrication import FabricationPreviewService, ModelPreviewError
 from .gcode_thumbnail import extract_gcode_thumbnail
 from .jobs import print_job_summary
 from .local_gcode_index import LocalGcodeIndexer
@@ -775,6 +776,11 @@ def create_app(
     local_gcode_indexer = local_gcode_indexer or LocalGcodeIndexer(
         os.getenv("NEPTUNE_GCODE_SOURCE_DIR", "/mnt/neptune-source"), motion_timeline
     )
+    model_previews = FabricationPreviewService(
+        local_gcode_indexer.source_dir,
+        os.getenv("NEPTUNE_HMI_PREVIEW_CACHE_DIR", "/data/hmi-previews"),
+    )
+    model_preview_slots = asyncio.Semaphore(2)
     hub = BroadcastHub()
     commands = DryRunCommandService()
     workflows = GuidedWorkflowManager()
@@ -1069,6 +1075,10 @@ def create_app(
         if origin and not _origin_matches(request.headers.get("host", ""), origin):
             raise HTTPException(status_code=403, detail="Request origin is not allowed")
 
+    from .manufacturing.api import install as install_print_bay
+
+    install_print_bay(app, require_auth, require_control_token, printer)
+
     def request_requires_auth(request: Request) -> bool:
         peer = request.client.host if request.client else ""
         return auth_required or not _is_loopback(peer)
@@ -1352,6 +1362,37 @@ def create_app(
             else "cached_or_unavailable"
         )
         return payload
+
+    @app.get("/api/hmi/model-preview", dependencies=[Depends(require_auth)])
+    async def hmi_model_preview(path: str, view: str = "iso") -> Response:
+        """3D-rendered preview from a local, read-only G-code source."""
+        try:
+            async with model_preview_slots:
+                svg = await asyncio.to_thread(model_previews.preview, path, view)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ModelPreviewError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return Response(
+            content=svg,
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "private, max-age=300",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+            },
+        )
+
+    @app.get("/api/hmi/model-geometry", dependencies=[Depends(require_auth)])
+    async def hmi_model_geometry(path: str) -> dict[str, Any]:
+        """Sampled extrusion tubes for the optional touch-friendly Three.js inspector."""
+        try:
+            async with model_preview_slots:
+                return await asyncio.to_thread(model_previews.geometry, path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ModelPreviewError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get(
         "/api/printer/sdcard/preview/{filename}",

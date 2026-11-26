@@ -1,0 +1,394 @@
+{
+  "$defs": {
+    "Build": {
+      "additionalProperties": false,
+      "properties": {
+        "recompute": {
+          "const": true,
+          "default": true,
+          "title": "Recompute",
+          "type": "boolean"
+        },
+        "validate": {
+          "const": true,
+          "default": true,
+          "title": "Validate",
+          "type": "boolean"
+        },
+        "outputDirectory": {
+          "default": "artifacts/geometry",
+          "title": "Outputdirectory",
+          "type": "string"
+        }
+      },
+      "title": "Build",
+      "type": "object"
+    },
+    "Deployment": {
+      "additionalProperties": false,
+      "properties": {
+        "autoBuild": {
+          "default": true,
+          "title": "Autobuild",
+          "type": "boolean"
+        },
+        "autoSlice": {
+          "default": true,
+          "title": "Autoslice",
+          "type": "boolean"
+        },
+        "autoStage": {
+          "default": true,
+          "title": "Autostage",
+          "type": "boolean"
+        },
+        "autoPrint": {
+          "const": false,
+          "default": false,
+          "title": "Autoprint",
+          "type": "boolean"
+        },
+        "requireApproval": {
+          "const": true,
+          "default": true,
+          "title": "Requireapproval",
+          "type": "boolean"
+        }
+      },
+      "title": "Deployment",
+      "type": "object"
+    },
+    "Fallback": {
+      "additionalProperties": false,
+      "properties": {
+        "transport": {
+          "const": "removable-storage",
+          "default": "removable-storage",
+          "title": "Transport",
+          "type": "string"
+        },
+        "volume": {
+          "default": "NEPTUNE",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Volume",
+          "type": "string"
+        }
+      },
+      "title": "Fallback",
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "repository": {
+          "title": "Repository",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "repository"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "Object": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "export": {
+          "title": "Export",
+          "type": "string"
+        },
+        "cadObject": {
+          "title": "Cadobject",
+          "type": "string"
+        },
+        "meshPath": {
+          "title": "Meshpath",
+          "type": "string"
+        },
+        "meshObjectId": {
+          "title": "Meshobjectid",
+          "type": "string"
+        },
+        "parameterKeys": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Parameterkeys",
+          "type": "array"
+        },
+        "projectObjectId": {
+          "title": "Projectobjectid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "export",
+        "cadObject",
+        "meshPath",
+        "meshObjectId",
+        "projectObjectId"
+      ],
+      "title": "Object",
+      "type": "object"
+    },
+    "Plate": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "objects": {
+          "items": {
+            "$ref": "#/$defs/Object"
+          },
+          "minItems": 1,
+          "title": "Objects",
+          "type": "array"
+        },
+        "output": {
+          "pattern": "^[A-Za-z0-9_-]+\\.gcode$",
+          "title": "Output",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "objects",
+        "output"
+      ],
+      "title": "Plate",
+      "type": "object"
+    },
+    "Slicer": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "const": "orcaslicer",
+          "default": "orcaslicer",
+          "title": "Engine",
+          "type": "string"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "preserveProjectSettings": {
+          "const": true,
+          "default": true,
+          "title": "Preserveprojectsettings",
+          "type": "boolean"
+        },
+        "profiles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Profiles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "title": "Slicer",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "enum": [
+            "freecad",
+            "cadquery"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "protectedParameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "title": "Protectedparameters",
+          "type": "object"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "engine",
+        "document"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "Spec": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "build": {
+          "$ref": "#/$defs/Build"
+        },
+        "slicer": {
+          "$ref": "#/$defs/Slicer"
+        },
+        "plates": {
+          "items": {
+            "$ref": "#/$defs/Plate"
+          },
+          "minItems": 1,
+          "title": "Plates",
+          "type": "array"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "staging": {
+          "$ref": "#/$defs/Staging"
+        },
+        "deployment": {
+          "$ref": "#/$defs/Deployment"
+        },
+        "fallback": {
+          "$ref": "#/$defs/Fallback"
+        }
+      },
+      "required": [
+        "source",
+        "slicer",
+        "plates",
+        "target"
+      ],
+      "title": "Spec",
+      "type": "object"
+    },
+    "Staging": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "versioned": {
+          "const": true,
+          "default": true,
+          "title": "Versioned",
+          "type": "boolean"
+        },
+        "generatePreview": {
+          "const": true,
+          "default": true,
+          "title": "Generatepreview",
+          "type": "boolean"
+        },
+        "generateChecksum": {
+          "const": true,
+          "default": true,
+          "title": "Generatechecksum",
+          "type": "boolean"
+        }
+      },
+      "title": "Staging",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "printer": {
+          "title": "Printer",
+          "type": "string"
+        },
+        "transport": {
+          "const": "octoprint",
+          "default": "octoprint",
+          "title": "Transport",
+          "type": "string"
+        }
+      },
+      "required": [
+        "printer"
+      ],
+      "title": "Target",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "cdaprod.dev/v1alpha1",
+      "title": "Apiversion",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ManufacturingProject",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/Spec"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

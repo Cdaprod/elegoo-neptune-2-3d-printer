@@ -1,0 +1,84 @@
+apiVersion: cdaprod.dev/v1alpha1
+kind: ManufacturingProject
+metadata:
+  name: waveshare-display-mount
+  repository: Cdaprod/2020-extrusion-display-mount
+spec:
+  source:
+    engine: freecad
+    document: display-mount.FCStd
+    parameters:
+      MountingParams.DriverAccessDiameter: 4
+    protectedParameters:
+      MountingParams.TabWidth: 10
+      MountingParams.TabHeight: 15
+      MountingParams.MountFaceDepth: 10
+  build:
+    recompute: true
+    validate: true
+    outputDirectory: artifacts/geometry
+  slicer:
+    engine: orcaslicer
+    project: display-mount.3mf
+    preserveProjectSettings: true
+  plates:
+  - name: Brackets
+    objects:
+    - id: bracket-left
+      cadObject: LeftBracketTrussV2
+      export: LeftBracketModular.stl
+      meshPath: 3D/Objects/LeftBracketModular.stl_5.model
+      meshObjectId: '3'
+      projectObjectId: '4'
+      parameterKeys:
+      - MountingParams.DriverAccessDiameter
+    - id: bracket-right
+      cadObject: RightBracketTrussV2
+      export: RightBracketModular.stl
+      meshPath: 3D/Objects/RightBracketModular.stl_4.model
+      meshObjectId: '5'
+      projectObjectId: '6'
+      parameterKeys:
+      - MountingParams.DriverAccessDiameter
+    output: DISPMNT01.gcode
+  - name: Cross Bodies
+    objects:
+    - id: saddle
+      cadObject: SaddleModular
+      export: SaddleModular.stl
+      meshPath: 3D/Objects/SaddleModular.stl_3.model
+      meshObjectId: '1'
+      projectObjectId: '2'
+      parameterKeys: []
+    - id: keeper
+      cadObject: RemovableKeeper
+      export: keeper-working.stl
+      meshPath: 3D/Objects/keeper-working.stl_1.model
+      meshObjectId: '7'
+      projectObjectId: '8'
+      parameterKeys: []
+    - id: crossbar
+      cadObject: RightCrossbarDrilling
+      export: RightCrossbarDrilling.stl
+      meshPath: 3D/Objects/RightCrossbarDrilling.stl_2.model
+      meshObjectId: '9'
+      projectObjectId: '10'
+      parameterKeys: []
+    output: DISPMNT02.gcode
+  target:
+    printer: neptune-2
+    transport: octoprint
+  staging:
+    enabled: true
+    versioned: true
+    generatePreview: true
+    generateChecksum: true
+  deployment:
+    autoBuild: true
+    autoSlice: true
+    autoStage: true
+    autoPrint: false
+    requireApproval: true
+  fallback:
+    transport: removable-storage
+    volume: NEPTUNE

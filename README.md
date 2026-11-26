@@ -220,3 +220,36 @@ This is a community-maintained project for a specific printer/WiFi setup. It is 
 Issues and pull requests are welcome. Include reproduction steps, sanitized logs, and relevant hardware/firmware details; never attach access tokens, WiFi passwords, private IPs, or database files. There is no guaranteed response time. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
 
 Released under the [MIT License](LICENSE).
+
+## Print Bay: declarative CAD-to-print builds
+
+Observatory now includes `/print-bay`: automatically prepared named plates, interactive geometry previews, background native CAD builds, preservation-focused Orca project reconciliation, selective slicing, immutable artifact revisions, checksums, staging, explicit OctoPrint upload and collision-safe SD export. A small Pi agent caches staged artifacts over the authenticated Mac API; it does not need CAD or slicing runtimes. Existing monitoring and Compose services remain in place.
+
+See the [API, manifest, worker and deployment guide](integrations/mks-wifi/docs/print-bay.md), [versioned JSON schema](schemas/manufacturing.schema.json), [display mount manifest](examples/manufacturing/manufacturing.yaml), and [real integration evidence](docs/print-bay-integration.json). The integration used the active native FreeCAD workspace associated with the display-mount project, outside its Git checkout; source content hashes and a native build snapshot identify that input without claiming a CAD commit that does not exist.
+
+![Print Bay with prepared bracket geometry on the Waveshare widescreen layout](docs/print-bay-preview.png)
+
+Build, slice, stage, upload and print remain separate. The feature never starts a physical print. Existing SD contents and firmware were not changed during verification. The current Neptune TFT needs its legacy image encoding; embedded PNG previews and the Waveshare/Observatory 3D interface are independent of that requirement. `.GCO` SD filenames now participate in the existing read-only preview index.
+
+## Commissioned Raspberry Pi touchscreen appliance
+
+On the commissioned Pi, update with:
+
+```sh
+cd ~/elegoo-neptune-2-3d-printer
+git pull --ff-only origin main
+make deploy
+```
+
+This preserves the validated `c585943` native fullscreen launcher, existing Docker
+volumes, credentials and Chromium profile, and selects the dedicated `/hmi` interface.
+The same Observatory serves desktop/mobile clients, an integrated Print Bay with
+interactive STL plate previews, and the recovered G-code fabrication gallery.
+OctoPrint uploads are available for reconstruction through a read-only volume.
+Touch calibration and bounded persistent journald settings are applied idempotently;
+no reflash, XML editing, independent frontend or GitHub write token is required.
+
+See [Pi deployment and remaining hardware acceptance](deploy/raspberry-pi/README.md),
+[HMI interactions and rendered screenshots](docs/waveshare-hmi.md), and
+[fabrication gallery](docs/gcode-fabrication-gallery.md). Physical commands are never
+part of UI validation; print submission keeps its existing operator gates.

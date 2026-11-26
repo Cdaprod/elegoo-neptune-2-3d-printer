@@ -35,12 +35,17 @@ jobs:
         run: uv sync --locked --extra dev --extra web --no-editable
       - name: Run Python tests
         run: uv run --no-sync pytest -q
+      - name: Verify manufacturing cache permissions in the production image
+        run: |
+          docker build -t neptune-observatory-manufacturing-ci .
+          docker run --rm --network none --mount type=volume,dst=/data/manufacturing --entrypoint python neptune-observatory-manufacturing-ci -c "import os; from pathlib import Path; from mks_wifi_bridge.manufacturing.controller import Controller; assert os.getuid() != 0; c=Controller(Path('/data/manufacturing'),Path('/data/manufacturing/projects')); assert c.discover() == []; print('Non-root manufacturing registry initialized on fresh Docker volume')"
       - name: Validate flag-free SD rebuild and failure recovery
         run: python ../../scripts/test_neptune_sd_rebuild.py -q
+          python ../../scripts/test_appliance_config.py -q
       - name: Lint and formatting
         run: |
           uv run --no-sync ruff check src tests
-          uv run --no-sync ruff format --check src tests
+          uv run --no-sync ruff format --check --diff src tests
       - name: Compile dashboard JavaScript
         run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests
@@ -106,7 +111,10 @@ jobs:
           MKS_WIFI_HOST: printer.example.invalid
           NEPTUNE_CONTROL_EXECUTION_ENABLED: "false"
           NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: "false"
+          NEPTUNE_GCODE_SOURCE_DIR: /tmp/neptune-hmi-browser
+          NEPTUNE_HMI_PREVIEW_CACHE_DIR: /tmp/neptune-hmi-preview-cache
         run: |
+          python ../../scripts/hmi_browser_fixture.py
           .venv/bin/neptune-observatory --host 127.0.0.1 --port 8000 > /tmp/observatory-browser.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8000/ >/dev/null; then exit 0; fi
@@ -116,6 +124,24 @@ jobs:
           exit 1
       - name: Verify every dashboard sidebar view in Chromium
         run: node scripts/test-dashboard-navigation.cjs
+      - name: Verify Waveshare 3D HMI at 1280 by 400
+        env:
+          HMI_SCREENSHOT: /tmp/neptune-hmi-models-1280x400.png
+          HMI_SCREENSHOT_DIR: /tmp/neptune-appliance-screenshots
+        run: |
+          node scripts/test-hmi-navigation.cjs
+          node scripts/test-hmi-3d-gallery.cjs
+          node scripts/test-appliance-hmi.cjs
+      - name: Upload HMI geometry gallery screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neptune-hmi-3d-gallery-1280x400
+          path: |
+            /tmp/neptune-hmi-models-1280x400.png
+            /tmp/neptune-appliance-screenshots/*.png
+          if-no-files-found: ignore
+
 
   octoprint-plugin-image:
     runs-on: ubuntu-latest
@@ -147,3 +173,14 @@ jobs:
               /etc/cont-init.d/91-configure-mks-remote
               /usr/local/bin/python3 -c '"'"'import yaml; d=yaml.safe_load(open("/tmp/neptune-rawtcp-ci/config.yaml")); assert d["plugins"]["unrelated"]["option"] == "keep"; assert d["serial"]["port"] == "/dev/ttyUSB0"; assert len(d["plugins"]["remote_connection"]["remotes"]) == 1'"'"'
             '
+
+  observatory-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native ARM64 appliance backend
+        run: docker build -t neptune-observatory-arm64 integrations/mks-wifi
+      - name: Validate ARM64 imports and persistent registry without a printer
+        run: |
+          docker run --rm --network none --mount type=volume,dst=/data/manufacturing --entrypoint python neptune-observatory-arm64 -c "import platform; from pathlib import Path; from mks_wifi_bridge.observatory import create_app; from mks_wifi_bridge.gcode_fabrication import FabricationPreviewService; from mks_wifi_bridge.manufacturing.controller import Controller; assert platform.machine() == 'aarch64'; Controller(Path('/data/manufacturing'),Path('/data/manufacturing/projects')); print('ARM64 application imports and non-root registry passed')"
