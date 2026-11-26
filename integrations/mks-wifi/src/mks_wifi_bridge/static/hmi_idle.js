@@ -5,12 +5,12 @@ export function createIdleExperience(win=window, idleMs=150000) {
  const reduced=()=>win.matchMedia('(prefers-reduced-motion: reduce)').matches;
  let preferences=readPreferences(),phase='active',timer,transition,lastActivity=Date.now(),releaseAt=0,disposed=false,restoreFocus=null;
  const pointers=new Set(),keys=new Set(),bound=new Map(),frameObservers=new Map();
- const clock=()=>Date.now();
+ const clock=()=>Date.now(),configuredIdleMs=()=>idleMs!==150000?idleMs:preferences.idleSeconds*1000;
  function setPhase(value){phase=value;doc.body.dataset.idlePhase=value;win.dispatchEvent(new win.CustomEvent('hmi:cinematic',{detail:{active:value==='entering'||value==='cinematic',phase:value}}));}
- function schedule(delay=preferences.idleSeconds*1000){win.clearTimeout(timer);if(!preferences.enabled||disposed)return;timer=win.setTimeout(check,delay);}
+ function schedule(delay=configuredIdleMs()){win.clearTimeout(timer);if(!preferences.enabled||disposed)return;timer=win.setTimeout(check,delay);}
  function visibleDocuments(){return [doc,...[...doc.querySelectorAll('iframe')].filter(f=>f.getBoundingClientRect().width&&f.getBoundingClientRect().height).map(f=>{try{return f.contentDocument;}catch{return null;}}).filter(Boolean)];}
  function blocked(){return visibleDocuments().some(d=>d.querySelector('dialog[open],#login.visible')||d.activeElement?.matches('input,textarea,select,[contenteditable="true"]'));}
- function check(){if(disposed||!preferences.enabled||phase!=='active')return;if(doc.hidden||blocked()||pointers.size||keys.size){lastActivity=clock();schedule(1000);return;}const remaining=idleMs-(clock()-lastActivity);if(remaining>0){schedule(remaining);return;}enter();}
+ function check(){if(disposed||!preferences.enabled||phase!=='active')return;if(doc.hidden||blocked()||pointers.size||keys.size){lastActivity=clock();schedule(1000);return;}const remaining=configuredIdleMs()-(clock()-lastActivity);if(remaining>0){schedule(remaining);return;}enter();}
  function enter(){if(phase!=='active'||blocked())return;restoreFocus=doc.activeElement;overlay.hidden=false;overlay.setAttribute('aria-hidden','false');app.inert=true;setPhase('entering');transition=win.setTimeout(()=>{if(phase==='entering')setPhase('cinematic');},reduced()?0:1800);}
  function finishWake(){if(disposed)return;if(pointers.size||keys.size||clock()-releaseAt<300){transition=win.setTimeout(finishWake,100);return;}overlay.hidden=true;overlay.setAttribute('aria-hidden','true');app.inert=false;restoreFocus?.focus?.({preventScroll:true});setPhase('active');lastActivity=clock();schedule();}
  function wake(){if(phase==='active')return;win.clearTimeout(transition);setPhase('waking');transition=win.setTimeout(finishWake,reduced()?0:1000);}
