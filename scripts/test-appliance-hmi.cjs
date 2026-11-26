@@ -74,6 +74,7 @@ const path=require('node:path');
   for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
    await page.setViewportSize(viewport);await page.goto('http://127.0.0.1:8000/');
    assert.equal(await page.locator('#view-overview').isVisible(),true);
+   assert.equal(await page.getByRole('link',{name:'Touch HMI',exact:true}).getAttribute('href'),'/hmi');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
   const appDir=path.resolve(__dirname,'../integrations/mks-wifi');
