@@ -10,3 +10,14 @@ body.hmi-operations main{padding:8px 4px 4px;height:100%;overflow:auto;overscrol
 body.hmi-operations .view{min-height:0}
 body.hmi-operations .btn,body.hmi-operations button,body.hmi-operations input,body.hmi-operations select{min-height:44px}
 body.hmi-operations dialog{max-height:calc(100dvh - 12px);overflow-y:auto;max-width:calc(100vw - 20px)}
+body.hmi-operations .view-heading{margin:0 0 8px;align-items:center}
+body.hmi-operations .view-heading h1{font-size:19px;margin:0}
+body.hmi-operations .view-heading p{display:none}
+body.hmi-operations #view-machine.active{display:grid;grid-template-columns:300px minmax(0,1fr);gap:8px}
+body.hmi-operations #view-machine>.view-heading{grid-column:1/-1;margin:0}
+body.hmi-operations .machine-state-strip{grid-column:1/-1;margin:0;gap:8px}
+body.hmi-operations .machine-state-cell{padding:6px 10px}
+body.hmi-operations #view-machine>.commissioning-card{grid-column:1;grid-row:3/6;padding:10px;margin:0;align-self:start}
+body.hmi-operations #view-machine>.machine-tabs,body.hmi-operations #view-machine>.machine-notice,body.hmi-operations #view-machine>.machine-panel{grid-column:2;margin:0}
+body.hmi-operations #view-machine>.commissioning-card h2{font-size:14px;margin:0 0 5px}
+body.hmi-operations #view-machine>.commissioning-card p{font-size:12px;line-height:1.4;margin:4px 0 8px}
