@@ -118,6 +118,7 @@ jobs:
           NEPTUNE_OCTOPRINT_CONTROLS_ENABLED: "false"
           NEPTUNE_GCODE_SOURCE_DIR: /tmp/neptune-hmi-browser
           NEPTUNE_HMI_PREVIEW_CACHE_DIR: /tmp/neptune-hmi-preview-cache
+          NEPTUNE_TIMELINE_DB_PATH: /tmp/neptune-hmi-browser.sqlite
         run: |
           python ../../scripts/hmi_browser_fixture.py
           .venv/bin/neptune-observatory --host 127.0.0.1 --port 8000 > /tmp/observatory-browser.log 2>&1 &

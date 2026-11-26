@@ -78,7 +78,7 @@ const path=require('node:path');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
   const appDir=path.resolve(__dirname,'../integrations/mks-wifi');
-  const authServer=spawn(path.join(appDir,'.venv/bin/neptune-observatory'),['--host','0.0.0.0','--port','8002'],{cwd:appDir,env:{...process.env,PYTHONPATH:'src',MKS_WIFI_HOST:'printer.example.invalid',NEPTUNE_OBSERVATORY_TOKEN:'browser-test-only',NEPTUNE_CONTROL_EXECUTION_ENABLED:'false',NEPTUNE_OCTOPRINT_CONTROLS_ENABLED:'false',NEPTUNE_MANUFACTURING_STORAGE:'/tmp/neptune-hmi-auth-test'},stdio:'ignore'});
+  const authServer=spawn(path.join(appDir,'.venv/bin/neptune-observatory'),['--host','0.0.0.0','--port','8002'],{cwd:appDir,env:{...process.env,PYTHONPATH:'src',MKS_WIFI_HOST:'printer.example.invalid',NEPTUNE_OBSERVATORY_TOKEN:'browser-test-only',NEPTUNE_CONTROL_EXECUTION_ENABLED:'false',NEPTUNE_OCTOPRINT_CONTROLS_ENABLED:'false',NEPTUNE_MANUFACTURING_STORAGE:'/tmp/neptune-hmi-auth-test',NEPTUNE_MANUFACTURING_PROJECTS:'/tmp/neptune-hmi-auth-test/projects',NEPTUNE_TIMELINE_DB_PATH:'/tmp/neptune-hmi-auth-test.sqlite'},stdio:'ignore'});
   try{
    const authPage=await browser.newPage({viewport:{width:1280,height:400}});
    for(let i=0;i<60;i++){try{await authPage.goto('http://127.0.0.1:8002/hmi');break;}catch{await new Promise(r=>setTimeout(r,250));}}
