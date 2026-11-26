@@ -56,3 +56,8 @@ deploy: up
 
 kiosk:
 	@bash deploy/raspberry-pi/kiosk/launch.sh
+
+.PHONY: kiosk-setup
+kiosk-setup:
+	@$(PYTHON) -m venv "$$HOME/.local/share/neptune-kiosk/venv"
+	@"$$HOME/.local/share/neptune-kiosk/venv/bin/python" -m pip install "playwright==1.56.0"
