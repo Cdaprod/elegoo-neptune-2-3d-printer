@@ -1,0 +1,23 @@
+/* Presentation overrides retain the shared Observatory card and token definitions. */
+html,body{width:100%;height:100%;overflow:hidden!important;overscroll-behavior:none}
+body{background:radial-gradient(ellipse at 70% -20%,#1a3451,transparent 65%),var(--bg);color:var(--text)}
+#hmi-ambience{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0;opacity:.5;filter:blur(1.2px) saturate(.65)}
+#hmi-ambience canvas{width:100%;height:100%;display:block}
+#app{position:relative;z-index:1;max-height:100dvh;min-height:0!important;overflow:hidden}
+#app header,#app nav{background:#0a1422d9;border-color:var(--line);box-shadow:inset 0 1px #ffffff08}
+#app .brand{display:flex;gap:10px;align-items:center;font-weight:720;letter-spacing:-.02em;font-size:16px;text-transform:none}
+.brandmark{height:33px;width:30px;color:var(--blue)}.brand small{display:block;font-size:9px;color:var(--muted);font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+#app .tile{background:linear-gradient(150deg,#15263ac7,#101b2bcc 76%);border-color:var(--line);border-radius:15px;box-shadow:0 10px 26px #02071140,inset 0 1px #ffffff08}
+#app .heading{color:#b4c2d4;letter-spacing:.045em;font-size:11px}
+#app .hero{letter-spacing:-.035em;font-size:30px;text-transform:capitalize;line-height:1.2;margin:12px 0}
+#app .detail,#app .muted{color:var(--muted)}
+#app .value{font-size:28px;letter-spacing:-.035em;margin:12px 0}
+#app #view-overview .tile:last-child{position:relative;padding-left:24px}
+#app #view-overview .tile:last-child::before{content:"";position:absolute;inset:18px auto 18px 0;width:3px;background:linear-gradient(var(--blue),var(--green));border-radius:4px}
+#app nav button{background:transparent;border-color:transparent;border-radius:10px;color:#bbc9d9;font-weight:550;min-height:48px;max-height:48px}
+#app nav button[aria-current="page"]{background:linear-gradient(100deg,#1c426c,#183150);box-shadow:inset 0 0 0 1px #31577e;color:#f6fbff}
+#app .model{border-color:var(--line);background:linear-gradient(150deg,#15263a,#101b2b 76%);border-radius:15px;box-shadow:inset 0 1px #ffffff08}
+#app .model.selected{border-color:var(--cyan)}
+#view-controls.active{display:block!important;overflow:hidden}
+#operations-frame{width:100%;height:100%;border:0;border-radius:15px}
+@media(prefers-reduced-motion:reduce){#hmi-ambience{filter:none;opacity:.15}}

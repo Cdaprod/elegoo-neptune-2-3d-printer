@@ -22,9 +22,7 @@ Print Bay reuses `/print-bay?presentation=hmi` in a same-origin frame to preserv
 its existing implementation and authentication. Exported STL plate models are
 interactive. Automatic preparation happens before **Ready to send**; stale or invalid
 artifacts are not deliverable. Upload and SD export remain explicit operations.
-The desktop Print Bay keeps recovery/history controls. Existing machine controls
-remain in Observatory with Operator Mode, readiness and confirmation gates; selecting
-a gallery model does not submit or start a print.
+The desktop Print Bay keeps recovery/history controls. The Controls panel now embeds the existing Observatory machine, motion, files, history and console views with their original Operator Mode, readiness and confirmation handlers. The gallery inspector’s **Manage files & print** action opens the same file controls without selecting or starting a job.
 
 The fabrication gallery reconstructs deposited filament from locally available
 G-code, with a shaded geometry preview and a bundled Three.js orbit inspector.
@@ -55,3 +53,20 @@ These rendered screenshots use synthetic fixtures and unavailable printer teleme
 CI also verifies shared authentication, desktop/mobile parity, isolated touch/orbit
 interaction, and absence of automatic printer writes. Physical Pi GPU performance
 and reboot acceptance remain to be checked on the commissioned appliance.
+
+## Shared Observatory presentation
+
+Desktop Observatory, HMI and Print Bay load `observatory_theme.css` for the same
+tokens and card surface. The HMI retains its bounded layout and horizontal touch
+navigation, using the Observatory logo, gradients, borders, shadows and typography.
+The decorative background reuses `makeMachine` from the existing digital twin: a
+slow close-up orbit around an illustrative focal point, tinted and blurred behind
+translucent cards. It is not telemetry or a commanded machine pose. Rendering is
+capped at 20 fps / pixel ratio 1, pauses when hidden, becomes static with reduced
+motion preferences, and falls back to the gradient if WebGL is unavailable.
+
+The overview explicitly distinguishes **SD status unverified** from OctoPrint host
+idle. Missing progress hides the progress bar instead of implying a zero-percent
+job. Read-only monitoring remains usable while operation gates are disabled.
+
+![Updated Observatory HMI overview](screenshots/hmi-overview-1280x400.png)

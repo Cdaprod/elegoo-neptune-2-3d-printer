@@ -89,8 +89,9 @@ never modified. The standalone optional read-only host-directory overlay remains
 available. Cached reconstruction lives in the existing Observatory data volume.
 A remote printer SD filename alone cannot provide geometry without G-code bytes.
 
-File selection never prints. Machine controls use the existing desktop control
-flow, authentication, Operator Mode, readiness checks, and explicit confirmation.
+File selection never prints. Machine controls and files use the existing Observatory handlers within a bounded
+HMI operations panel, with authentication, Operator Mode, readiness checks and
+explicit confirmation.
 Uploads and physical actions remain explicit. No motion, heating, uploads or print
 submission are part of application validation.
 

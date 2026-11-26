@@ -28,6 +28,10 @@ const path=require('node:path');
    return route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
   });
   await page.goto('http://127.0.0.1:8000/hmi');
+  await page.locator('#hmi-ambience[data-renderer="ready"] canvas').waitFor();
+  assert.equal(await page.locator('#hmi-ambience').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
+  const overviewDir=process.env.HMI_SCREENSHOT_DIR;
+  if(overviewDir){fs.mkdirSync(overviewDir,{recursive:true});await page.screenshot({path:overviewDir+'/hmi-overview-1280x400.png'});}
   const overflow=()=>page.evaluate(()=>({x:document.documentElement.scrollWidth>innerWidth,y:document.documentElement.scrollHeight>innerHeight}));
   assert.deepEqual(await overflow(),{x:false,y:false});
   const cdp=await page.context().newCDPSession(page);
@@ -67,8 +71,18 @@ const path=require('node:path');
   await page.locator('#inspector-status').filter({hasText:'Interactive 3D'}).waitFor();
   await swipe(400,180,90,25);
   assert.equal(await page.locator('#model-inspector[open]').count(),1);
-  await page.locator('#inspector-close').tap();
+  await page.locator('#manage-model').tap();
+  await page.locator('#view-controls.active').waitFor();
+  await page.frameLocator('#operations-frame').locator('#view-sdcard.active').waitFor();
   assert.deepEqual(await overflow(),{x:false,y:false});
+  await page.locator('nav [data-go="controls"]').tap();
+  const operations=page.frameLocator('#operations-frame');
+  await operations.locator('body.hmi-operations').waitFor();
+  for(const name of ['machine','motion','sdcard','history','console']){
+   await operations.locator(`.nav [data-view="${name}"]`).tap();
+   await operations.locator(`#view-${name}.active`).waitFor();
+  }
+  assert.equal(await operations.locator('body').evaluate(()=>document.documentElement.scrollHeight>innerHeight),false);
   assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
   // Existing remote interfaces remain accessible and fit their respective widths.
   for(const viewport of [{width:1440,height:900},{width:390,height:844}]){

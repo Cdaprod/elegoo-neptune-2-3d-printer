@@ -11,7 +11,7 @@
    if(!res.ok){let body=await res.json().catch(()=>({}));throw new Error(body.detail||"Request failed: "+res.status);}
    return res.json();
  }
- function route(view){if(!["overview","print-bay","models","observations","controls"].includes(view))return;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(view==="models")loadFiles();}
+ function route(view){if(!["overview","print-bay","models","observations","controls"].includes(view))return;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
@@ -27,9 +27,10 @@
   text("nozzle",value(t.nozzle_temperature));text("bed",value(t.bed_temperature));
   text("nozzle-large",value(t.nozzle_temperature));text("bed-large",value(t.bed_temperature));
   const job=s.print_job||{};
-  text("job-state",job.status||"Unknown");
-  text("job-file",job.filename?.status==="available"?job.filename.value:"No verified job filename");
+  text("job-state",job.status==="unknown"?"SD status unverified":job.status||"Awaiting job status");
+  text("job-file",job.filename?.status==="available"?job.filename.value:"No verified printer SD job");
   const percent=job.progress_percent?.status==="available"?number(job.progress_percent.value):null;
+  $("progress").hidden=percent===null;
   $("progress").value=percent===null?0:Math.max(0,Math.min(100,percent));
   text("job-meta",percent===null?"Progress not reported":percent.toFixed(1)+"% reported");
   text("printer-state",online?(t.printer_state?.value??job.status??"Connected"):"Unverified");
@@ -175,6 +176,7 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;}
  }
+ $("manage-model").addEventListener("click",()=>{closeInspector();$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";route("controls");});
  $("refresh-files").addEventListener("click",loadFiles);
  $("login-form").addEventListener("submit",async e=>{e.preventDefault();text("login-error","");try{const res=await fetch("/api/auth/session",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:$("token").value})});if(!res.ok)throw new Error("Access token rejected");$("token").value="";$("login").classList.remove("visible");state.login=false;await refresh();}catch(err){text("login-error",err.message);}});
  async function refresh(){

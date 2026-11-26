@@ -5,24 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#08111e">
   <title>Neptune Observatory</title>
+  <link rel="stylesheet" href="/static/observatory_theme.css">
+  <link rel="stylesheet" href="/static/hmi_operations.css">
   <style>
-    :root {
-      color-scheme: dark;
-      --bg: #08111e;
-      --panel: #101d2d;
-      --panel-hi: #15253a;
-      --line: #263a51;
-      --muted: #91a2b8;
-      --text: #edf4ff;
-      --blue: #43a9ff;
-      --cyan: #5ed7e9;
-      --green: #46e58e;
-      --red: #ff727c;
-      --amber: #ffc56b;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-synthesis: none;
-      text-rendering: optimizeLegibility;
-    }
+
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 70% -20%, #1a3451 0, transparent 42%), var(--bg); color: var(--text); }
@@ -60,7 +46,7 @@
     @keyframes enter { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     .grid { display: grid; gap: 14px; }
     .stats { grid-template-columns: minmax(190px, 1.35fr) repeat(3, minmax(135px, 1fr)); }
-    .card { min-width: 0; background: linear-gradient(150deg, #15263a, #101b2b 76%); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 10px 26px #02071140, inset 0 1px #ffffff08; }
+
     .stat { min-height: 112px; padding: 18px; display: flex; align-items: center; gap: 13px; }
     .temperature-stat { position: relative; overflow: hidden; padding-left: 20px; }
     .temperature-stat::before { content: ""; position: absolute; inset: 16px auto 16px 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--blue); }
@@ -869,6 +855,13 @@
         if (button.dataset.view === "overview") maybeLoadTwinPreview();
         drawCharts();
       }));
+      const presentation = new URLSearchParams(location.search);
+      if(presentation.get("presentation")==="hmi-operations") {
+        document.body.classList.add("hmi-operations");
+        const requested=presentation.get("view");
+        const initial=["machine","motion","sdcard","history","console"].includes(requested)?requested:"machine";
+        document.querySelector(`.nav button[data-view="${initial}"]`)?.click();
+      }
       document.querySelectorAll("[data-open-view]").forEach((button) => button.addEventListener("click", () => {
         document.querySelector(`.nav button[data-view="${button.dataset.openView}"]`)?.click();
       }));

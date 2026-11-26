@@ -1,0 +1,23 @@
+/* Existing controls rendered in a bounded touch panel; no duplicate command handlers. */
+body.hmi-operations{height:100dvh;min-height:0;overflow:hidden;background:transparent}
+body.hmi-operations .shell{height:100%;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:50px minmax(0,1fr)}
+body.hmi-operations .sidebar{padding:0;border:0;background:#0a1422d9;display:block;min-height:0}
+body.hmi-operations .sidebar .brand,body.hmi-operations .sidebar-foot,body.hmi-operations .mobile-brand,body.hmi-operations .topbar,body.hmi-operations .nav>a{display:none}
+body.hmi-operations .nav{display:flex;gap:6px;overflow-x:auto;padding:2px 4px}
+body.hmi-operations .nav button{display:none;min-height:44px;white-space:nowrap;flex:1;width:auto}
+body.hmi-operations .nav button:is([data-view=machine],[data-view=motion],[data-view=sdcard],[data-view=history],[data-view=console]){display:flex;justify-content:center}
+body.hmi-operations main{padding:8px 4px 4px;height:100%;overflow:auto;overscroll-behavior:contain;max-width:none}
+body.hmi-operations .view{min-height:0}
+body.hmi-operations .btn,body.hmi-operations button,body.hmi-operations input,body.hmi-operations select{min-height:44px}
+body.hmi-operations dialog{max-height:calc(100dvh - 12px);overflow-y:auto;max-width:calc(100vw - 20px)}
+body.hmi-operations .view-heading{margin:0 0 8px;align-items:center}
+body.hmi-operations .view-heading h1{font-size:19px;margin:0}
+body.hmi-operations .view-heading p{display:none}
+body.hmi-operations #view-machine.active{display:grid;grid-template-columns:300px minmax(0,1fr);gap:8px}
+body.hmi-operations #view-machine>.view-heading{grid-column:1/-1;margin:0}
+body.hmi-operations .machine-state-strip{grid-column:1/-1;margin:0;gap:8px}
+body.hmi-operations .machine-state-cell{padding:6px 10px}
+body.hmi-operations #view-machine>.commissioning-card{grid-column:1;grid-row:3/6;padding:10px;margin:0;align-self:start}
+body.hmi-operations #view-machine>.machine-tabs,body.hmi-operations #view-machine>.machine-notice,body.hmi-operations #view-machine>.machine-panel{grid-column:2;margin:0}
+body.hmi-operations #view-machine>.commissioning-card h2{font-size:14px;margin:0 0 5px}
+body.hmi-operations #view-machine>.commissioning-card p{font-size:12px;line-height:1.4;margin:4px 0 8px}
