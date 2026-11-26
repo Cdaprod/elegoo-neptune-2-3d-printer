@@ -70,3 +70,40 @@ idle. Missing progress hides the progress bar instead of implying a zero-percent
 job. Read-only monitoring remains usable while operation gates are disabled.
 
 ![Updated Observatory HMI overview](screenshots/hmi-overview-1280x400.png)
+
+## Continuous cinematic idle mode
+
+After **150 seconds (2½ minutes)** without interaction, the existing HMI recedes
+through a depth/focus transition while its existing Three.js renderer becomes a
+full-width cinematic machine study. The same canvas and scene stay alive. A smooth
+closed camera path moves between structural, build-surface and toolhead viewpoints,
+with rim lighting, a fine ground grid, fog and a bounded particle field. The fixed
+illustrative machine pose is not reported or commanded printer motion. The compact
+telemetry caption retains the latest observed connection and temperature readings.
+
+Touch, mouse, wheel or keyboard interaction triggers a coordinated return to the
+same panel. The first wake gesture is consumed; long touches and held keys remain
+captured until release, so the gesture cannot activate a control underneath. Focus
+is restored without scrolling. There are no printer requests in the idle controller.
+A newly lost connection or reported fault interrupts the cinematic view as well.
+
+Activity inside Print Bay and the shared operations iframe resets the same timer.
+Open authentication/confirmation/model dialogs, focused form controls and held input
+suppress idle entry. New dialogs interrupt an existing cinematic presentation.
+Reduced-motion preference uses a static camera and immediate visual state changes;
+WebGL failure retains the gradient/HUD fallback. Rendering remains capped at 20 fps
+and pixel ratio 1, with hidden-document rendering paused. No launcher, hardware,
+authentication or physical-operation gates change.
+
+Panel navigation now uses directional arrival/departure animations and responsive
+navigation feedback. Reduced-motion preference disables these animations.
+
+![Actual 1280×400 cinematic render with unavailable test telemetry](screenshots/hmi-cinematic-1280x400.png)
+
+`node scripts/test-hmi-cinematic.cjs` uses Playwright's accelerated clock to verify
+idle timing, activity inside iframes, the continuous renderer, consumed touch/key
+wake, held gestures, dialog suppression, status interruption and reduced motion.
+The existing browser regressions continue to check navigation, desktop/mobile,
+shared authentication, overflow and absence of automatic printer writes. CI publishes
+the cinematic screenshot alongside the existing HMI preview artifacts. Physical
+Pi GPU performance and real touch wake remain on-device acceptance checks.
