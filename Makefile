@@ -5,7 +5,7 @@ SHELL := /bin/sh
 PYTHON ?= python3
 
 help:
-	@printf '%s\n' 'make deploy                          # start services and launch desktop kiosk' 'make kiosk                           # launch fullscreen browser only' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # validate or provision OctoPrint application key' 'make reauthorize-octoprint           # explicitly replace a revoked OctoPrint key' 'make up                              # reuse valid API key and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services' 'make sd-rebuild                      # backup and rebuild inserted SD card safely'
+	@printf '%s\n' 'make deploy                          # start services and launch desktop kiosk' 'make kiosk                           # start fullscreen browser in background' 'make setup                           # configure printer and Observatory token' 'make authorize-octoprint             # validate or provision OctoPrint application key' 'make reauthorize-octoprint           # explicitly replace a revoked OctoPrint key' 'make up                              # reuse valid API key and launch both containers' 'make check                           # validate root Compose configuration' 'make token                           # show existing Observatory token locally' 'make rotate-token                    # generate and save a new Observatory token' 'make logs                            # follow both services' 'make sd-rebuild                      # backup and rebuild inserted SD card safely'
 
 setup:
 	@$(PYTHON) scripts/setup_env.py
@@ -51,8 +51,20 @@ rotate-token:
 sd-rebuild:
 	@$(PYTHON) scripts/neptune_sd_rebuild.py
 
-deploy: up
+deploy: kiosk-setup up
 	@$(MAKE) kiosk
 
 kiosk:
+	@bash deploy/raspberry-pi/kiosk/manage.sh start
+
+kiosk-debug:
 	@bash deploy/raspberry-pi/kiosk/launch.sh
+
+.PHONY: kiosk-debug kiosk-stop kiosk-restart kiosk-status kiosk-logs kiosk-enable kiosk-disable
+kiosk-stop kiosk-restart kiosk-status kiosk-logs kiosk-enable kiosk-disable:
+	@bash deploy/raspberry-pi/kiosk/manage.sh $(@:kiosk-%=%)
+
+.PHONY: kiosk-setup
+kiosk-setup:
+	@$(PYTHON) -m venv "$$HOME/.local/share/neptune-kiosk/venv"
+	@"$$HOME/.local/share/neptune-kiosk/venv/bin/python" -m pip install "playwright==1.56.0"

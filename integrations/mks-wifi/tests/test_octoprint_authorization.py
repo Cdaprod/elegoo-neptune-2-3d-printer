@@ -26,7 +26,14 @@ KEY = "abcdef1234567890abcdef1234567890"
 BASE = "http://127.0.0.1:5001"
 
 
-def test_application_key_is_issued_only_after_user_approval():
+@pytest.mark.parametrize(
+    "remote_env", [{}, {"SSH_CONNECTION": "test"}, {"SSH_TTY": "/dev/pts/1"}, {"CI": "true"}]
+)
+def test_application_key_is_issued_only_after_user_approval(remote_env, monkeypatch):
+    for name in ("SSH_CONNECTION", "SSH_TTY", "CI"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in remote_env.items():
+        monkeypatch.setenv(name, value)
     calls = []
     windows = []
 
@@ -60,7 +67,7 @@ def test_application_key_is_issued_only_after_user_approval():
         )
 
     assert result == KEY
-    assert windows == [BASE + "/plugin/appkeys/auth/pending123"]
+    assert windows == ([] if remote_env else [BASE + "/plugin/appkeys/auth/pending123"])
     assert any(call[2] == {"app": "Neptune Observatory"} for call in calls)
 
 

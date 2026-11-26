@@ -154,10 +154,13 @@ def authorize(opener, base: str, *, sleep=time.sleep, open_browser=webbrowser.op
     print("OctoPrint requires a one-time approval for Neptune Observatory.")
     print("Open this local link and approve the request with your OctoPrint account:")
     print(dialog_url, flush=True)
-    try:
-        open_browser(dialog_url)
-    except (OSError, RuntimeError):
-        pass
+    if not (os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY") or os.environ.get("CI")):
+        try:
+            open_browser(dialog_url)
+        except (OSError, RuntimeError):
+            pass
+    else:
+        print("Remote session: replace 127.0.0.1 with the Pi LAN hostname or address in the approval link; keep this command running.", flush=True)
 
     for _ in range(180):
         status, _, result = request(opener, poll_url)

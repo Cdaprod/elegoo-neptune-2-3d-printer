@@ -1,0 +1,6 @@
+# Observed working ARM64 Python 3.10.18 subset; not a complete lock.
+Slicer-Thumbnails==1.2.3
+gcode-thumbnail-tool==0.1.4
+Pillow==12.0.0
+OctoPrint-SpoolManager==1.7.8
+Print-Job-History==1.17.5
