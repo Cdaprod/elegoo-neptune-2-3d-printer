@@ -427,6 +427,8 @@ class PrinterService:
                     "observed_at": iso(self.observed_at),
                     "nozzle_c": nozzle,
                     "bed_c": bed,
+                    "nozzle_target_c": self.telemetry["nozzle_temperature"].get("target_c"),
+                    "bed_target_c": self.telemetry["bed_temperature"].get("target_c"),
                 }
             )
         return self.status_payload()
@@ -1362,6 +1364,11 @@ def create_app(
             else "cached_or_unavailable"
         )
         return payload
+
+    @app.get("/visual-lab", response_class=HTMLResponse, include_in_schema=False)
+    def visualization_lab() -> HTMLResponse:
+        """Simulation-only shell; live input still uses the existing authenticated API."""
+        return HTMLResponse(files("mks_wifi_bridge").joinpath("static/visual_lab.html").read_text())
 
     @app.get("/api/hmi/model-preview", dependencies=[Depends(require_auth)])
     async def hmi_model_preview(path: str, view: str = "iso") -> Response:

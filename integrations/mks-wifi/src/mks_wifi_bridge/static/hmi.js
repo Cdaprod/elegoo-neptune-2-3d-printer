@@ -21,6 +21,7 @@
  document.querySelector("main").addEventListener("pointerup",e=>{if(!gesture)return;const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;gesture=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.6){const views=["overview","print-bay","models","observations","controls"];route(views[Math.max(0,Math.min(4,views.indexOf(state.view)+(dx<0?1:-1)))]);}});
  let previouslyLive=false,previouslyError=false;
  function renderStatus(s){
+  window.dispatchEvent(new CustomEvent('hmi:telemetry',{detail:s}));
   const online=Boolean(s.connection?.connected)&&!s.stale;
   const machineError=/error|fault/i.test(s.telemetry?.printer_state?.value||'');if((previouslyLive&&!online)||(machineError&&!previouslyError))window.dispatchEvent(new CustomEvent('hmi:interrupt'));previouslyLive=online;previouslyError=machineError;
   const cinema=$('cinema-telemetry');if(cinema)cinema.textContent=(online?'Live':'Telemetry '+(s.stale?'stale':'unavailable'))+' · Nozzle '+value(s.telemetry?.nozzle_temperature)+' · Bed '+value(s.telemetry?.bed_temperature);
@@ -187,7 +188,7 @@
  async function refresh(){
   if(document.hidden||state.login)return;
   try{const s=await api("/api/printer/status");renderStatus(s);}catch(err){if(err.message!=="Authentication required"){text("health","● API unavailable");$("health").dataset.state="offline";text("integrity","Unavailable");text("observations-note",err.message);}}
-  try{renderChart(await api("/api/printer/temperatures"));}catch(err){if(err.message!=="Authentication required")text("observations-note","Temperature history unavailable: "+err.message);}
+  try{const temperatures=await api("/api/printer/temperatures");renderChart(temperatures);window.dispatchEvent(new CustomEvent('hmi:temperatures',{detail:temperatures}));}catch(err){if(err.message!=="Authentication required")text("observations-note","Temperature history unavailable: "+err.message);}
  }
  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
  refresh();state.interval=setInterval(refresh,5000);
