@@ -41,3 +41,48 @@ body:is([data-idle-phase=entering],[data-idle-phase=cinematic]) #idle-overlay{op
 body[data-idle-phase=waking] #app{transition-duration:.65s,.95s,.65s}
 body[data-idle-phase=waking] #hmi-ambience{transition-duration:1s}
 body[data-idle-phase=waking] #idle-overlay{transition-duration:.7s}
+
+/* Studio-first operator experience. Fit all six primary routes at 1280×400. */
+#app nav{overflow:hidden;gap:4px;padding:4px}
+#app nav button{min-width:0;max-width:none;flex:1 1 0;padding:4px 8px;font-size:12px}
+#view-overview.active{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(0,.9fr) minmax(0,.8fr);gap:8px}
+#view-overview .tile{padding:11px;min-height:0}
+#view-overview .hero{font-size:clamp(17px,1.9vw,25px);margin:8px 0}
+#view-overview .value{font-size:clamp(17px,2vw,23px);margin:16px 0}
+#view-overview .detail{font-size:11px}
+#view-overview .filename{font-size:13px}
+#view-overview .tile:last-child{padding-left:12px}
+#view-overview .tile:last-child::before{display:none}
+#view-overview .studio-hero{position:relative;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(90deg,#06101ad9,#1024367a 54%,#06121c22 95%);border-color:#43708b99;overflow:hidden}
+.studio-topline{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;letter-spacing:.12em;color:#9cd6ee;font-weight:750}
+#studio-phase{font-size:9px;color:#a9cfde;letter-spacing:.03em;text-align:right}
+.studio-copy h2{font-size:clamp(18px,2.2vw,30px);line-height:1.12;letter-spacing:-.045em;margin:5px 0;color:#edfaff}
+.studio-copy p{font-size:11px;line-height:1.25;max-width:340px;color:#accce0;margin:0}
+.studio-readout{display:flex;align-items:center;gap:12px;color:#b7dded;font-size:10px}
+.studio-readout strong{font-size:13px;color:#f1faff}
+.studio-actions{display:flex;gap:6px}
+#app .studio-actions button{font-size:12px;min-height:39px;padding:5px 11px;font-weight:700}
+#app #home-cinema,#app .primary-action{background:linear-gradient(115deg,#1b688a,#235779);border-color:#67bcdf}
+.studio-modes{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+#app .studio-modes button{font-size:9px;min-height:25px;padding:3px 6px;border-radius:6px;color:#b1d5e8;background:#11263d8a}
+#app #overview-observations{min-height:36px;font-size:11px;padding:5px 8px;margin-top:8px}
+#view-print-bay.active,#view-controls.active{display:grid!important;grid-template-rows:29px minmax(0,1fr);gap:5px;overflow:hidden}
+.embedded-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;overflow:hidden;padding:4px 10px;background:#0d1f31dc;border:1px solid #2a4d66;border-radius:8px;font-size:10px;color:#bed2df;white-space:nowrap}
+.embedded-toolbar strong{color:#a9daf6;font-size:10px;letter-spacing:.09em}
+#view-print-bay iframe,#view-controls iframe{min-height:0;width:100%;height:100%}
+#model-filter{min-height:36px;width:155px;min-width:100px;background:#0c1e30;border:1px solid #36566f;color:#e5f6ff;border-radius:8px;padding:6px 9px;font-size:12px}
+.model[hidden]{display:none!important}
+.diagnostics-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:12px}
+.diagnostics-grid span{background:#102a40aa;border:1px solid #304962;border-radius:7px;padding:6px;font-size:10px;color:#9bbcd1;min-width:0}
+.diagnostics-grid strong{display:block;margin-top:4px;font-size:14px;color:#e2f8ff;font-variant-numeric:tabular-nums}
+.diagnostics-footer{font-size:10px;line-height:1.5;color:#a7c6d4;margin-top:7px}
+#view-settings.active{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.settings-panel{display:flex;flex-direction:column;gap:9px;min-height:0;overflow-y:auto!important;scrollbar-width:thin}
+#app .settings-panel label{font-size:12px;color:#d8e7f2;display:flex;justify-content:space-between;gap:8px;align-items:center}
+#app .settings-panel select{min-height:35px;max-width:55%;background:#0b2031;color:#e8f9ff;border:1px solid #476682;border-radius:7px;padding:5px 9px;font-size:12px}
+#app .settings-panel input[type=checkbox]{width:20px;height:20px;accent-color:#36b9de;flex:none}
+.settings-panel .setting-check{justify-content:flex-start!important;gap:12px!important}
+.settings-note,.settings-panel .detail{font-size:11px;line-height:1.4;color:#a5c1d3;margin:0}
+#app .settings-actions button{min-height:39px;padding:5px 9px;font-size:12px}
+@media(max-width:900px){#app nav button{font-size:10px;padding:4px 2px}.studio-copy h2{font-size:18px}.studio-copy p{display:none}.studio-modes button{font-size:8px}#model-filter{width:100px}}
+@media(prefers-reduced-motion:reduce){.studio-hero,.studio-modes button{transition:none!important}}

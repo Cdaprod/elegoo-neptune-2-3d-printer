@@ -13,12 +13,12 @@
  }
  let routeAnimation=null,leaveAnimation=null,departingPanel=null;
  function finishDeparture(){if(departingPanel){for(const key of ['display','position','inset','zIndex','pointerEvents'])departingPanel.style[key]='';departingPanel.inert=false;departingPanel=null;}}
- function route(view){if(!["overview","print-bay","models","observations","controls"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
+ function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
  document.querySelector("main").addEventListener("pointerdown",e=>{if(e.pointerType==="touch"&&!e.target.closest("#models,button,a,input,canvas,dialog,iframe"))gesture={x:e.clientX,y:e.clientY};});
- document.querySelector("main").addEventListener("pointerup",e=>{if(!gesture)return;const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;gesture=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.6){const views=["overview","print-bay","models","observations","controls"];route(views[Math.max(0,Math.min(4,views.indexOf(state.view)+(dx<0?1:-1)))]);}});
+ document.querySelector("main").addEventListener("pointerup",e=>{if(!gesture)return;const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;gesture=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.6){const views=["overview","print-bay","models","observations","controls","settings"];route(views[Math.max(0,Math.min(4,views.indexOf(state.view)+(dx<0?1:-1)))]);}});
  let previouslyLive=false,previouslyError=false;
  function renderStatus(s){
   window.dispatchEvent(new CustomEvent('hmi:telemetry',{detail:s}));
@@ -169,6 +169,13 @@
    });
    return button;
  }
+ function filterModels(){
+  const q=($('model-filter')?.value||'').trim().toLowerCase();
+  const models=Array.from($('models').querySelectorAll('.model'));
+  let shown=0;for(const item of models){item.hidden=!!q&&!item.textContent.toLowerCase().includes(q);if(!item.hidden)shown++;}
+  if(models.length)text('model-count',shown+' of '+models.length+' files');
+ }
+ window.addEventListener('hmi:filter-models',filterModels);
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
   try{
@@ -180,7 +187,7 @@
    text("model-count",host.childElementCount+" files · "+(listing.local_index?.status||listing.status||"unknown"));
    if(!host.childElementCount){const empty=document.createElement("div");empty.className="tile";empty.textContent=listing.local_index?.error||listing.error||"No indexed G-code available. Configure a read-only source volume or refresh the printer SD listing.";host.append(empty);}
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
-  finally{state.loading=false;}
+  finally{state.loading=false;filterModels();}
  }
  $("manage-model").addEventListener("click",()=>{closeInspector();$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";route("controls");});
  $("refresh-files").addEventListener("click",loadFiles);
