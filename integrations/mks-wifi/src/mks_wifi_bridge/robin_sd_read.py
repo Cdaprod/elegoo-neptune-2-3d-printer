@@ -14,7 +14,6 @@ from typing import Protocol
 
 MAX_SD_BYTES = 50 * 1024 * 1024
 MAX_SD_CHUNK_BYTES = 4096
-MAX_SD_CHUNKS = (MAX_SD_BYTES + MAX_SD_CHUNK_BYTES - 1) // MAX_SD_CHUNK_BYTES
 SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,199}\.(?:gcode|gco|gc|g)", re.I)
 
 
@@ -99,6 +98,8 @@ async def collect_sd_file(
     if not 0 < timeout_seconds <= 120:
         raise SdReadError("Invalid SD transfer timeout")
 
+    max_chunks = (max_bytes + chunk_size - 1) // chunk_size
+
     async def transfer() -> tuple[bytes, str]:
         length, token = await reader.stat(filename)
         if (
@@ -112,7 +113,7 @@ async def collect_sd_file(
         digest = hashlib.sha256()
         result = bytearray()
         for offset in range(0, length, chunk_size):
-            if offset // chunk_size >= MAX_SD_CHUNKS:
+            if offset // chunk_size >= max_chunks:
                 raise SdReadError("SD chunk limit exceeded")
             needed = min(chunk_size, length - offset)
             block = await reader.read(filename, offset, needed, token)
