@@ -15,7 +15,7 @@ Read response data uses a fixed 192-byte stack buffer; no whole-file MCU bufferi
 STAT, OPEN and READ use existing FAT abstractions, not another filesystem driver.
 
 The patch also changes the upstream **compile-only test configuration** from its
-V3 default to V1.2/F103VE, primary UART1, one extruder, standalone A4988-style
+V3 default to V1.2/F103VE, primary UART3 (retained upstream selection; the WiFi module owns USART1), one extruder, standalone A4988-style
 interfaces, FSMC TFT35, onboard SD and no USB-host volume. BLTouch/bilinear leveling
 are disabled in this test configuration. These are NOT verified printer settings.
 Do not substitute them for the user's calibrated configuration. In particular,
@@ -141,20 +141,11 @@ The fixed-state implementation is Brad Conte’s public-domain SHA-256 from
 with original attribution retained in the patch. It is used for file integrity,
 not signatures, credentials or side-channel-sensitive cryptography.
 
-Clean build manifest for the complete patch:
+The USB primary retains upstream `SERIAL_PORT=3`; `wifiSerial_STM32.cpp`
+constructs the WiFi interface on USART1. Do not assign the primary serial owner
+to USART1 while that module is enabled. The installed board schematic and
+USB bridge still require physical confirmation.
 
-```json
-{
-  "experimental_only": true,
-  "hardware_accepted": false,
-  "upstream": "https://github.com/makerbase-mks/Mks-Robin-Nano-Marlin2.0-Firmware.git",
-  "revision": "af5eb011d08f2a2e19809e38470f678958530b29",
-  "source_date_epoch": "1640995200",
-  "platformio": "PlatformIO Core, version 6.1.19",
-  "patch_sha256": "46a9de07c52a3a68eea6abe20ed147ab4e1d53710b5a9b9dbb0651dcb8d42e2d",
-  "artifacts": {
-    "Robin_nano35.bin": "d158f2b264ff82289f7ae153bdad50a7d90049e771b53da6ed87f0a9c1f4f25f",
-    "firmware.bin": "75c0510caa10e75a3b55e0b4e3d3f34067294766a7e510557ab843cb2ac168a0"
-  }
-}
-```
+UART3 configuration cross build: 57,696 bytes static RAM and 325,804 bytes flash;
+actual handler fixtures pass. The earlier UART1 candidate is superseded and must
+not be used. The compile-only CI regenerates checksums for this patch.
