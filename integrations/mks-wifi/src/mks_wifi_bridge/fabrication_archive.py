@@ -40,6 +40,19 @@ class FabricationArchive:
                     provider TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL,
                     observed_at TEXT NOT NULL, PRIMARY KEY(provider,path,sha256),
                     FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                CREATE TABLE IF NOT EXISTS artifact_provenance(
+                    sha256 TEXT NOT NULL, provider TEXT NOT NULL, source_uri TEXT NOT NULL,
+                    filename TEXT NOT NULL, artifact_kind TEXT NOT NULL,
+                    first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+                    PRIMARY KEY(sha256,provider,source_uri,filename),
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(2);
+                CREATE TABLE IF NOT EXISTS artifact_relationships(
+                    parent_sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    child_sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    relationship TEXT NOT NULL CHECK(relationship IN
+                    ('sliced_from','derived_from','observes','configured_by')),
+                    PRIMARY KEY(parent_sha256,child_sha256,relationship));
                 CREATE TABLE IF NOT EXISTS artifact_stages(
                     id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
                     source_execution_id TEXT, status TEXT NOT NULL DEFAULT 'staged',
@@ -87,14 +100,19 @@ class FabricationArchive:
         return db
 
     def ingest(self, source, provider="local", original_filename=None):
+        from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
         source = Path(source)
-        if source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_SOURCE_BYTES:
-            raise ValueError("Source must be a bounded regular file")
+        return FabricationIngestion(self).submit_path(
+            source, ArtifactSubmission(original_filename or source.name, provider, str(source))
+        )
+
+    def persist_stream(self, stream, submission):
         digest = hashlib.sha256()
         fd, temporary = tempfile.mkstemp(dir=self.root, prefix=".ingest-")
         size = 0
         try:
-            with os.fdopen(fd, "wb") as output, source.open("rb") as stream:
+            with os.fdopen(fd, "wb") as output:
                 while chunk := stream.read(65536):
                     size += len(chunk)
                     if size > MAX_SOURCE_BYTES:
@@ -103,6 +121,8 @@ class FabricationArchive:
                     output.write(chunk)
                 output.flush()
                 os.fsync(output.fileno())
+            if size == 0:
+                raise ValueError("Empty artifacts are not accepted")
             sha = digest.hexdigest()
             target = self.root / (sha + ".gcode")
             os.replace(temporary, target)
@@ -111,15 +131,29 @@ class FabricationArchive:
                     "INSERT OR IGNORE INTO fabrication_artifacts VALUES(?,?,?,?,?)",
                     (
                         sha,
-                        original_filename or source.name,
+                        submission.filename,
                         size,
                         now(),
-                        json.dumps({"provenance": provider}),
+                        json.dumps({"provenance": submission.provider}),
                     ),
                 )
                 db.execute(
                     "INSERT OR REPLACE INTO artifact_locations VALUES(?,?,?,?)",
-                    (provider, str(source), sha, now()),
+                    (submission.provider, submission.source_uri, sha, now()),
+                )
+                db.execute(
+                    "INSERT INTO artifact_provenance VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(sha256,provider,source_uri,filename) DO UPDATE SET "
+                    "last_seen=excluded.last_seen",
+                    (
+                        sha,
+                        submission.provider,
+                        submission.source_uri,
+                        submission.filename,
+                        submission.artifact_kind,
+                        now(),
+                        now(),
+                    ),
                 )
             return sha
         finally:

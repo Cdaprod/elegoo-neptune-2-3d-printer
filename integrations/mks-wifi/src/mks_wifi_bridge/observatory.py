@@ -1245,6 +1245,38 @@ def create_app(
                 "note": str(exc),
             }
 
+    @app.post("/api/fabrication/ingest", dependencies=[Depends(require_control_token)])
+    async def ingest_artifact(request: Request, filename: str):
+        """HTTP/browser adapter: archive only; no OctoPrint connection required."""
+        import tempfile
+
+        from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+        if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
+            raise HTTPException(415, "Submit raw artifact bytes")
+        submission = ArtifactSubmission(filename, "http", "upload:" + filename)
+        try:
+            submission.validate()
+            with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stream:
+                size = 0
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_IMPORT_BYTES:
+                        raise HTTPException(413, "Artifact exceeds 50 MiB")
+                    stream.write(chunk)
+                stream.seek(0)
+                sha = await asyncio.to_thread(
+                    FabricationIngestion(fabrication_archive).submit, submission, stream
+                )
+            return {
+                "schema_version": 1,
+                "sha256": sha,
+                "archived": True,
+                "printer_command_sent": False,
+            }
+        except (ValueError, LibraryImportError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @app.get("/api/fabrication/{collection}", dependencies=[Depends(require_auth)])
     async def archive_collection(collection: str, before: str | None = None, limit: int = 40):
         try:
@@ -1603,6 +1635,15 @@ def create_app(
                 data.extend(chunk)
             if not data:
                 raise HTTPException(status_code=422, detail="G-code file is empty.")
+            import io
+
+            from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+            sha = await asyncio.to_thread(
+                FabricationIngestion(fabrication_archive).submit,
+                ArtifactSubmission(filename, "browser_hmi", "upload:" + filename),
+                io.BytesIO(data),
+            )
             backend = printer.backend
             try:
                 result = await asyncio.to_thread(
@@ -1610,7 +1651,13 @@ def create_app(
                 )
             except LibraryImportError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
-        return {**result, "storage": "octoprint_local", "printer_command_sent": False}
+        return {
+            **result,
+            "sha256": sha,
+            "archived": True,
+            "storage": "octoprint_local",
+            "printer_command_sent": False,
+        }
 
     @app.get("/visual-lab", response_class=HTMLResponse, include_in_schema=False)
     def visualization_lab() -> HTMLResponse:

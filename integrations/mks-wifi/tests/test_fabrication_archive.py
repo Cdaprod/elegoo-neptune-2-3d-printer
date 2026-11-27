@@ -83,3 +83,29 @@ def test_execution_link_survives_geometry_cache_eviction(tmp_path):
         db.execute("DELETE FROM gcode_files")
     assert store.collection("history")["items"][0]["sha256"] == sha
     assert store.stage_again("historic")["sha256"] == sha
+
+
+def test_source_neutral_ingestion_deduplicates_bytes_and_preserves_provenance(tmp_path):
+    from io import BytesIO
+
+    from mks_wifi_bridge.fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+    store = archive(tmp_path)
+    service = FabricationIngestion(store)
+    content = b"G90\nG1 X10 E1\n"
+    identities = []
+    for provider, uri in [("removable", "/card/part.gcode"), ("wireless_handoff", "drop:42")]:
+        submission = ArtifactSubmission("part.gcode", provider, uri)
+        identities.append(service.submit(submission, BytesIO(content)))
+        assert service.submit(submission, BytesIO(content)) == identities[-1]
+    assert identities[0] == identities[1]
+    with store.db() as db:
+        assert db.execute("SELECT count(*) FROM fabrication_artifacts").fetchone()[0] == 1
+        assert db.execute("SELECT count(*) FROM artifact_provenance").fetchone()[0] == 2
+        assert db.execute("SELECT count(*) FROM artifact_stages").fetchone()[0] == 0
+    assert len(list(store.root.glob("*.gcode"))) == 1
+    with pytest.raises(ValueError):
+        service.submit(
+            ArtifactSubmission("part.step", "http", "upload:part.step", "design"), BytesIO(content)
+        )
+    assert not list(store.root.glob(".ingest-*"))

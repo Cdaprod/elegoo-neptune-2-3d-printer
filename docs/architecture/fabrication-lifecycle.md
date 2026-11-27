@@ -81,3 +81,32 @@ No automatic hardware operations were run to validate this experimental opt-in.
 Original bytes and execution records survive card reformatting only after bytes
 have actually been acquired. No software can reconstruct missing original bytes
 from M20 filenames or M23 sizes.
+
+## Unified ingestion contract (schema 1)
+
+Many source adapters → `FabricationIngestion.submit(ArtifactSubmission, stream)` →
+one canonical archive → gallery, history, derivatives and staging consumers.
+
+`ArtifactSubmission` carries original filename, adapter provider, source URI,
+artifact kind and schema version. Canonical identity is always SHA-256 of the
+original bytes, independent of filename, adapter and transport. Schema migration 2
+adds idempotent provenance records (including original names, first/last arrival)
+and typed relationship storage: sliced_from, derived_from, observes, configured_by.
+Different sources submitting identical bytes create one canonical artifact and
+multiple provenance records. Ingestion never stages, selects or starts a print.
+
+Implemented adapters: configured local-file scans, verified native-SD transfers,
+existing browser/HMI G-code upload, and authenticated raw HTTP G-code submission
+at `POST /api/fabrication/ingest?filename=part.gcode` (application/octet-stream).
+The HTTP endpoint requires existing write authentication and origin protections;
+it works without OctoPrint and performs no delivery or execution. HMI legacy
+uploads archive through the same service before their existing local delivery.
+
+Removable-media bulk hydration still needs adapter/UI integration with the existing
+SD importer. OrcaSlicer direct submission, LilBitDrop wireless transport, network
+storage protocols and non-G-code formats remain future adapters. No Apple AirDrop
+compatibility or operating wireless service is claimed. The contract currently
+accepts execution_gcode only; unsupported artifact kinds fail explicitly. CAD,
+slicer projects, photos and derivatives must gain typed validation before being
+accepted, rather than masquerading as G-code. Source URIs are provenance labels,
+not URLs fetched by the ingestion service.
