@@ -85,3 +85,40 @@ def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_ssh_sender_bridge_to_real_loopback_receiver(tmp_path):
+    """SSH executable is simulated; remote Python/HTTP/files are actual local execution."""
+    import shlex
+    import subprocess
+
+    sender_path = SOURCE.with_name("send.py")
+    sender_spec = importlib.util.spec_from_file_location("lilbitdrop_sender_test", sender_path)
+    sender = importlib.util.module_from_spec(sender_spec)
+    sender_spec.loader.exec_module(sender)
+    private = tmp_path / "receiver-token"
+    private.write_text("private-test-token-" + "x" * 32)
+    private.chmod(0o600)
+    server = receiver.Receiver(("127.0.0.1", 0), tmp_path / "handoff", private.read_text())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    source = tmp_path / "sender.gcode"
+    source.write_bytes(b"G90\nG1 X10 E1\n")
+
+    def ssh_runner(command, **kwargs):
+        assert command[:2] == ["ssh", "-T"]
+        assert "StrictHostKeyChecking=yes" in command and "BatchMode=yes" in command
+        assert private.read_text() not in command[-1]
+        return subprocess.run(shlex.split(command[-1]), **kwargs)
+
+    try:
+        result = sender.send(
+            source, token_file=str(private), port=server.server_port, runner=ssh_runner
+        )
+        assert result["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+        assert not result["printing"]
+        assert len(list(server.completed.iterdir())) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
