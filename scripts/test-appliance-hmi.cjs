@@ -8,6 +8,15 @@ const path=require('node:path');
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=swiftshader']});
  try{
   const page=await browser.newPage({viewport:{width:1280,height:400},hasTouch:true});
+  await page.addInitScript(()=>{
+   window.__hmiInput=[];
+   for(const type of ['pointerdown','pointerup','pointercancel','touchstart','touchend','click'])document.addEventListener(type,event=>{
+    const touch=event.changedTouches?.[0];
+    const record={type,target:event.target.id||event.target.tagName,x:touch?.clientX??event.clientX,y:touch?.clientY??event.clientY};
+    window.__hmiInput.push(record);if(window.__hmiInput.length>18)window.__hmiInput.shift();
+    queueMicrotask(()=>record.prevented=event.defaultPrevented);
+   },true);
+  });
   const errors=[],writes=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{if(r.url().includes('/api/')&&!['GET','HEAD'].includes(r.method()))writes.push(r.url());});
@@ -84,6 +93,8 @@ const path=require('node:path');
   assert.equal(await page.locator('#view-models.active').count(),1);
   await page.locator('#models').evaluate(e=>e.scrollLeft=0);
   const hmiSnapshot=()=>page.evaluate(()=>({
+   input:window.__hmiInput,
+   manageRect:(()=>{const r=document.querySelector("#manage-model")?.getBoundingClientRect();return r?{x:r.x,y:r.y,w:r.width,h:r.height,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.id}:null;})(),
    idlePhase:document.body.dataset.idlePhase,
    inspectorOpen:document.querySelector('#model-inspector')?.open,
    inspectorStatus:document.querySelector('#inspector-status')?.textContent,
