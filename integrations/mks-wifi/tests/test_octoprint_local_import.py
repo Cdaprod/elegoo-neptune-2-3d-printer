@@ -106,9 +106,7 @@ def test_hmi_endpoint_requires_auth_origin_and_opt_in(monkeypatch, tmp_path):
     backend = OctoPrintBackend("http://octoprint:80", "secret-key")
     service = PrinterService(backend=backend, interval=30)
     monkeypatch.setenv("NEPTUNE_HMI_IMPORT_ENABLED", "false")
-    app = create_app(
-        service, bind_host="0.0.0.0", auth_token="dashboard-key"
-    )
+    app = create_app(service, bind_host="0.0.0.0", auth_token="dashboard-key")
     with TestClient(app) as client:
         assert client.get("/api/hmi/import-status").status_code == 401
         headers = {"Authorization": "Bearer dashboard-key"}
@@ -129,15 +127,14 @@ def test_hmi_endpoint_requires_auth_origin_and_opt_in(monkeypatch, tmp_path):
     monkeypatch.setenv("NEPTUNE_HMI_IMPORT_ENABLED", "true")
     app = create_app(
         PrinterService(backend=backend, interval=30),
-        bind_host="0.0.0.0", auth_token="dashboard-key",
+        bind_host="0.0.0.0",
+        auth_token="dashboard-key",
     )
     writes = []
 
     def fake_upload(base, key, filename, data):
         writes.append((base, key, filename, data))
-        return {
-            "status": "imported", "filename": filename, "selected": False, "printing": False
-        }
+        return {"status": "imported", "filename": filename, "selected": False, "printing": False}
 
     monkeypatch.setattr(observatory_module, "upload_local_gcode", fake_upload)
     headers = {
@@ -152,13 +149,16 @@ def test_hmi_endpoint_requires_auth_origin_and_opt_in(monkeypatch, tmp_path):
                 "/api/hmi/import-gcode?filename=Part.gcode",
                 headers={**headers, "Origin": "http://evil.example"},
                 content=b"G1 X1 E1",
-            ).status_code == 403
+            ).status_code
+            == 403
         )
         assert (
             client.post(
                 "/api/hmi/import-gcode?filename=../bad.gcode",
-                headers=headers, content=b"G1 X1 E1",
-            ).status_code == 422
+                headers=headers,
+                content=b"G1 X1 E1",
+            ).status_code
+            == 422
         )
         response = client.post(
             "/api/hmi/import-gcode?filename=Part.gcode", headers=headers, content=b"G1 X1 E1"

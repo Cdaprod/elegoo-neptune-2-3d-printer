@@ -2,6 +2,7 @@
 
 Never connects to firmware, chooses a file, or starts a print. No overwrite.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -46,10 +47,10 @@ def validate_gcode_filename(filename: str, data: bytes) -> str:
         raise LibraryImportError("G-code must contain between 1 byte and 50 MiB")
     if NAME.fullmatch(filename):
         return filename
-    stem = filename[:-len(suffix)]
+    stem = filename[: -len(suffix)]
     ascii_stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode()
     safe_stem = re.sub(r"[^A-Za-z0-9_. -]+", "-", ascii_stem)
-    safe_stem = re.sub(r"\\.{2,}", "-", safe_stem).strip(" ._-")[:65] or "model"
+    safe_stem = re.sub(r"\.{2,}", "-", safe_stem).strip(" ._-")[:65] or "model"
     digest = hashlib.sha256(filename.encode("utf-8")).hexdigest()[:10]
     return f"{safe_stem}-{digest}{suffix}"
 
@@ -61,12 +62,16 @@ def multipart(filename: str, data: bytes) -> tuple[str, bytes]:
     for field in ("select", "print"):
         body += (
             f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"\r\n'
-            'Content-Type: text/plain\r\n\r\nfalse\r\n'
+            "Content-Type: text/plain\r\n\r\nfalse\r\n"
         ).encode()
     body += (
-        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-        'Content-Type: application/octet-stream\r\n\r\n'
-    ).encode() + data + b"\r\n"
+        (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        + data
+        + b"\r\n"
+    )
     return boundary, body + f"--{boundary}--\r\n".encode()
 
 
@@ -99,9 +104,12 @@ def upload_local_gcode(
         if found is not None:
             if found.get("hash") == expected:
                 return {
-                    "status": "already_imported", "filename": filename,
-                    "sha256": digest, "size_bytes": len(data),
-                    "selected": False, "printing": False,
+                    "status": "already_imported",
+                    "filename": filename,
+                    "sha256": digest,
+                    "size_bytes": len(data),
+                    "selected": False,
+                    "printing": False,
                 }
             from pathlib import PurePosixPath
 
@@ -117,13 +125,17 @@ def upload_local_gcode(
                             if duplicate.get("hash") is None
                             else "already_imported"
                         ),
-                        "filename": filename, "sha256": digest,
-                        "size_bytes": len(data), "selected": False, "printing": False,
+                        "filename": filename,
+                        "sha256": digest,
+                        "size_bytes": len(data),
+                        "selected": False,
+                        "printing": False,
                     }
                 raise LibraryImportError("Content-addressed filename is occupied")
         boundary, payload = multipart(filename, data)
         request = Request(
-            base_url.rstrip("/") + "/api/files/local", data=payload,
+            base_url.rstrip("/") + "/api/files/local",
+            data=payload,
             headers={
                 **headers,
                 "Content-Type": "multipart/form-data; boundary=" + boundary,
@@ -137,9 +149,12 @@ def upload_local_gcode(
         if len(raw) > 4096:
             raise LibraryImportError("OctoPrint returned an oversized import response")
         return {
-            "status": "imported", "filename": filename,
-            "sha256": digest, "size_bytes": len(data),
-            "selected": False, "printing": False,
+            "status": "imported",
+            "filename": filename,
+            "sha256": digest,
+            "size_bytes": len(data),
+            "selected": False,
+            "printing": False,
         }
     except HTTPError as exc:
         if exc.code in {401, 403}:
