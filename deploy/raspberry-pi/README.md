@@ -111,3 +111,6 @@ The existing OctoPrint base/plugin Python migration remains separate work; no pl
 upgrade is performed by this integration. Keep HTTP services on a trusted LAN.
 
 Native Robin Nano SD retrieval is documented in [the native SD integration guide](../../docs/native-robin-sd.md). Stock firmware remains unsupported for byte retrieval; experimental firmware is isolated and never flashed by `make deploy`.
+
+Factory USB observations, exclusive ownership checks and the one-time USB migration
+are documented in [Native Robin SD access](../../docs/native-robin-sd.md). Factory SD file-content retrieval remains unverified; no firmware flashing is part of deployment.

@@ -63,6 +63,8 @@
   }
  }
 
+ let factoryUsb={available:false,selection_enabled:false};
+ api("/api/factory-usb").then(value=>{factoryUsb=value;}).catch(()=>{});
  let inspectorViewer=null;
  let inspectorRequest=null;
  let inspectorEpoch=0;
@@ -124,6 +126,8 @@
      preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
    }else if(file.preview_available)preview.src=legacyPreview(file,source);
    else preview.removeAttribute("src");
+   $("factory-select-file").hidden=!["printer","printer_native"].includes(source);
+   $("factory-select-file").disabled=!(factoryUsb.available&&factoryUsb.selection_enabled);
    $("retrieve-sd").hidden=source!=="printer_native"||!file.retrievable;
    $("cancel-sd").hidden=true;
    $("copy-sd-local").hidden=source!=="native_cache";
@@ -185,6 +189,7 @@
    const meta=file.metadata||file.print_metadata||file.local_metadata?.metadata||{};
    info.textContent=(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
+     (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
    button.append(image,name,info);
    setPreviewImage(image,file,source);
@@ -252,6 +257,11 @@
  $("copy-sd-local").addEventListener('click',async()=>{
   if(inspected?.source!=='native_cache')return;
   try{const result=await api('/api/native-sd/assets/'+inspected.file.sha256+'/import-local',{method:'POST'});text('native-sd-status',result.status+' · '+result.filename+' · no print selected');}
+  catch(error){text('native-sd-status',error.message);}
+ });
+ $("factory-select-file").addEventListener('click',async()=>{
+  const filename=inspected?.file.name;if(!filename||!confirm('I am beside an idle printer. Select '+filename+' only, without starting a print?'))return;
+  try{const result=await api('/api/factory-usb/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'select',filename,confirmation:'SELECT '+filename,attended:true,printer_idle_confirmed:true})});text('native-sd-status','Selected '+result.data.filename+' · '+result.data.size_bytes+' bytes · no print requested');}
   catch(error){text('native-sd-status',error.message);}
  });
  function openManagedFiles(){

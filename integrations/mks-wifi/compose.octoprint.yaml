@@ -12,6 +12,7 @@ services:
         read_only: true
     environment:
       NEPTUNE_GCODE_SOURCE_DIR: /mnt/octoprint/octoprint/uploads
+      NEPTUNE_FACTORY_USB_SELECTION_ENABLED: ${NEPTUNE_FACTORY_USB_SELECTION_ENABLED:-false}
       NEPTUNE_NATIVE_SD_READ_ENABLED: ${NEPTUNE_NATIVE_SD_READ_ENABLED:-false}
       NEPTUNE_NATIVE_SD_CACHE: /data/native-sd
       NEPTUNE_HMI_IMPORT_ENABLED: ${NEPTUNE_HMI_IMPORT_ENABLED:-false}

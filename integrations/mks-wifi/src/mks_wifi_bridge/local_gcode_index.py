@@ -101,7 +101,12 @@ class LocalGcodeIndexer:
         truncated = False
         for directory, dirnames, filenames in os.walk(root_real, followlinks=False):
             dirnames[:] = sorted(
-                name for name in dirnames if not (Path(directory) / name).is_symlink()
+                name
+                for name in dirnames
+                if not name.startswith(".")
+                and name.casefold()
+                not in {"system volume information", "$recycle.bin", "lost+found"}
+                and not (Path(directory) / name).is_symlink()
             )
             for filename in sorted(filenames):
                 candidate = Path(directory) / filename

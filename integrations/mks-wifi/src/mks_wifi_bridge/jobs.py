@@ -48,12 +48,21 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
         and external_state in {"printing", "paused", "idle"}
     )
     host_running = active_value is True
+    factory = telemetry.get("factory_usb") or {}
+    selected_usb = (factory.get("select") or {}).get("data") or {}
+    usb_selected = (
+        telemetry.get("connection_transport") == "usb" and selected_usb.get("selected") is True
+    )
+
     if not fresh:
         status = "stale" if snapshot.get("observed_at") else "unavailable"
         active = None
     elif octoprint_mode and external_selected:
         status = str(external.get("state") or "unknown")
         active = external.get("active")
+    elif fresh and usb_selected and active_value is not True:
+        status = "selected"
+        active = None
     elif octoprint_mode and active_value is False:
         # OctoPrint idle describes its host job, not a separate touchscreen SD job.
         status = "unknown"
@@ -99,6 +108,12 @@ def print_job_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
             else "unavailable",
             "value": external.get("elapsed_seconds") if sd_active else None,
             "source_command": "MKS_HTTP_/api/job" if sd_active else None,
+        }
+    if fresh and usb_selected and not host_running:
+        filename = {
+            "status": "available",
+            "value": selected_usb.get("filename"),
+            "source_command": "USB M23 (selected; print activity unverified)",
         }
     try:
         elapsed_value = float(elapsed["value"])

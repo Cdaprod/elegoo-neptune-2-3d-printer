@@ -10,16 +10,16 @@ help:
 setup:
 	@$(PYTHON) scripts/setup_env.py
 
-authorize-octoprint: setup
+authorize-octoprint: setup usb-check
 	@OCTOPRINT_API_KEY=authorization-pending docker compose stop neptune-observatory
 	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d --build octoprint
 	@$(PYTHON) scripts/authorize_octoprint.py
 
-reauthorize-octoprint: setup
+reauthorize-octoprint: setup usb-check
 	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d octoprint
 	@$(PYTHON) scripts/authorize_octoprint.py --reauthorize
 
-up: setup
+up: setup usb-check
 	@docker volume inspect mks-wifi_commissioning-data >/dev/null 2>&1 || docker volume create mks-wifi_commissioning-data >/dev/null
 	@OCTOPRINT_API_KEY=authorization-pending docker compose up -d octoprint
 	@$(PYTHON) scripts/authorize_octoprint.py
@@ -77,3 +77,7 @@ appliance-config:
 .PHONY: sd-import
 sd-import:
 	@$(PYTHON) scripts/import_sd_gcode.py $(if $(SD_MOUNT),"$(SD_MOUNT)",) $(if $(filter 1,$(APPLY)),--apply,)
+
+.PHONY: usb-check
+usb-check: setup
+	@$(PYTHON) scripts/check_usb_owner.py

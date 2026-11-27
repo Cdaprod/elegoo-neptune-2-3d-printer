@@ -123,6 +123,9 @@ class SdEntry(BaseModel):
     name: str
     kind: str
     size_bytes: int | None = None
+    source: str | None = None
+    display_name: str | None = None
+    selected: bool = False
     preview_available: bool = False
     ambiguous: bool = False
     preview_source: str = "none"
@@ -309,7 +312,10 @@ class PrinterService:
             async with self.io_lock:
                 if self.backend is not None:
                     status = await self.backend.read_state()
-                    if self.physical_status_reader is not None:
+                    if (
+                        self.physical_status_reader is not None
+                        and status.get("connection_transport") != "usb"
+                    ):
                         try:
                             self.external_sd_status = await self.physical_status_reader.read_state()
                         except (MksHttpStatusError, OSError, TimeoutError) as exc:
@@ -411,6 +417,12 @@ class PrinterService:
             status if self.backend is not None else telemetry_payload(status, self.firmware)
         )
         if self.backend is not None:
+            firmware = self.telemetry.get("firmware_identification", {})
+            if firmware.get("status") == "available":
+                self.firmware = firmware["value"]
+                self.firmware_observed_at = utc_now()
+            if self.telemetry.get("connection_transport") == "usb":
+                self.external_sd_status = None
             self.telemetry["external_sd"] = self.external_sd_status or {
                 "status": "unavailable",
                 "state": "unknown",
@@ -1097,6 +1109,9 @@ def create_app(
     from .manufacturing.api import install as install_print_bay
 
     install_print_bay(app, require_auth, require_control_token, printer)
+    from .factory_usb import install as install_factory_usb
+
+    install_factory_usb(app, require_auth, require_control_token, printer)
     from .native_sd_api import install as install_native_sd
 
     native_sd_service = install_native_sd(
@@ -1374,10 +1389,17 @@ def create_app(
             }
             for entry in payload.get("entries", [])
         ]
+        from .factory_usb import catalog_visible
+
+        entries = [entry for entry in entries if catalog_visible(entry.get("name", ""))]
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
         payload["printer_listing_source"] = (
-            "octoprint_sdcard"
+            "factory_usb_m20"
+            if octoprint_mode
+            and printer.backend.connection_transport == "usb"
+            and payload.get("status") == "available"
+            else "octoprint_sdcard"
             if octoprint_mode
             else "firmware_m20"
             if payload.get("status") == "available"

@@ -221,3 +221,80 @@ Hardware acceptance remains **not run**:
    that actually moves/heats/prints requires its own explicit operator authorization.
 8. Exercise cancellation, disconnect and SD removal only when safe and separately
    authorized; verify a clean new-session retry and unchanged source file.
+
+## Factory USB commissioning evidence and host integration
+
+The operator's physical transcript is preserved in
+`integrations/mks-wifi/tests/fixtures/robin_factory_usb.json`. It identifies
+`Robin_nano_v2.1.6.b`, CH340 `1a86:7523`, `ch341`, `/dev/ttyUSB0`, 115200 8N1.
+The operator identifies the PCB as Robin Nano v1.2; firmware identity alone does
+not establish PCB revision. M115, M503, M114, M105, M21, M20/M20 L, M23 and M27
+worked. `DISPMNT01.gcode` was selected and reported as **2113357 bytes**, with
+cursor zero. This verifies selection and size, **not file-content retrieval or
+an active print**. RSD/1 remains uninstalled and physically unverified.
+
+The existing OctoPrint connection now owns the USB device exclusively (pyserial
+exclusive lock plus Linux TIOCEXCL). Factory queries use its tagged command queue,
+not a second serial client. `/api/factory-usb` exposes observations;
+`POST /api/factory-usb/query` supports firmware, configuration, temperature,
+coordinates, list/list_long and status. Identify the firmware first. Queries are
+restricted to an operational, idle USB owner and retain authentication/origin
+checks. Factory SD select/initialize additionally require the disabled-by-default
+`NEPTUNE_FACTORY_USB_SELECTION_ENABLED` gate, CONTROL permission and explicit
+attended idle confirmation. Selection calls OctoPrint's selection API with
+`printAfterSelect=false`. Production deployment does not perform these actions.
+
+Completion is transaction-specific: M20 requires both directory markers, M23
+requires matching filename/size and selection acknowledgment, and M114 requires
+an XYZ response. Bare `ok` and unsolicited temperature responses cannot complete
+unrelated queries. Temperature observations explicitly do not claim command-ACK
+correlation. M503 is a bounded, potentially partial configuration snapshot, not a
+verified restoration backup. Missing responses time out; data is never invented.
+AppleDouble files, hidden paths and system directories are excluded. Locally
+matched filenames alone never establish content identity or native geometry.
+
+### Unsolicited M105 investigation
+
+The operator observed `echo:enqueueing "M105"` with both containers paused,
+M155 S0 ineffective and picocom the only identified USB owner. Source-verifiable
+candidate: Makerbase's factory-family firmware at
+[`b346a1f3b6d3296b8efee87e06c92da504b5c0c3`](https://github.com/makerbase-mks/MKS-Robin-Nano-Firmware/blob/b346a1f3b6d3296b8efee87e06c92da504b5c0c3/Src/wifi_module.cpp#L1425)
+enqueues M105 inside its WiFi command handler. Internal WiFi/TFT-to-firmware
+forwarding can therefore generate the observed echo without a Linux USB writer.
+This is a source-backed hypothesis, not identification of the installed binary's
+exact origin. The same pinned source configures USART3 PB10/PB11 and USART1
+PA9/PA10; tracing the actual board USB routing remains a pre-flash requirement.
+Tests replay the interleaved transcript and test wrong transaction tags, partial
+responses, guarded selection, unsafe machine states and exclusive-owner preflight.
+
+### Updating and commissioning USB without flashing
+
+Normal updates remain `git pull --ff-only origin main` followed by `make deploy`.
+For the one-time USB migration, first inspect the physical printer and close
+picocom normally in tmux `printer:serial` (picocom Ctrl-A then Ctrl-X). On the Pi:
+
+```sh
+cd ~/elegoo-neptune-2-3d-printer
+git pull --ff-only origin main
+sudo fuser -v /dev/ttyUSB0
+docker inspect --format '{{.Name}} paused={{.State.Paused}}' neptune-observatory neptune-octoprint
+# Only after diagnostics are closed and the printer is safely idle, explicitly
+# unpause any containers reported paused; do not blindly restart a serial owner.
+# docker unpause neptune-octoprint neptune-observatory
+python3 scripts/check_usb_owner.py --configure-usb
+make deploy
+```
+
+The preflight verifies stable `/dev/serial/by-id` identity, rejects external
+owners and paused containers, and never opens the port or sends G-code. It
+preserves credentials, volumes and `.env.bak`; USB autoconnect is disabled.
+Select `/dev/ttyUSB-printer`, 115200 in the existing OctoPrint connection UI only
+after operator checks. Keep RSD enablement false. Use the HMI SD management
+observations to request M115 and directory/status/coordinate snapshots; these
+remain read-only. M23 selection or M21 initialization requires separate attended
+operator confirmation. Do not open picocom concurrently.
+
+Factory SD bytes, independent SHA-256 equality and deposited geometry from that
+physical card remain the experimental hardware acceptance gate. The reference
+firmware cross-build is not a qualified replacement for this installed factory
+binary; MCU, bootloader, pin/config compatibility and recovery remain mandatory.

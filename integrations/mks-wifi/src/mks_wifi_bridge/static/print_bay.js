@@ -30,22 +30,23 @@ function mesh(buffer){
 async function preview(canvas, plate, artifact){
   const currentGeneration=generation;
   if(!artifact&&!project()?.geometryAvailable){canvas.replaceWith(text('p','No exported geometry yet'));return;}
+  let renderer;
   try{
-    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
     const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(35,1,.1,10000);
     scene.add(new THREE.HemisphereLight(0xc1efff,0x203040,3));const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(80,140,90);scene.add(light);
     const group=new THREE.Group();scene.add(group);
     const geometries=await Promise.all(plate.objects.map(async obj=>{
       const r=await fetch(artifact?fileUrl(artifact,obj.export):`/api/manufacturing/projects/${encodeURIComponent(project().name)}/geometry/${encodeURIComponent(obj.export)}`);if(!r.ok)throw Error('Preview unavailable');return mesh(await r.arrayBuffer());
     }));
-    if(currentGeneration!==generation){geometries.forEach(g=>g.dispose());renderer.dispose();return;}
+    if(currentGeneration!==generation){geometries.forEach(g=>g.dispose());renderer.dispose();renderer.forceContextLoss();return;}
     for(const g of geometries)group.add(new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x69bbcc,roughness:.55,metalness:.15})));
     // CAD uses Z-up. Apply one assembly rotation, preserving relative object positions.
     group.rotation.x=-Math.PI/2;const box=new THREE.Box3().setFromObject(group), center=box.getCenter(new THREE.Vector3());group.position.sub(center);
     const size=box.getSize(new THREE.Vector3()).length();camera.position.set(size*.85,size*.65,size);camera.lookAt(0,0,0);
     const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.enablePan=false;
     const view={renderer,controls,scene,camera};views.push(view);
-  }catch(e){canvas.replaceWith(text('p',e.message));}
+  }catch(e){renderer?.dispose();renderer?.forceContextLoss();canvas.replaceWith(text('p',e.message));}
 }
 function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();v.renderer.forceContextLoss();}views=[];}
 function stateFor(plate){return preparationState(project(),plate,artifacts,jobs,worker);}

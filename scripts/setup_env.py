@@ -87,22 +87,26 @@ def main() -> int:
         print("Generated and saved a new Observatory token (run make token to display).")
         return 0
 
-    # Precedence: explicit shell override > saved non-placeholder value > known
-    # static printer IP. Network discovery is opt-in, never a setup prerequisite.
-    host = os.environ.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
-    if not host:
-        host = values.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
-    if host in ("", "printer.local"):
-        host = DEFAULT_PRINTER_IP
-    if host.lower() == "discover":
-        try:
-            host = discover()
-        except RuntimeError as exc:
-            parser.error(str(exc))
-    if not HOST_PATTERN.fullmatch(host):
-        parser.error("printer address must be a hostname or IPv4 address without URL/port")
-    updates["OCTOPRINT_MKS_WIFI_HOST"] = host
-    print(f"Using configured MKS WiFi endpoint: {host}")
+    transport = os.environ.get("OCTOPRINT_TRANSPORT", values.get("OCTOPRINT_TRANSPORT", "wifi"))
+    if transport == "usb":
+        print("Using USB transport; saved optional WiFi settings are preserved.")
+    else:
+        # Precedence: explicit shell override > saved non-placeholder value > known
+        # static printer IP. Network discovery is opt-in, never a setup prerequisite.
+        host = os.environ.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+        if not host:
+            host = values.get("OCTOPRINT_MKS_WIFI_HOST", "").strip()
+        if host in ("", "printer.local"):
+            host = DEFAULT_PRINTER_IP
+        if host.lower() == "discover":
+            try:
+                host = discover()
+            except RuntimeError as exc:
+                parser.error(str(exc))
+        if not HOST_PATTERN.fullmatch(host):
+            parser.error("printer address must be a hostname or IPv4 address without URL/port")
+        updates["OCTOPRINT_MKS_WIFI_HOST"] = host
+        print(f"Using configured MKS WiFi endpoint: {host}")
 
     # OctoPrint issues its own API keys. make up requests one through OctoPrint's
     # Application Keys plugin after the OctoPrint service has started.

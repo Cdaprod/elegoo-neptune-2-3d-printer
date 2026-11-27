@@ -53,6 +53,8 @@ class OctoPrintBackend:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
+        self.connection_transport = None
+        self.factory_observations = {}
         self.host = parsed.hostname
         self.port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._opener = build_opener(_NoRedirects())
@@ -309,6 +311,21 @@ class OctoPrintBackend:
     async def read_state(self) -> dict[str, Any]:
         connection = await self.get("/api/connection")
         current = connection.get("current") or {}
+        serial_port = str(current.get("port") or "")
+        self.connection_transport = (
+            "usb"
+            if serial_port.startswith(("/dev/ttyUSB", "/dev/ttyACM", "/dev/serial/", "/dev/cu.usb"))
+            else "mks_wifi"
+        )
+        self.factory_observations = {}
+        if self.connection_transport == "usb":
+            try:
+                bridge = await self.get("/api/plugin/neptune_sd_read")
+                self.factory_observations = (bridge.get("factory_usb") or {}).get(
+                    "observations", {}
+                )
+            except OctoPrintError:
+                pass
         state = str(current.get("state") or "unknown").lower()
         if state in {"closed", "offline", "error", "unknown"}:
             raise OctoPrintError("OctoPrint is reachable but its printer is disconnected")
@@ -343,7 +360,12 @@ class OctoPrintBackend:
                 "source": "octoprint_api",
             },
             "print_active": _field(active) if active is not None else _field(None),
-            "firmware_identification": _field(None),
+            "firmware_identification": _field(
+                self.factory_observations.get("firmware", {}).get("data", {}).get("firmware"),
+                source="factory_usb_M115",
+            ),
+            "connection_transport": self.connection_transport,
+            "factory_usb": self.factory_observations,
             "progress_percent": _field(progress.get("completion"), unit="%"),
             "current_file": _field(job_file.get("name")),
             "file_size_bytes": _field(job_file.get("size")),
@@ -379,6 +401,11 @@ class OctoPrintBackend:
             raise OctoPrintError("OctoPrint SD refresh is unreachable or timed out") from None
 
     async def list_files(self, *, refresh: bool = False) -> list[dict[str, Any]]:
+        from .factory_usb import catalog_visible, query
+
+        if refresh and self.connection_transport == "usb":
+            result = await query(self, {"operation": "list_long"})
+            return result["data"]["entries"]
         if refresh:
             await asyncio.to_thread(self._refresh_sd_sync)
         payload = await self.get("/api/files")
@@ -387,7 +414,7 @@ class OctoPrintBackend:
             if not isinstance(item, dict):
                 continue
             name = item.get("name")
-            if not isinstance(name, str) or not name:
+            if not isinstance(name, str) or not catalog_visible(name):
                 continue
             # Physical SD files only; OctoPrint uploads are a separate origin.
             if item.get("origin") != "sdcard":

@@ -338,6 +338,40 @@ def test_octoprint_plugin_uses_owner_and_rejects_unsafe_states(monkeypatch):
     assert not plugin.on_api_get(None)["can_read"]
     assert plugin.received(None, "ok T:24") == "ok T:24"
     assert len(sent) == 1
+    # Replay the stock profile through the actual tagged OctoPrint hook, not a second port.
+    allowed["control"] = True
+    configured["enabled"] = True
+    evidence = json.loads((Path(__file__).parent / "fixtures/robin_factory_usb.json").read_text())
+
+    def factory_commands(lines, **kwargs):
+        for wire_command in lines:
+            plugin.sent(None, "sent", wire_command, None, wire_command.split()[0], tags={"other"})
+            plugin.received(None, "ok")
+            assert not plugin._factory_pending["transaction"].sent
+            plugin.sent(None, "sent", wire_command, None, wire_command.split()[0], **kwargs)
+            response = (
+                evidence["firmware_response"]
+                if wire_command == "M115"
+                else ["Begin file list", "PART.GCO 42", "End file list"]
+            )
+            for line in response:
+                plugin.received(None, evidence["unsolicited"][1])
+                plugin.received(None, line)
+
+    plugin._printer.commands = factory_commands
+    assert (
+        plugin.factory_command({"operation": "firmware"})["data"]["firmware"]
+        == "Robin_nano_v2.1.6.b"
+    )
+    assert (
+        plugin.factory_command({"operation": "list_long"})["data"]["entries"][0]["size_bytes"] == 42
+    )
+    with pytest.raises(ValueError, match="422"):
+        plugin.factory_command({"operation": "select", "filename": "PART.GCO"})
+    configured["state"] = "PRINTING"
+    with pytest.raises(ValueError, match="423"):
+        plugin.factory_command({"operation": "list"})
+    assert plugin.serial_factory(None, "REMOTE:socket://printer:8080", 115200, 1) is None
 
 
 def test_same_filename_different_content_and_bounded_eviction(tmp_path):
