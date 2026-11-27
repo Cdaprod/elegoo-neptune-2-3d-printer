@@ -1,0 +1,761 @@
+diff --git a/Marlin/Configuration.h b/Marlin/Configuration.h
+index b303f8d..d7a54d5 100644
+--- a/Marlin/Configuration.h
++++ b/Marlin/Configuration.h
+@@ -102,7 +102,7 @@
+  *
+  * :[-1, 0, 1, 2, 3, 4, 5, 6, 7]
+  */
+-#define SERIAL_PORT 3
++#define SERIAL_PORT 1
+ 
+ /**
+  * Serial Port Baud Rate
+@@ -123,7 +123,7 @@
+  * Currently Ethernet (-2) is only supported on Teensy 4.1 boards.
+  * :[-2, -1, 0, 1, 2, 3, 4, 5, 6, 7]
+  */
+-//#define SERIAL_PORT_2 -1
++//#define SERIAL_PORT_2 3
+ //#define BAUDRATE_2 250000   // Enable to override BAUDRATE
+ 
+ /**
+@@ -139,7 +139,7 @@
+ 
+ // Choose the name from boards.h that matches your setup
+ #ifndef MOTHERBOARD
+-  #define MOTHERBOARD BOARD_MKS_ROBIN_NANO_V3
++  #define MOTHERBOARD BOARD_MKS_ROBIN_NANO
+ #endif
+ 
+ // Name displayed in the LCD "Ready" message and Info menu
+@@ -192,19 +192,19 @@
+ 
+ // This defines the number of extruders
+ // :[0, 1, 2, 3, 4, 5, 6, 7, 8]
+-#define EXTRUDERS 2
++#define EXTRUDERS 1
+ 
+ // Generally expected filament diameter (1.75, 2.85, 3.0, ...). Used for Volumetric, Filament Width Sensor, etc.
+ #define DEFAULT_NOMINAL_FILAMENT_DIA 1.75
+ 
+ // For Cyclops or any "multi-extruder" that shares a single nozzle.
+-#define SINGLENOZZLE
++//#define SINGLENOZZLE
+ 
+ // Save and restore temperature and fan speed on tool-change.
+ // Set standby for the unselected tool with M104/106/109 T...
+ #if ENABLED(SINGLENOZZLE)
+-  #define SINGLENOZZLE_STANDBY_TEMP
+-  #define SINGLENOZZLE_STANDBY_FAN
++  //#define SINGLENOZZLE_STANDBY_TEMP
++  //#define SINGLENOZZLE_STANDBY_FAN
+ #endif
+ 
+ /**
+@@ -861,9 +861,9 @@
+  *          TMC5130, TMC5130_STANDALONE, TMC5160, TMC5160_STANDALONE
+  * :['A4988', 'A5984', 'DRV8825', 'LV8729', 'L6470', 'L6474', 'POWERSTEP01', 'TB6560', 'TB6600', 'TMC2100', 'TMC2130', 'TMC2130_STANDALONE', 'TMC2160', 'TMC2160_STANDALONE', 'TMC2208', 'TMC2208_STANDALONE', 'TMC2209', 'TMC2209_STANDALONE', 'TMC26X', 'TMC26X_STANDALONE', 'TMC2660', 'TMC2660_STANDALONE', 'TMC5130', 'TMC5130_STANDALONE', 'TMC5160', 'TMC5160_STANDALONE']
+  */
+-#define X_DRIVER_TYPE  TMC2209
+-#define Y_DRIVER_TYPE  TMC2209
+-#define Z_DRIVER_TYPE  TMC2209
++#define X_DRIVER_TYPE  A4988
++#define Y_DRIVER_TYPE  A4988
++#define Z_DRIVER_TYPE  A4988
+ //#define X2_DRIVER_TYPE A4988
+ //#define Y2_DRIVER_TYPE A4988
+ //#define Z2_DRIVER_TYPE A4988
+@@ -872,8 +872,8 @@
+ //#define I_DRIVER_TYPE  A4988
+ //#define J_DRIVER_TYPE  A4988
+ //#define K_DRIVER_TYPE  A4988
+-#define E0_DRIVER_TYPE TMC2209
+-#define E1_DRIVER_TYPE TMC2209
++#define E0_DRIVER_TYPE A4988
++#define E1_DRIVER_TYPE A4988
+ //#define E2_DRIVER_TYPE A4988
+ //#define E3_DRIVER_TYPE A4988
+ //#define E4_DRIVER_TYPE A4988
+@@ -1087,7 +1087,7 @@
+ /**
+  * The BLTouch probe uses a Hall effect sensor and emulates a servo.
+  */
+-#define BLTOUCH
++//#define BLTOUCH
+ 
+ /**
+  * Touch-MI Probe by hotends.fr
+@@ -1536,7 +1536,7 @@
+  */
+ //#define AUTO_BED_LEVELING_3POINT
+ //#define AUTO_BED_LEVELING_LINEAR
+-#define AUTO_BED_LEVELING_BILINEAR
++//#define AUTO_BED_LEVELING_BILINEAR
+ //#define AUTO_BED_LEVELING_UBL
+ //#define MESH_BED_LEVELING
+ 
+@@ -1737,11 +1737,11 @@
+  * - Allows Z homing only when XY positions are known and trusted.
+  * - If stepper drivers sleep, XY homing may be required again before Z homing.
+  */
+-#define Z_SAFE_HOMING
++//#define Z_SAFE_HOMING
+ 
+ #if ENABLED(Z_SAFE_HOMING)
+-  #define Z_SAFE_HOMING_X_POINT X_CENTER  // X point for Z homing
+-  #define Z_SAFE_HOMING_Y_POINT Y_CENTER  // Y point for Z homing
++  //#define Z_SAFE_HOMING_X_POINT X_CENTER  // X point for Z homing
++  //#define Z_SAFE_HOMING_Y_POINT Y_CENTER  // Y point for Z homing
+ #endif
+ 
+ // Homing speeds (mm/min)
+@@ -2640,7 +2640,7 @@
+ // 480x320, 3.5", SPI Display From MKS
+ // Normally used in MKS Robin Nano V2
+ //
+-#define MKS_TS35_V2_0
++//#define MKS_TS35_V2_0
+ 
+ //
+ // 320x240, 2.4", FSMC Display From MKS
+@@ -2664,7 +2664,7 @@
+ // 480x320, 3.5", FSMC Display From MKS
+ // Normally used in MKS Robin Nano V1.2
+ //
+-// #define MKS_ROBIN_TFT35
++#define MKS_ROBIN_TFT35
+ 
+ //
+ // 480x272, 4.3", FSMC Display From MKS
+@@ -2958,3 +2958,6 @@
+ 
+ // Disable servo with M282 to reduce power consumption, noise, and heat when not in use
+ //#define SERVO_DETACH_GCODE
++
++// EXPERIMENTAL compile target only. NOT qualified for flashing.
++#define NEPTUNE_SD_READ
+diff --git a/Marlin/Configuration_adv.h b/Marlin/Configuration_adv.h
+index 555563c..00dfc12 100644
+--- a/Marlin/Configuration_adv.h
++++ b/Marlin/Configuration_adv.h
+@@ -1490,7 +1490,7 @@
+    *
+    * [1] On AVR an interrupt-capable pin is best for UHS3 compatibility.
+    */
+-  #define USB_FLASH_DRIVE_SUPPORT
++  //#define USB_FLASH_DRIVE_SUPPORT
+   #if ENABLED(USB_FLASH_DRIVE_SUPPORT)
+     /**
+      * USB Host Shield Library
+@@ -1508,7 +1508,7 @@
+     /**
+      * Native USB Host supported by some boards (USB OTG)
+      */
+-    #define USE_OTG_USB_HOST
++    //#define USE_OTG_USB_HOST
+ 
+     #if DISABLED(USE_OTG_USB_HOST)
+       #define USB_CS_PIN    SDSS
+@@ -1550,7 +1550,7 @@
+   //#define NO_SD_DETECT
+ 
+   // Multiple volume support - EXPERIMENTAL.
+-  #define MULTI_VOLUME
++  //#define MULTI_VOLUME
+   #if ENABLED(MULTI_VOLUME)
+     #define VOLUME_SD_ONBOARD       1
+     #define VOLUME_USB_FLASH_DRIVE  2
+@@ -1883,7 +1883,7 @@
+ 
+   #define BABYSTEP_DISPLAY_TOTAL          // Display total babysteps since last G28
+ 
+-  #define BABYSTEP_ZPROBE_OFFSET          // Combine M851 Z and Babystepping
++  //#define BABYSTEP_ZPROBE_OFFSET          // Combine M851 Z and Babystepping
+   #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
+     //#define BABYSTEP_HOTEND_Z_OFFSET      // For multiple hotends, babystep relative Z offsets
+     //#define BABYSTEP_ZPROBE_GFX_OVERLAY   // Enable graphical overlay on Z-offset editor
+diff --git a/Marlin/src/MarlinCore.cpp b/Marlin/src/MarlinCore.cpp
+index 25f0968..7d9cd34 100644
+--- a/Marlin/src/MarlinCore.cpp
++++ b/Marlin/src/MarlinCore.cpp
+@@ -29,6 +29,9 @@
+  */
+ 
+ #include "MarlinCore.h"
++#if ENABLED(NEPTUNE_SD_READ)
++  #include "feature/neptune_sd/native_sd.h"
++#endif
+ 
+ #include "HAL/shared/Delay.h"
+ #include "HAL/shared/esp_wifi.h"
+@@ -749,6 +752,7 @@ inline void manage_inactivity(const bool no_stepper_sleep=false) {
+  *  - Handle Joystick jogging
+  */
+ void idle(bool no_stepper_sleep/*=false*/) {
++  TERN_(NEPTUNE_SD_READ, native_sd_tick());
+   #if ENABLED(MARLIN_DEV_MODE)
+     static uint16_t idle_depth = 0;
+     if (++idle_depth > 5) SERIAL_ECHOLNPGM("idle() call depth: ", idle_depth);
+diff --git a/Marlin/src/feature/neptune_sd/native_sd.h b/Marlin/src/feature/neptune_sd/native_sd.h
+new file mode 100644
+index 0000000..834dd85
+--- /dev/null
++++ b/Marlin/src/feature/neptune_sd/native_sd.h
+@@ -0,0 +1,4 @@
++#pragma once
++// Experimental RSD/1. Independent read-only SdFile; never selects a print file.
++void native_sd_invalidate();
++void native_sd_tick();
+diff --git a/Marlin/src/feature/neptune_sd/sha256.cpp b/Marlin/src/feature/neptune_sd/sha256.cpp
+new file mode 100644
+index 0000000..a036c65
+--- /dev/null
++++ b/Marlin/src/feature/neptune_sd/sha256.cpp
+@@ -0,0 +1,163 @@
++// Brad Conte public-domain SHA-256, B-Con/crypto-algorithms@cfbde48414baacf51fc7c74f275190881f037d32
++#include "../../inc/MarlinConfigPre.h"
++#if ENABLED(NEPTUNE_SD_READ)
++/*********************************************************************
++* Filename:   sha256.c
++* Author:     Brad Conte (brad AT bradconte.com)
++* Copyright:
++* Disclaimer: This code is presented "as is" without any guarantees.
++* Details:    Implementation of the SHA-256 hashing algorithm.
++              SHA-256 is one of the three algorithms in the SHA2
++              specification. The others, SHA-384 and SHA-512, are not
++              offered in this implementation.
++              Algorithm specification can be found here:
++               * http://csrc.nist.gov/publications/fips/fips180-2/fips180-2withchangenotice.pdf
++              This implementation uses little endian byte order.
++*********************************************************************/
++
++/*************************** HEADER FILES ***************************/
++#include <stdlib.h>
++#include <memory.h>
++#include "sha256.h"
++
++/****************************** MACROS ******************************/
++#define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
++#define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
++
++#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
++#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
++#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
++#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
++#define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
++#define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
++
++/**************************** VARIABLES *****************************/
++static const WORD k[64] = {
++	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
++	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
++	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
++	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
++	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
++	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
++	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
++	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
++};
++
++/*********************** FUNCTION DEFINITIONS ***********************/
++void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
++{
++	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
++
++	for (i = 0, j = 0; i < 16; ++i, j += 4)
++		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
++	for ( ; i < 64; ++i)
++		m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
++
++	a = ctx->state[0];
++	b = ctx->state[1];
++	c = ctx->state[2];
++	d = ctx->state[3];
++	e = ctx->state[4];
++	f = ctx->state[5];
++	g = ctx->state[6];
++	h = ctx->state[7];
++
++	for (i = 0; i < 64; ++i) {
++		t1 = h + EP1(e) + CH(e,f,g) + k[i] + m[i];
++		t2 = EP0(a) + MAJ(a,b,c);
++		h = g;
++		g = f;
++		f = e;
++		e = d + t1;
++		d = c;
++		c = b;
++		b = a;
++		a = t1 + t2;
++	}
++
++	ctx->state[0] += a;
++	ctx->state[1] += b;
++	ctx->state[2] += c;
++	ctx->state[3] += d;
++	ctx->state[4] += e;
++	ctx->state[5] += f;
++	ctx->state[6] += g;
++	ctx->state[7] += h;
++}
++
++void sha256_init(SHA256_CTX *ctx)
++{
++	ctx->datalen = 0;
++	ctx->bitlen = 0;
++	ctx->state[0] = 0x6a09e667;
++	ctx->state[1] = 0xbb67ae85;
++	ctx->state[2] = 0x3c6ef372;
++	ctx->state[3] = 0xa54ff53a;
++	ctx->state[4] = 0x510e527f;
++	ctx->state[5] = 0x9b05688c;
++	ctx->state[6] = 0x1f83d9ab;
++	ctx->state[7] = 0x5be0cd19;
++}
++
++void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len)
++{
++	WORD i;
++
++	for (i = 0; i < len; ++i) {
++		ctx->data[ctx->datalen] = data[i];
++		ctx->datalen++;
++		if (ctx->datalen == 64) {
++			sha256_transform(ctx, ctx->data);
++			ctx->bitlen += 512;
++			ctx->datalen = 0;
++		}
++	}
++}
++
++void sha256_final(SHA256_CTX *ctx, BYTE hash[])
++{
++	WORD i;
++
++	i = ctx->datalen;
++
++	// Pad whatever data is left in the buffer.
++	if (ctx->datalen < 56) {
++		ctx->data[i++] = 0x80;
++		while (i < 56)
++			ctx->data[i++] = 0x00;
++	}
++	else {
++		ctx->data[i++] = 0x80;
++		while (i < 64)
++			ctx->data[i++] = 0x00;
++		sha256_transform(ctx, ctx->data);
++		memset(ctx->data, 0, 56);
++	}
++
++	// Append to the padding the total message's length in bits and transform.
++	ctx->bitlen += ctx->datalen * 8;
++	ctx->data[63] = ctx->bitlen;
++	ctx->data[62] = ctx->bitlen >> 8;
++	ctx->data[61] = ctx->bitlen >> 16;
++	ctx->data[60] = ctx->bitlen >> 24;
++	ctx->data[59] = ctx->bitlen >> 32;
++	ctx->data[58] = ctx->bitlen >> 40;
++	ctx->data[57] = ctx->bitlen >> 48;
++	ctx->data[56] = ctx->bitlen >> 56;
++	sha256_transform(ctx, ctx->data);
++
++	// Since this implementation uses little endian byte ordering and SHA uses big endian,
++	// reverse all the bytes when copying the final state to the output hash.
++	for (i = 0; i < 4; ++i) {
++		hash[i]      = (ctx->state[0] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 4]  = (ctx->state[1] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 8]  = (ctx->state[2] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 12] = (ctx->state[3] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 16] = (ctx->state[4] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 20] = (ctx->state[5] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 24] = (ctx->state[6] >> (24 - i * 8)) & 0x000000ff;
++		hash[i + 28] = (ctx->state[7] >> (24 - i * 8)) & 0x000000ff;
++	}
++}
++
++#endif
+diff --git a/Marlin/src/feature/neptune_sd/sha256.h b/Marlin/src/feature/neptune_sd/sha256.h
+new file mode 100644
+index 0000000..7123a30
+--- /dev/null
++++ b/Marlin/src/feature/neptune_sd/sha256.h
+@@ -0,0 +1,34 @@
++/*********************************************************************
++* Filename:   sha256.h
++* Author:     Brad Conte (brad AT bradconte.com)
++* Copyright:
++* Disclaimer: This code is presented "as is" without any guarantees.
++* Details:    Defines the API for the corresponding SHA1 implementation.
++*********************************************************************/
++
++#ifndef SHA256_H
++#define SHA256_H
++
++/*************************** HEADER FILES ***************************/
++#include <stddef.h>
++
++/****************************** MACROS ******************************/
++#define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
++
++/**************************** DATA TYPES ****************************/
++typedef unsigned char BYTE;             // 8-bit byte
++typedef unsigned int  WORD;             // 32-bit word, change to "long" for 16-bit machines
++
++typedef struct {
++	BYTE data[64];
++	WORD datalen;
++	unsigned long long bitlen;
++	WORD state[8];
++} SHA256_CTX;
++
++/*********************** FUNCTION DECLARATIONS **********************/
++void sha256_init(SHA256_CTX *ctx);
++void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len);
++void sha256_final(SHA256_CTX *ctx, BYTE hash[]);
++
++#endif   // SHA256_H
+diff --git a/Marlin/src/gcode/gcode.cpp b/Marlin/src/gcode/gcode.cpp
+index e0df32d..fe637f5 100644
+--- a/Marlin/src/gcode/gcode.cpp
++++ b/Marlin/src/gcode/gcode.cpp
+@@ -656,6 +656,9 @@ void GcodeSuite::process_parsed_command(const bool no_ok/*=false*/) {
+       case 85: M85(); break;                                      // M85: Set inactivity stepper shutdown timeout
+       case 92: M92(); break;                                      // M92: Set the steps-per-unit for one or more axes
+       case 114: M114(); break;                                    // M114: Report current position
++      #if ENABLED(NEPTUNE_SD_READ)
++        case 794: M794(); break;
++      #endif
+       case 115: M115(); break;                                    // M115: Report capabilities
+ 
+       case 117: TERN_(HAS_STATUS_MESSAGE, M117()); break;         // M117: Set LCD message text, if possible
+diff --git a/Marlin/src/gcode/gcode.h b/Marlin/src/gcode/gcode.h
+index 4a3c865..5db1498 100644
+--- a/Marlin/src/gcode/gcode.h
++++ b/Marlin/src/gcode/gcode.h
+@@ -708,6 +708,9 @@ private:
+ 
+   static void M114();
+   static void M115();
++  #if ENABLED(NEPTUNE_SD_READ)
++    static void M794();
++  #endif
+ 
+   #if HAS_STATUS_MESSAGE
+     static void M117();
+diff --git a/Marlin/src/gcode/host/M115.cpp b/Marlin/src/gcode/host/M115.cpp
+index 1c10697..2a3d746 100644
+--- a/Marlin/src/gcode/host/M115.cpp
++++ b/Marlin/src/gcode/host/M115.cpp
+@@ -63,6 +63,9 @@ void GcodeSuite::M115() {
+   );
+ 
+   #if ENABLED(EXTENDED_CAPABILITIES_REPORT)
++    #if ENABLED(NEPTUNE_SD_READ)
++      cap_line(PSTR("NEPTUNE_SD_READ"),true);
++    #endif
+ 
+     // The port that sent M115
+     serial_index_t port = queue.ring_buffer.command_port();
+diff --git a/Marlin/src/gcode/sd/M794.cpp b/Marlin/src/gcode/sd/M794.cpp
+new file mode 100644
+index 0000000..61da850
+--- /dev/null
++++ b/Marlin/src/gcode/sd/M794.cpp
+@@ -0,0 +1,206 @@
++/** Experimental Neptune RSD/1; upstream af5eb011d08f2a2e19809e38470f678958530b29. */
++#include "../../inc/MarlinConfig.h"
++#if ENABLED(NEPTUNE_SD_READ) && ENABLED(SDSUPPORT)
++#include "../gcode.h"
++#include "../queue.h"
++#include "../../sd/cardreader.h"
++#include "../../module/planner.h"
++#include "../../module/printcounter.h"
++#include "../../MarlinCore.h"
++#include "../../feature/neptune_sd/native_sd.h"
++#include "../../feature/neptune_sd/sha256.h"
++#include <ctype.h>
++#if ENABLED(MKS_WIFI_MODULE)
++  #include "../../lcd/extui/mks_ui/wifi_module.h"
++#endif
++
++namespace {
++  constexpr uint16_t CHUNK = 192;
++  constexpr uint32_t RSD_MAX_BYTES = 52428800UL;
++  const char * const operations[] = {"CAPABILITIES", "LIST", "STAT", "OPEN", "READ", "CLOSE", "CANCEL"};
++  SdFile reading;
++  SHA256_CTX file_hash;
++  uint32_t epoch = 1, generation = 0, session = 0, next_offset = 0, last_sequence = 0;
++  millis_t last_activity = 0;
++  char opened_name[13] = {}, opened_token[49] = {};
++
++  bool idle_machine() {
++    return
++      #if ENABLED(MKS_WIFI_MODULE)
++        wifi_link_state != WIFI_TRANS_FILE &&
++      #endif
++      IsRunning() && card.isMounted() && !card.isFileOpen()
++      && !card.flag.saving && !card.flag.logging && !card.isPrinting()
++      && !print_job_timer.isRunning() && !print_job_timer.isPaused()
++      && !planner.has_blocks_queued();
++  }
++  void close_session() { reading.close(); session = 0; next_offset = 0; }
++  void string_out(const char *s) { while (*s) SERIAL_CHAR(*s++); }
++  void start(const uint8_t op, const uint32_t sequence) {
++    SERIAL_ECHOPGM("RSD1 {\"v\":1,\"op\":\""); string_out(operations[op]);
++    SERIAL_ECHOPGM("\",\"q\":", sequence, ",\"s\":", session);
++  }
++  void error(const char *why) {
++    SERIAL_ECHOPGM(",\"error\":\""); string_out(why); SERIAL_ECHOLNPGM("\"}");
++  }
++  bool alias(const char *name) {
++    const char *dot = strchr(name, '.');
++    if (!dot || dot == name || dot-name > 8 || strchr(dot+1, '.')) return false;
++    for (const char *p=name; p<dot; ++p)
++      if (!isalnum(*p) && *p!='_' && *p!='~' && *p!='-') return false;
++    return !strcmp(dot+1,"GCO") || !strcmp(dot+1,"GC") || !strcmp(dot+1,"G");
++  }
++  bool unsigned_field(const char letter, uint32_t &result) {
++    char key[]=" V"; key[1]=letter;
++    const char *p=strstr(parser.command_ptr,key);
++    if (!p || strstr(p+2,key)) return false;
++    p+=2; result=0;
++    if (!isdigit(*p)) return false;
++    while (isdigit(*p)) {
++      const uint8_t digit=*p++-'0';
++      if (result>(0xFFFFFFFFUL-digit)/10) return false;
++      result=result*10+digit;
++    }
++    return !*p || *p==' ';
++  }
++  bool filename(char *name) {
++    const char *raw = strstr(parser.command_ptr, " P");
++    if (!raw) return false;
++    raw += 2;
++    if (strstr(raw," P")) return false;
++    uint8_t n=0;
++    while (*raw && *raw!=' ') {
++      if (n>=12 || !raw[1] || !raw[2] || !isdigit(raw[0]) || !isdigit(raw[1]) || !isdigit(raw[2])) return false;
++      const uint16_t number = (raw[0]-'0')*100 + (raw[1]-'0')*10 + raw[2]-'0';
++      if (!number || number>127) return false;
++      const char value = number;
++      if (!value || uint8_t(value)>127) return false;
++      name[n++] = toupper(value); raw+=3;
++    }
++    name[n]=0;
++    return alias(name);
++  }
++  bool snapshot(const char *name, char *token, uint32_t &size) {
++    SdFile root = card.getroot(), file;
++    dir_t info;
++    if (!file.open(&root,name,O_READ) || !file.isFile() || !file.dirEntry(&info)) {
++      file.close(); return false;
++    }
++    size = file.fileSize();
++    snprintf(token,49,"%08lx%08lx%08lx%04x%04x%04x%04x",
++      (unsigned long)epoch,(unsigned long)file.firstCluster(),(unsigned long)size,
++      info.creationDate,info.creationTime,info.lastWriteDate,info.lastWriteTime);
++    file.close();
++    return size && size<=RSD_MAX_BYTES;
++  }
++  void metadata(const char *token, uint32_t size) {
++    SERIAL_ECHOPGM(",\"size\":",size,",\"token\":\""); string_out(token); SERIAL_CHAR('"');
++  }
++  uint32_t crc32(const uint8_t *data, uint16_t count) {
++    uint32_t crc=0xFFFFFFFFUL;
++    while (count--) {
++      crc ^= *data++;
++      for (uint8_t bit=0; bit<8; ++bit) crc=(crc>>1)^((crc&1)?0xEDB88320UL:0);
++    }
++    return ~crc;
++  }
++}
++
++void native_sd_invalidate() { close_session(); if (++epoch==0) epoch=1; }
++void native_sd_tick() {
++  if (session && (!idle_machine() || ELAPSED(millis(),last_activity+15000UL))) close_session();
++}
++
++void GcodeSuite::M794() {
++  uint32_t operation=255, sequence=0, version=0, requested_session=0, request_offset=0, request_count=0;
++  const bool well_formed=unsigned_field('O',operation) && unsigned_field('Q',sequence)
++    && unsigned_field('V',version) && unsigned_field('S',requested_session)
++    && unsigned_field('A',request_offset) && unsigned_field('B',request_count);
++  const uint32_t op=operation;
++  if (op>6) return; // Unknown operation cannot touch the filesystem.
++  native_sd_tick();
++  // Only configured primary USB UART; never WiFi UART or SD/injected commands.
++  if (queue.ring_buffer.command_port().index != 0 || !well_formed || !sequence || version!=1) {
++    start(op,sequence); error("VERSION_OR_TRANSPORT"); return;
++  }
++  if (!idle_machine()) { start(op,sequence); error("BUSY_OR_MEDIA"); return; }
++  if (op>=4 && (!session || requested_session!=session || sequence<=last_sequence)) {
++    start(op,sequence); error("SESSION_OR_SEQUENCE"); return;
++  }
++  last_activity=millis();
++  if (op==0) {
++    start(op,sequence); SERIAL_ECHOLNPGM(",\"chunk\":192,\"max_bytes\":52428800,\"hash\":\"sha256\"}"); return;
++  }
++  if (op==1) {
++    const uint32_t cursor=request_offset;
++    if (cursor>=4096) { start(op,sequence); error("LIMIT"); return; }
++    SdFile root=card.getroot();
++    root.rewind();
++    uint16_t found=0, scanned=0;
++    char name[13], long_name[LONG_FILENAME_LENGTH];
++    dir_t info;
++    while (scanned++<4096 && root.readDir(&info,long_name)>0) {
++      SdFile::dirName(info,name);
++      const uint32_t size=info.fileSize;
++      if (!DIR_IS_FILE(&info) || !alias(name) || !size || size>RSD_MAX_BYTES) continue;
++      if (found++==cursor) {
++        start(op,sequence); SERIAL_ECHOPGM(",\"name\":\""); string_out(name);
++        SERIAL_ECHOPGM("\",\"size\":",size,",\"display_hex\":\"");
++        const char *display = long_name[0] ? long_name : name;
++        constexpr char digits[]="0123456789abcdef";
++        for (uint16_t i=0; display[i] && i<200; ++i) {
++          const uint8_t c=display[i]; SERIAL_CHAR(digits[c>>4],digits[c&15]);
++        }
++        SERIAL_ECHOLNPGM("\"}"); return;
++      }
++    }
++    start(op,sequence); SERIAL_ECHOLNPGM(",\"end\":true}"); return;
++  }
++  if (op==2 || op==3) {
++    char name[13], token[49]; uint32_t size;
++    if (!filename(name) || !snapshot(name,token,size)) {
++      start(op,sequence); error("PATH_OR_FILE"); return;
++    }
++    if (op==3) {
++      if (session) { start(op,sequence); error("BUSY"); return; }
++      SdFile root=card.getroot();
++      if (!reading.open(&root,name,O_READ)) { start(op,sequence); error("IO"); return; }
++      if (++generation==0) ++generation;
++      session=generation; next_offset=0; last_sequence=sequence; sha256_init(&file_hash);
++      strcpy(opened_name,name); strcpy(opened_token,token);
++    }
++    start(op,sequence); metadata(token,size); SERIAL_ECHOLNPGM("}"); return;
++  }
++  char token[49]; uint32_t size;
++  if (!snapshot(opened_name,token,size) || strcmp(token,opened_token)) {
++    start(op,sequence); error("CHANGED"); close_session(); return;
++  }
++  last_sequence=sequence;
++  if (op==5 || op==6) {
++    start(op,sequence);
++    if (op==5) {
++      if (next_offset!=size) { error("INCOMPLETE"); close_session(); return; }
++      uint8_t digest[32]; sha256_final(&file_hash,digest);
++      constexpr char digits[]="0123456789abcdef";
++      SERIAL_ECHOPGM(",\"sha256\":\"");
++      for (uint8_t i=0; i<32; ++i) SERIAL_CHAR(digits[digest[i]>>4],digits[digest[i]&15]);
++      SERIAL_CHAR('"');
++    }
++    SERIAL_ECHOLNPGM("}"); close_session(); return;
++  }
++  const uint32_t offset=request_offset, count=request_count;
++  if (offset!=next_offset || !count || count>CHUNK || offset>size || count>size-offset) {
++    start(op,sequence); error("OFFSET_OR_LIMIT"); return;
++  }
++  uint8_t data[CHUNK];
++  if (!reading.seekSet(offset) || reading.read(data,count)!=int16_t(count)) {
++    start(op,sequence); error("IO"); close_session(); return;
++  }
++  sha256_update(&file_hash,data,count);
++  start(op,sequence); SERIAL_ECHOPGM(",\"offset\":",offset,",\"token\":\""); string_out(token);
++  SERIAL_ECHOPGM("\",\"crc\":",crc32(data,count),",\"data\":\"");
++  constexpr char digits[]="0123456789abcdef";
++  for (uint16_t i=0; i<count; ++i) SERIAL_CHAR(digits[data[i]>>4],digits[data[i]&15]);
++  SERIAL_ECHOLNPGM("\"}"); next_offset+=count;
++}
++#endif
+diff --git a/Marlin/src/lcd/extui/mks_ui/wifi_module.cpp b/Marlin/src/lcd/extui/mks_ui/wifi_module.cpp
+index 72504bc..8259fd1 100644
+--- a/Marlin/src/lcd/extui/mks_ui/wifi_module.cpp
++++ b/Marlin/src/lcd/extui/mks_ui/wifi_module.cpp
+@@ -857,6 +857,11 @@ static void wifi_gcode_exec(uint8_t *cmd_line) {
+       tmpStr = (uint8_t *)strchr((char *)tmpStr, ' ');
+ 
+       switch (cmd_value) {
++        #if ENABLED(NEPTUNE_SD_READ)
++          case 794: // RSD/1 replies exceed the stock ESP text channel. USB only.
++            SEND_OK_TO_WIFI;
++            break;
++        #endif
+ 
+         case 20: // M20: Print SD / µdisk file
+           file_writer.fileTransfer = 0;
+diff --git a/Marlin/src/sd/cardreader.cpp b/Marlin/src/sd/cardreader.cpp
+index 9f8aac6..ee93da6 100644
+--- a/Marlin/src/sd/cardreader.cpp
++++ b/Marlin/src/sd/cardreader.cpp
+@@ -27,6 +27,9 @@
+ //#define DEBUG_CARDREADER
+ 
+ #include "cardreader.h"
++#if ENABLED(NEPTUNE_SD_READ)
++  #include "../feature/neptune_sd/native_sd.h"
++#endif
+ 
+ #include "../MarlinCore.h"
+ #include "../lcd/marlinui.h"
+@@ -436,6 +439,7 @@ void CardReader::printSelectedFilename() {
+ }
+ 
+ void CardReader::mount() {
++  TERN_(NEPTUNE_SD_READ, native_sd_invalidate());
+   flag.mounted = false;
+   if (root.isOpen()) root.close();
+ 
+@@ -522,6 +526,7 @@ void CardReader::manage_media() {
+  * Used by M22, "Release Media", manage_media.
+  */
+ void CardReader::release() {
++  TERN_(NEPTUNE_SD_READ, native_sd_invalidate());
+   // Card removed while printing? Abort!
+   if (IS_SD_PRINTING())
+     abortFilePrintSoon();
+@@ -697,6 +702,7 @@ inline void echo_write_to_file(const char * const fname) {
+ // Open a file by DOS path for write
+ //
+ void CardReader::openFileWrite(const char * const path) {
++  TERN_(NEPTUNE_SD_READ, native_sd_invalidate());
+   if (!isMounted()) return;
+ 
+   announceOpen(2, path);
+@@ -753,6 +759,7 @@ bool CardReader::fileExists(const char * const path) {
+ // Delete a file by name in the working directory
+ //
+ void CardReader::removeFile(const char * const name) {
++  TERN_(NEPTUNE_SD_READ, native_sd_invalidate());
+   if (!isMounted()) return;
+ 
+   //abortFilePrintNow();
+diff --git a/Marlin/src/sd/cardreader.h b/Marlin/src/sd/cardreader.h
+index 97003e1..48c76d6 100644
+--- a/Marlin/src/sd/cardreader.h
++++ b/Marlin/src/sd/cardreader.h
+@@ -90,6 +90,10 @@ typedef struct {
+   #include "../libs/autoreport.h"
+ #endif
+ 
++#if ENABLED(NEPTUNE_SD_READ)
++  #include "../feature/neptune_sd/native_sd.h"
++#endif
++
+ class CardReader {
+ public:
+   static card_flags_t flag;                         // Flags (above)
+@@ -109,7 +113,10 @@ public:
+ 
+   CardReader();
+ 
+-  static void changeMedia(DiskIODriver *_driver) { driver = _driver; }
++  static void changeMedia(DiskIODriver *_driver) {
++    TERN_(NEPTUNE_SD_READ, native_sd_invalidate());
++    driver = _driver;
++  }
+ 
+   static SdFile getroot() { return root; }
+ 

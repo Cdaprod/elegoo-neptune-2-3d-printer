@@ -1,0 +1,29 @@
+name: Experimental RSD firmware (no flashing)
+on:
+  push:
+    branches: [experimental/robin-sd-read-v1]
+    paths: [firmware/robin-sd-read/**, .github/workflows/experimental-rsd-firmware.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install platformio==6.1.19
+      - name: Test actual handler and cross-compile isolated STM32F103 image
+        run: python firmware/robin-sd-read/build.py /tmp/rsd1-experimental
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: experimental-not-flash-qualified-rsd1
+          path: |
+            /tmp/rsd1-experimental/.pio/build/mks_robin_nano35/*.bin
+            /tmp/rsd1-experimental/.pio/build/mks_robin_nano35/rsd1-build.json
