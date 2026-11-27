@@ -28,6 +28,12 @@ at requestAnimationFrame rate, even when no orbit/zoom interaction occurred.
   geometry, materials, render context, and observers; document visibility
   resumes invalidated renders.
 
+
+- Model cards and the **Manage files & print** button activate from a stationary
+  touch `pointerup` when Chromium suppresses its compatibility `click` after
+  OrbitControls gestures. A 12px travel threshold rejects drags, and a 500ms
+  activation guard prevents both handlers from activating twice.
+
 ## Validate on the Raspberry Pi 4
 
 Use the existing Observatory deployment instructions and an idle printer.
