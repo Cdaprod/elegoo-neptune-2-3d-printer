@@ -414,6 +414,9 @@ class MotionTimeline:
                     ended_at TEXT, state TEXT NOT NULL, progress REAL, file_id TEXT,
                     source TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS execution_events(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS telemetry(
                     id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
                     observed_at TEXT NOT NULL, state TEXT, filename TEXT, progress REAL,
@@ -1118,6 +1121,32 @@ class MotionTimeline:
                         None if latency is None else float(latency),
                     ),
                 )
+            for identifier in {session_id, current["id"] if current else None} - {None}:
+                execution = db.execute(
+                    "SELECT state,progress FROM print_sessions WHERE id=?", (identifier,)
+                ).fetchone()
+                last = db.execute(
+                    "SELECT payload FROM execution_events WHERE execution_id=? "
+                    "ORDER BY rowid DESC LIMIT 1",
+                    (identifier,),
+                ).fetchone()
+                prior_state = json.loads(last["payload"]).get("state") if last else None
+                if execution and execution["state"] != prior_state:
+                    db.execute(
+                        "INSERT INTO execution_events VALUES(?,?,?,?,?,?)",
+                        (
+                            str(uuid.uuid4()),
+                            identifier,
+                            observed,
+                            "state_observation",
+                            json.dumps(
+                                {"state": execution["state"], "progress": execution["progress"]}
+                            ),
+                            "inferred_interruption"
+                            if execution["state"] == "interrupted"
+                            else source,
+                        ),
+                    )
             if previous:
                 observed_values = {
                     "nozzle_target": (telemetry.get("nozzle_temperature") or {}).get("target_c"),

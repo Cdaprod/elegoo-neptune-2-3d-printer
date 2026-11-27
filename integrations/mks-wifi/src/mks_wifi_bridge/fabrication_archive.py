@@ -59,6 +59,13 @@ class FabricationArchive:
                     execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL,
                     evidence TEXT NOT NULL, transport TEXT NOT NULL,
                     FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(5);
+                CREATE TABLE IF NOT EXISTS execution_events(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS quality_assessments(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, assessed_at TEXT NOT NULL,
+                    result TEXT NOT NULL, notes TEXT NOT NULL, source TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS artifact_discoveries(
                     id TEXT PRIMARY KEY, provider TEXT NOT NULL, path TEXT NOT NULL,
                     filename TEXT NOT NULL, size INTEGER, first_seen TEXT NOT NULL,
@@ -324,6 +331,11 @@ class FabricationArchive:
                     "SELECT status FROM artifact_derivatives WHERE sha256=? AND kind='geometry'",
                     (sha,),
                 ).fetchone()
+                quality = db.execute(
+                    "SELECT result FROM quality_assessments WHERE execution_id=? "
+                    "ORDER BY assessed_at DESC,id DESC LIMIT 1",
+                    (item["id"],),
+                ).fetchone()
                 stages = db.execute(
                     "SELECT status FROM artifact_stages WHERE sha256=?", (sha,)
                 ).fetchall()
@@ -340,7 +352,7 @@ class FabricationArchive:
                 else "unavailable",
                 "delivery": stages[-1][0] if stages else "not_staged",
                 "execution": item.get("state", "not_started"),
-                "quality": "unassessed",
+                "quality": quality[0] if quality else "unassessed",
                 "identity": item.get("identity_evidence")
                 or ("verified_sha256" if sha else "discovered_not_archived"),
                 "delivery_capabilities": {
@@ -355,6 +367,60 @@ class FabricationArchive:
             "next": json.dumps([last.get("started_at") or last["ingested_at"], last["id"]])
             if last and len(rows) > limit
             else None,
+        }
+
+    def assess_quality(self, execution_id, result, notes=""):
+        if (
+            result not in {"unassessed", "accepted", "rejected"}
+            or not isinstance(notes, str)
+            or len(notes) > 2000
+        ):
+            raise ValueError("Invalid operator assessment")
+        with self.db() as db:
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            identity = uuid.uuid4().hex
+            db.execute(
+                "INSERT INTO quality_assessments VALUES(?,?,?,?,?,?)",
+                (identity, execution_id, now(), result, notes, "operator_supplied"),
+            )
+        return {"id": identity, "result": result, "source": "operator_supplied"}
+
+    def execution_detail(self, execution_id):
+        with self.db() as db:
+            row = db.execute(
+                "SELECT p.*,e.sha256,e.evidence,e.transport FROM print_sessions p "
+                "LEFT JOIN execution_identity e ON e.execution_id=p.id WHERE p.id=?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown execution")
+            events = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT * FROM execution_events WHERE execution_id=? "
+                    "ORDER BY observed_at,rowid LIMIT 1000",
+                    (execution_id,),
+                )
+            ]
+            quality = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT * FROM quality_assessments WHERE execution_id=? "
+                    "ORDER BY assessed_at DESC,rowid DESC LIMIT 100",
+                    (execution_id,),
+                )
+            ]
+        for event in events:
+            event["payload"] = json.loads(event["payload"])
+        return {
+            "execution": dict(row),
+            "events": events,
+            "quality_assessments": quality,
+            "replay": "Recorded telemetry is separate from inferred G-code movement",
+            "telemetry_url": "/api/timeline/sessions/" + execution_id,
         }
 
     def stages(self):

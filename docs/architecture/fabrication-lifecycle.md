@@ -380,3 +380,20 @@ is not print execution or physical acceptance. Native SD upload/delivery request
 are explicitly blocked while no verified write transport exists; native SD printing
 itself remains supported through observed execution history and existing guarded
 operator controls. No automated validation issued a printer command or upload.
+
+## Durable events and physical quality
+
+Schema 5 persists execution state observations independently of the bounded raw
+telemetry cache. Repeated identical states do not create duplicate events;
+interruption inference is labeled separately from backend observations. Missing or
+stale telemetry never creates a successful outcome. Existing sessions remain the
+execution authority, and old history without events is not filled with invented
+transitions. The historical inspector reads durable event records and exposes the
+existing telemetry/session endpoint as a replay foundation, with inferred G-code
+motion explicitly separate from recorded observations.
+
+Operator quality assessments are append-only records. Accepted/rejected/unassessed
+and notes never overwrite machine completion/failure, execution identity or prior
+assessments. The HMI inspector can read events and save an assessment without
+issuing machine controls. Photos and new source formats remain typed future ingestion
+adapters; no fixtures are added to production history.

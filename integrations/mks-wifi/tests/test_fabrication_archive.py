@@ -309,3 +309,20 @@ def test_print_bay_archive_delivery_is_confirmed_profile_checked_and_receive_onl
     assert calls == ["/api/connection", "/api/printerprofiles"]
     assert client.post(endpoint, json=confirmation).status_code == 409
     assert len(uploads) == 1
+
+
+def test_quality_is_append_only_and_never_rewrites_machine_outcome(tmp_path):
+    store = archive(tmp_path)
+    with store.db() as db:
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            ("failed", "unknown.gcode", "2000", "2001", "failed", None, None, "printer_sd"),
+        )
+    first = store.assess_quality("failed", "accepted", "Usable despite interrupted final travel")
+    second = store.assess_quality("failed", "rejected", "Later inspection found separation")
+    assert first["id"] != second["id"]
+    detail = store.execution_detail("failed")
+    assert detail["execution"]["state"] == "failed"
+    assert len(detail["quality_assessments"]) == 2
+    assert all(row["source"] == "operator_supplied" for row in detail["quality_assessments"])
+    assert detail["execution"]["sha256"] is None

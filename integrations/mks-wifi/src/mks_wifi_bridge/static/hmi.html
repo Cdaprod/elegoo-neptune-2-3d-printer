@@ -101,7 +101,7 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
   <div class="inspector-panel">
    <h2 id="inspector-title">Model</h2>
    <p id="inspector-details">G-code-derived filament representation; not a CAD solid.</p>
-   <p id="lifecycle-details" class="detail"></p><p id="inspector-status" role="status">Loading geometry…</p>
+   <p id="lifecycle-details" class="detail"></p><p id="execution-record" class="detail"></p><div id="execution-quality" hidden><label>Physical quality <select id="quality-result"><option value="unassessed">Unassessed</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select></label><input id="quality-notes" maxlength="2000" placeholder="Operator notes (optional)"><button id="save-quality" type="button">Save assessment</button></div><p id="inspector-status" role="status">Loading geometry…</p>
    <div class="inspector-actions"><button type="button" data-view-angle="iso">Isometric</button><button type="button" data-view-angle="top">Top</button><button type="button" data-view-angle="front">Front</button></div>
    <p>Drag to orbit · pinch to zoom. Selection never starts a print.</p><p id="native-sd-status" role="status"></p><button id="retrieve-sd" type="button" hidden>Retrieve SD file</button><button id="cancel-sd" type="button" hidden>Cancel retrieval</button><button id="copy-sd-local" type="button" hidden>Copy verified file to OctoPrint</button><button id="factory-select-file" type="button" hidden>Select on USB · no print</button><button id="manage-model" type="button">Manage files &amp; print</button>
    <button id="print-again" type="button" hidden>Print again · stage copy</button><button id="inspector-close" type="button">Close</button>

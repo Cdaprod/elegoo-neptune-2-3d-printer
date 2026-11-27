@@ -125,6 +125,13 @@
    text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
+   $('execution-quality').hidden=!(file.archive&&file.started_at);
+   text('execution-record','');
+   if(file.archive&&file.started_at)api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/detail',{signal:inspectorRequest.signal}).then(record=>{
+    if(epoch!==inspectorEpoch)return;
+    const latest=record.quality_assessments?.[0];$('quality-result').value=latest?.result||'unassessed';$('quality-notes').value=latest?.notes||'';
+    text('execution-record','Observed events: '+(record.events||[]).slice(-8).map(event=>event.observed_at+' '+(event.payload?.state||event.event_type)).join(' · '));
+   }).catch(error=>{if(epoch===inspectorEpoch&&error.name!=='AbortError')text('execution-record','Execution detail unavailable: '+error.message);});
    const preview=$("inspector-image");
    preview.hidden=false;
    preview.onerror=null;
@@ -282,6 +289,7 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value)loadFiles();}
  }
+ $('save-quality').addEventListener('click',async()=>{if(!inspected?.file?.started_at)return;try{const result=await api('/api/fabrication/executions/'+encodeURIComponent(inspected.file.id)+'/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:$('quality-result').value,notes:$('quality-notes').value})});text('execution-record','Physical quality '+result.result+' · operator supplied; machine outcome unchanged');}catch(error){text('execution-record',error.message);}});
  $('archive-files').addEventListener('click',async()=>{try{const result=await api('/api/fabrication/reconcile',{method:'POST'});text('model-count',result.archived+' immutable artifacts preserved');}catch(error){text('model-count',error.message);}});
  $('print-again').addEventListener('click',async()=>{if(!inspected?.file?.archive)return;try{
   const file=inspected.file;const endpoint=file.started_at?'/api/fabrication/executions/'+encodeURIComponent(file.id)+'/stage':'/api/fabrication/artifacts/'+file.sha256+'/stage';

@@ -1349,6 +1349,38 @@ def create_app(
         except (ValueError, FileNotFoundError) as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get(
+        "/api/fabrication/executions/{execution_id}/detail", dependencies=[Depends(require_auth)]
+    )
+    async def archive_execution_detail(execution_id: str):
+        try:
+            return await asyncio.to_thread(fabrication_archive.execution_detail, execution_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/quality",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def archive_execution_quality(execution_id: str, request: Request):
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > 10000:
+                raise HTTPException(413, "Assessment exceeds limit")
+        try:
+            data = json.loads(body)
+            if not isinstance(data, dict) or set(data) - {"result", "notes"}:
+                raise ValueError("Invalid quality assessment")
+            return await asyncio.to_thread(
+                fabrication_archive.assess_quality,
+                execution_id,
+                data.get("result"),
+                data.get("notes", ""),
+            )
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @app.get("/api/fabrication/staging/queue", dependencies=[Depends(require_auth)])
     async def archive_stages():
         return {
