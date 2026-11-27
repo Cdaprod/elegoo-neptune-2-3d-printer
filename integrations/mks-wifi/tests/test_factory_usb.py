@@ -228,3 +228,49 @@ def test_selected_factory_sd_file_is_not_an_active_print():
     assert result["status"] == "selected" and result["active"] is None
     assert result["filename"]["value"] == "DISPMNT01.gcode"
     assert result["progress_percent"]["value"] is None
+
+
+def test_octoprint_usb_missing_plugin_preserves_telemetry_and_catalog(monkeypatch):
+    import asyncio
+
+    from mks_wifi_bridge import factory_usb
+    from mks_wifi_bridge.octoprint_backend import OctoPrintBackend, OctoPrintError
+
+    backend = OctoPrintBackend("http://octoprint", "fixture")
+    calls = []
+
+    def get_sync(endpoint):
+        calls.append(endpoint)
+        if endpoint == "/api/plugin/neptune_sd_read":
+            raise OctoPrintError("HTTP 404")
+        return {
+            "/api/connection": {
+                "current": {"port": "/dev/ttyUSB-printer", "state": "Operational"}
+            },
+            "/api/printer": {
+                "state": {"flags": {"operational": True}},
+                "temperature": {"tool0": {"actual": 23.94}, "bed": {"actual": 23.91}},
+            },
+            "/api/job": {},
+            "/api/files": {"files": [
+                {"name": "AXOLOTL.GCO", "origin": "printer"},
+                {"name": "legacy.gcode", "origin": "sdcard"},
+                {"name": "._AXOLOTL.GCO", "origin": "printer"},
+                {"name": "local.gcode", "origin": "local"},
+            ]},
+        }[endpoint]
+
+    async def unavailable(*args):
+        raise OctoPrintError("HTTP 404")
+
+    monkeypatch.setattr(backend, "_get_sync", get_sync)
+    monkeypatch.setattr(factory_usb, "query", unavailable)
+    state = asyncio.run(backend.read_state())
+    assert state["printer_state"]["value"] == "idle"
+    assert state["nozzle_temperature"]["value"] == 23.94
+    assert "/api/plugin/neptune_sd_read" in calls
+    for refresh in (False, True):
+        entries = asyncio.run(backend.list_files(refresh=refresh))
+        assert [entry["name"] for entry in entries] == ["AXOLOTL.GCO", "legacy.gcode"]
+    with pytest.raises(ValueError):
+        asyncio.run(backend.get("/api/plugin/untrusted"))
