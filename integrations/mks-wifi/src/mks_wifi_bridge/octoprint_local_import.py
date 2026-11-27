@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -26,17 +27,35 @@ class NoRedirects(HTTPRedirectHandler):
 
 
 def validate_gcode_filename(filename: str, data: bytes) -> str:
-    if not isinstance(filename, str) or not NAME.fullmatch(filename) or ".." in filename:
-        raise LibraryImportError(
-            "Use an ASCII G-code basename (.gcode, .gco, .gc or .g), without directories"
-        )
+    """Normalize common slicer filenames, but reject traversal and control characters."""
+    if (
+        not isinstance(filename, str)
+        or len(filename) > 240
+        or not filename
+        or filename.startswith(".")
+        or ".." in filename
+        or "/" in filename
+        or "\\" in filename
+        or any(ord(char) < 32 for char in filename)
+    ):
+        raise LibraryImportError("Supply a G-code filename, not a path or hidden file")
+    suffix = "." + filename.rsplit(".", 1)[-1].lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise LibraryImportError("Only .gcode, .gco, .gc and .g files can be imported")
     if not data or len(data) > MAX_IMPORT_BYTES:
         raise LibraryImportError("G-code must contain between 1 byte and 50 MiB")
-    return filename
+    if NAME.fullmatch(filename):
+        return filename
+    stem = filename[:-len(suffix)]
+    ascii_stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode()
+    safe_stem = re.sub(r"[^A-Za-z0-9_. -]+", "-", ascii_stem)
+    safe_stem = re.sub(r"\\.{2,}", "-", safe_stem).strip(" ._-")[:65] or "model"
+    digest = hashlib.sha256(filename.encode("utf-8")).hexdigest()[:10]
+    return f"{safe_stem}-{digest}{suffix}"
 
 
 def multipart(filename: str, data: bytes) -> tuple[str, bytes]:
-    validate_gcode_filename(filename, data)
+    filename = validate_gcode_filename(filename, data)
     boundary = "neptune-" + os.urandom(18).hex()
     body = b""
     for field in ("select", "print"):
@@ -55,7 +74,7 @@ def upload_local_gcode(
     base_url: str, api_key: str, filename: str, data: bytes, *, opener=None
 ) -> dict:
     """Copy one verified local file. Existing names are never overwritten."""
-    validate_gcode_filename(filename, data)
+    filename = validate_gcode_filename(filename, data)
     if not api_key or not base_url.startswith(("http://", "https://")):
         raise LibraryImportError("OctoPrint local import is not configured")
     opener = opener or build_opener(NoRedirects())
