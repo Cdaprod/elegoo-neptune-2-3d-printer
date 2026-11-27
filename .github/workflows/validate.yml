@@ -48,7 +48,7 @@ jobs:
           python -m unittest discover -s ../../tests -p test_octoprint_startup.py -q
       - name: Lint and formatting
         run: |
-          uv run --no-sync ruff check src tests
+          uv run --no-sync ruff check src tests ../../integrations/lilbitdrop/receiver.py
           uv run --no-sync ruff format --check --diff src tests
       - name: Compile dashboard JavaScript
         run: node ../../scripts/check_dashboard_js.cjs
