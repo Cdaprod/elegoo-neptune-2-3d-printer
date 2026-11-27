@@ -33,7 +33,13 @@ def identity(device, sys_root=Path("/sys/class/tty")):
     raise RuntimeError("USB VID/PID unavailable; refusing to guess a serial device")
 
 
-def ownership(device, run=subprocess.run):
+def ownership(device, run=None):
+    if run is None:
+        def run(command, **kwargs):
+            if command[0] == "fuser" and os.geteuid() != 0:
+                command = ["sudo", "-n", *command]
+            return subprocess.run(command, **kwargs)
+
     owners = run(
         ["fuser", str(Path(device).resolve())],
         capture_output=True,
@@ -52,6 +58,8 @@ def ownership(device, run=subprocess.run):
             text=True,
             timeout=5,
         )
+        if inspection.returncode and "No such" not in getattr(inspection, "stderr", ""):
+            raise RuntimeError("Cannot inspect container ownership/paused state; check Docker access")
         if inspection.returncode == 0 and inspection.stdout.strip() == "true":
             paused.append(name)
         if name == "neptune-octoprint" and inspection.returncode == 0:

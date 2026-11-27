@@ -1392,6 +1392,13 @@ def create_app(
         from .factory_usb import catalog_visible
 
         entries = [entry for entry in entries if catalog_visible(entry.get("name", ""))]
+        if octoprint_mode and printer.backend.connection_transport == "usb":
+            selected = printer.backend.factory_observations.get("select", {}).get("data", {})
+            for entry in entries:
+                entry["selected"] = bool(
+                    selected.get("selected")
+                    and selected.get("filename", "").casefold() == entry.get("name", "").casefold()
+                )
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
         payload["printer_listing_source"] = (

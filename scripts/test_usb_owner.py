@@ -36,7 +36,7 @@ class UsbOwnership(unittest.TestCase):
             calls.append(command)
             if command[0] == "fuser":
                 return SimpleNamespace(returncode=0, stdout="1234")
-            return SimpleNamespace(returncode=1, stdout="")
+            return SimpleNamespace(returncode=1, stdout="", stderr="No such object")
 
         with self.assertRaisesRegex(RuntimeError, "Close picocom"):
             ownership("/dev/null", run)
