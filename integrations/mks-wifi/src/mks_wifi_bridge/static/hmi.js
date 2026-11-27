@@ -189,7 +189,28 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();}
  }
- $("manage-model").addEventListener("click",()=>{$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";route("controls");closeInspector();});
+ const manageButton=$("manage-model");
+ let manageTouch=null,lastManageActivation=-Infinity;
+ function openManagedFiles(){
+  const now=performance.now();
+  if(now-lastManageActivation<500)return;
+  lastManageActivation=now;
+  $("operations-frame").src="/?presentation=hmi-operations&view=sdcard";
+  route("controls");
+  closeInspector();
+ }
+ // A touch pointerup can be delivered without a synthesized click after WebGL
+ // OrbitControls gestures in Chromium. Require a short, stationary button press.
+ manageButton.addEventListener("pointerdown",e=>{
+  if(e.pointerType==="touch")manageTouch={id:e.pointerId,x:e.clientX,y:e.clientY};
+ });
+ manageButton.addEventListener("pointercancel",()=>{manageTouch=null;});
+ manageButton.addEventListener("pointerup",e=>{
+  const touch=manageTouch;manageTouch=null;
+  if(touch&&e.pointerType==="touch"&&touch.id===e.pointerId&&
+     Math.hypot(e.clientX-touch.x,e.clientY-touch.y)<12)openManagedFiles();
+ });
+ manageButton.addEventListener("click",openManagedFiles);
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;
  async function checkImportStatus(){
