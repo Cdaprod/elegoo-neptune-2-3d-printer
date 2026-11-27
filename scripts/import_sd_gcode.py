@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
+from urllib.parse import quote, urlencode
 
 from authorize_octoprint import NoRedirects, local_url
 from setup_env import ENV, parse_env
@@ -105,7 +106,7 @@ def candidates(root: Path):
 def read_source(path: Path, root: Path) -> bytes:
     """Check the final path and descriptor; reject oversized or changing files."""
     resolved = path.resolve(strict=True)
-    if not resolved.is_relative_to(root):
+    if not resolved.is_relative_to(root.resolve()):
         raise ImportFailure(f"File escaped the selected volume: {path.name}")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     with os.fdopen(os.open(path, flags), "rb") as source:
@@ -247,10 +248,64 @@ def import_card(mount: Path, apply: bool = False, opener=None, env: dict | None 
     return summary
 
 
+def archive_card(mount: Path, apply=False, opener=None, env=None):
+    """Reuse mounted-card discovery; stream originals to the unified archive, never OctoPrint."""
+    root = verify_mount(mount).resolve()
+    env = env if env is not None else parse_env(ENV.read_text()) if ENV.exists() else {}
+    token = env.get("NEPTUNE_OBSERVATORY_TOKEN", "")
+    if apply and not token:
+        raise ImportFailure("Existing Observatory token is required for archive ingestion")
+    opener = opener or build_opener(NoRedirects())
+    result = {"discovered": 0, "archived": 0, "dry_run": not apply}
+    for path in candidates(root):
+        if not path.resolve(strict=True).is_relative_to(root):
+            raise ImportFailure("Source escaped the selected removable volume")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        with os.fdopen(os.open(path, flags), "rb") as source:
+            before = os.fstat(source.fileno())
+            if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= MAX_BYTES:
+                raise ImportFailure("Source must be a nonempty bounded regular G-code file")
+            hasher = hashlib.sha256()
+            hashed = 0
+            while block := source.read(65536):
+                hashed += len(block)
+                if hashed > MAX_BYTES:
+                    raise ImportFailure("Source grew beyond ingestion limit")
+                hasher.update(block)
+            digest = hasher.hexdigest()
+            if hashed != before.st_size:
+                raise ImportFailure("Source changed during fingerprinting")
+            source.seek(0)
+            result["discovered"] += 1
+            if apply:
+                request = Request("http://127.0.0.1:8000/api/fabrication/ingest?" +
+                                  urlencode({"filename": path.name}), data=source,
+                                  headers={"Authorization": "Bearer " + token,
+                                           "Content-Type": "application/octet-stream",
+                                           "Content-Length": str(before.st_size),
+                                           "X-Artifact-Provider": "removable_media",
+                                           "X-Artifact-Source": "removable:" + quote(str(path))},
+                                  method="POST")
+                with opener.open(request, timeout=120) as response:
+                    receipt = json.load(response)
+                if receipt.get("sha256") != digest or not receipt.get("archived"):
+                    raise ImportFailure("Archive receipt failed source SHA-256 verification")
+                result["archived"] += 1
+            after = os.fstat(source.fileno())
+            if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+                    after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                raise ImportFailure("Source changed during archive ingestion")
+        print(json.dumps({"file": str(path.relative_to(root)), "sha256": digest,
+                          "progress": result}, sort_keys=True))
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mount", nargs="?", type=Path, help="Optional mounted SD path; auto-detected if only one removable card")
     parser.add_argument("--apply", action="store_true", help="Copy files into OctoPrint; default dry run")
+    parser.add_argument("--archive", action="store_true",
+                        help="Hydrate canonical Pi storage instead of OctoPrint; never print")
     args = parser.parse_args()
     try:
         mount = args.mount
@@ -265,7 +320,10 @@ def main() -> None:
                 )
             mount = options[0]
             print("Detected removable card:", mount)
-        import_card(mount, apply=args.apply)
+        if args.archive:
+            print(json.dumps(archive_card(mount, apply=args.apply), sort_keys=True))
+        else:
+            import_card(mount, apply=args.apply)
     except (ImportFailure, HTTPError, URLError, OSError, ValueError) as exc:
         parser.exit(1, f"SD import failed: {exc}\n")
 

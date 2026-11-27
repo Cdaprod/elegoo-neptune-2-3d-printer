@@ -137,5 +137,34 @@ class ImportTests(unittest.TestCase):
             sd.verify_mount(self.root)
 
 
+
+
+
+class CanonicalHydrationTests(unittest.TestCase):
+    def test_streaming_hydration_uses_archive_contract_and_verifies_receipt(self):
+        import hashlib
+        class ArchiveOpener:
+            def __init__(self):
+                self.count = 0
+            def open(self, request, timeout):
+                self.count += 1
+                data = request.data.read()
+                assert '/api/fabrication/ingest?' in request.full_url
+                assert request.get_header('X-artifact-provider') == 'removable_media'
+                assert request.get_header('Authorization') == 'Bearer test-token'
+                return Response(json.dumps({'archived': True,
+                                            'sha256': hashlib.sha256(data).hexdigest()}).encode())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'part.gcode').write_bytes(b'G1 X20 E1\n')
+            (root/'._part.gcode').write_bytes(b'metadata')
+            opener = ArchiveOpener()
+            with mock.patch.object(sd, 'verify_mount', return_value=root):
+                result = sd.archive_card(root, apply=True, opener=opener,
+                                         env={'NEPTUNE_OBSERVATORY_TOKEN': 'test-token'})
+            self.assertEqual(result['archived'], 1)
+            self.assertEqual(opener.count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

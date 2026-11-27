@@ -252,3 +252,33 @@ Receiver regression cases include simultaneous first publication, inode-preservi
 retries, corrupt-target rejection, authentication, checksum/path errors, disk-space
 rejection, incomplete concurrent bodies, admission saturation, timeout cleanup,
 startup orphans, original sender filename provenance and no automatic staging.
+
+## Removable-media canonical hydration
+
+The existing SD importer now supports a canonical-only mode, independent of
+OctoPrint storage and printer SD readiness:
+
+```sh
+python3 scripts/import_sd_gcode.py /path/to/mounted/card --archive
+python3 scripts/import_sd_gcode.py /path/to/mounted/card --archive --apply
+```
+
+Run on the Pi hosting Observatory. It reuses mounted-volume verification,
+recursive bounded discovery and hidden/symlink filtering. Files are opened read-only,
+streaming SHA-256 is computed with a size bound, and source metadata is checked.
+Each file streams through the same authenticated ingestion endpoint and its returned
+canonical digest is compared against the original. Existing local .env credentials
+are read without logging. Source URI and removable_media provenance are retained;
+no source file is modified, no OctoPrint upload occurs, and no stage or print is
+created. Existing non-archive import behavior remains compatible. Ctrl-C cancels
+between/in a transfer; completed canonical receipts remain durable and retrying
+reconciles identical bytes rather than duplicating their canonical storage. Wait
+for the command to finish or exit before operator-controlled unmount/safe removal.
+No SD device was mounted, removed or imported on the physical Pi during validation.
+The original mounted card should be mounted read-only by the operator; the importer
+does not change mount configuration or perform unmounts automatically.
+
+Authenticated HTTP adapters may declare `X-Artifact-Provider` as http,
+removable_media or orca_slicer and `X-Artifact-Source` as a bounded source URI.
+These are adapter-declared provenance, not hardware attestation; URIs are never
+fetched or interpreted as filesystem paths by the server.

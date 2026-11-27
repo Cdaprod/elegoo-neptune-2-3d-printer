@@ -1278,7 +1278,12 @@ def create_app(
 
         if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
             raise HTTPException(415, "Submit raw artifact bytes")
-        submission = ArtifactSubmission(filename, "http", "upload:" + filename)
+        provider = request.headers.get("x-artifact-provider", "http")
+        if provider not in {"http", "removable_media", "orca_slicer"}:
+            raise HTTPException(422, "Unsupported ingestion adapter")
+        # Authenticated adapter-declared provenance; no URL fetching or filesystem access.
+        source_uri = request.headers.get("x-artifact-source", "upload:" + filename)
+        submission = ArtifactSubmission(filename, provider, source_uri)
         try:
             submission.validate()
             with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stream:
