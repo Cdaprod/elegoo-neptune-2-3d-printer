@@ -64,6 +64,12 @@
  }
 
  let factoryUsb={available:false,selection_enabled:false};
+ async function refreshIngestionStatus(){
+  try{const result=await api('/api/fabrication/ingestion/status');const adapter=result.adapters.find(item=>item.provider==='lilbitdrop');
+   text('ingestion-status','LilBitDrop · '+(adapter?.state||'unavailable')+' · '+(adapter?.ingested||0)+' archived · '+(adapter?.pending||0)+' pending'+(adapter?.errors?.length?' · '+adapter.errors.at(-1).error:''));
+  }catch(error){text('ingestion-status','File handoff status unavailable: '+error.message);}
+ }
+ refreshIngestionStatus();setInterval(()=>{if(!document.hidden&&state.view==='settings')refreshIngestionStatus();},5000);
  api("/api/factory-usb").then(value=>{factoryUsb=value;}).catch(()=>{});
  let inspectorViewer=null;
  let inspectorRequest=null;

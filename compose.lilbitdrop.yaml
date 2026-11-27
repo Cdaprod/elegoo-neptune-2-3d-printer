@@ -1,0 +1,14 @@
+# Optional: COMPOSE_FILE=compose.yaml:compose.lilbitdrop.yaml
+# Receiver owns completed/ and publishes by atomic rename; Observatory reads only.
+services:
+  neptune-observatory:
+    volumes:
+      - type: bind
+        source: ${NEPTUNE_LILBITDROP_HOST_COMPLETED_DIR:-/srv/neptune/incoming/completed}
+        target: /mnt/lilbitdrop/completed
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      NEPTUNE_LILBITDROP_INGEST_ENABLED: "true"
+      NEPTUNE_LILBITDROP_COMPLETED_DIR: /mnt/lilbitdrop/completed

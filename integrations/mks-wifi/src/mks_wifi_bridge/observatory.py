@@ -804,6 +804,14 @@ def create_app(
     from .fabrication_archive import FabricationArchive
 
     fabrication_archive = FabricationArchive(motion_timeline)
+    from .completed_ingestion import CompletedDirectoryAdapter
+
+    completed_adapter = None
+    if os.getenv("NEPTUNE_LILBITDROP_INGEST_ENABLED", "false").lower() == "true":
+        completed_adapter = CompletedDirectoryAdapter(
+            fabrication_archive,
+            os.getenv("NEPTUNE_LILBITDROP_COMPLETED_DIR", "/srv/neptune/incoming/completed"),
+        )
     model_preview_slots = asyncio.Semaphore(2)
     hub = BroadcastHub()
     commands = DryRunCommandService()
@@ -1029,10 +1037,15 @@ def create_app(
     async def lifespan(app: FastAPI):
         printer.stop_event.clear()
         archive_task = asyncio.create_task(archive_worker())
+        handoff_task = asyncio.create_task(completed_adapter.run()) if completed_adapter else None
         printer.worker_task = asyncio.create_task(printer.run_poller(publish_dashboard_snapshot))
         try:
             yield
         finally:
+            if handoff_task:
+                handoff_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await handoff_task
             archive_task.cancel()
             with suppress(asyncio.CancelledError):
                 await archive_task
@@ -1244,6 +1257,17 @@ def create_app(
                 "limit": limit,
                 "note": str(exc),
             }
+
+    @app.get("/api/fabrication/ingestion/status", dependencies=[Depends(require_auth)])
+    async def ingestion_status():
+        return {
+            "schema_version": 1,
+            "adapters": [
+                dict(completed_adapter.status)
+                if completed_adapter
+                else {"provider": "lilbitdrop", "state": "disabled"}
+            ],
+        }
 
     @app.post("/api/fabrication/ingest", dependencies=[Depends(require_control_token)])
     async def ingest_artifact(request: Request, filename: str):

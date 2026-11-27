@@ -104,9 +104,8 @@ uploads archive through the same service before their existing local delivery.
 
 Removable-media bulk hydration still needs adapter/UI integration with the existing
 SD importer. OrcaSlicer direct submission, network storage protocols and non-G-code formats
-remain future adapters. LilBitDrop is already installed and physically verified
-on the Pi according to the operator; only its Observatory ingestion handoff is
-pending. Reuse that established service rather than rebuilding its transport.
+remain future adapters. LilBitDrop discovery infrastructure is installed and operator-verified on the Pi;
+the receiving-side completed-file transfer lifecycle remains unverified. Reuse that established service rather than rebuilding its transport.
 The receiving directory/completion contract must be identified before wiring the
 adapter, so partially received files are never treated as complete artifacts.
 Native Apple AirDrop compatibility is not inferred from this handoff. The contract currently
@@ -114,3 +113,39 @@ accepts execution_gcode only; unsupported artifact kinds fail explicitly. CAD,
 slicer projects, photos and derivatives must gain typed validation before being
 accepted, rather than masquerading as G-code. Source URIs are provenance labels,
 not URLs fetched by the ingestion service.
+
+## LilBitDrop completed-directory adapter
+
+`CompletedDirectoryAdapter` uses watchfiles filesystem notifications plus startup
+and periodic reconciliation. The bounded adapter reads at most four new files per
+scan, ignores hidden/system/partial/symlink paths and non-G-code suffixes, waits
+for stable file metadata, and uses the unified ingestion contract with provider
+`lilbitdrop`. Completion receipts persist across restarts, while originals remain
+independent of the incoming folder. It never stages, uploads to OctoPrint or prints.
+Status, pending counts, current file and bounded errors are exposed through
+`GET /api/fabrication/ingestion/status` and HMI Settings.
+
+Receiver contract: receive into `/srv/neptune/incoming/partial/`, close and fsync the
+completed file, then atomically rename into `/srv/neptune/incoming/completed/` on
+the same filesystem. Never write into an already published completed file.
+Settling and mutation checks are defense in depth, not proof of completion for a
+receiver that violates this contract. Observatory never deletes incoming files.
+The adapter ignores temporary suffixes such as `.part` and `.partial`.
+
+The optional `compose.lilbitdrop.yaml` adds only a read-only bind of completed/; it
+requires that the host directory already exists and never grants privileged mode.
+Set `COMPOSE_FILE=compose.yaml:compose.lilbitdrop.yaml` in the existing private .env
+(or append this overlay after an existing USB overlay). Keep the current deployment
+checkout, existing `/srv/neptune-observatory/` configuration and existing persistent
+data volume; there is no new canonical storage tree. Override
+`NEPTUNE_LILBITDROP_HOST_COMPLETED_DIR` if the actual receiver uses another path.
+The internal read-only mount is `/mnt/lilbitdrop/completed`. Direct non-Compose
+configuration uses `NEPTUNE_LILBITDROP_INGEST_ENABLED=true` and
+`NEPTUNE_LILBITDROP_COMPLETED_DIR` (default `/srv/neptune/incoming/completed`).
+
+The BLE prototype `~/lilbitdrop-lab/peripheral.py`, advertised name
+`CDA Neptune PrintBay`, and wlan0 are operator-reported context. No Bluetooth, WiFi
+interface, SSH trust or receiver changes are made by this adapter. GitHub searches
+and direct repository lookup did not reveal an accessible LilBitDrop repository;
+its precise URL/access and receiving implementation still need reconciliation.
+No complete wireless-transfer or Pi deployment validation is claimed.
