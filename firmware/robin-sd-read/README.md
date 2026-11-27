@@ -155,7 +155,8 @@ not be used. The compile-only CI regenerates checksums for this patch.
 ## Operator-reported USB evidence — 2026-11-27
 
 The operator reports enumeration and selection through `/dev/ttyUSB0`, with this
-response from the currently installed, not-yet-identified firmware:
+response from the installed `Robin_nano_v2.1.6.b` factory firmware (identified by
+a subsequent M115 handoff):
 
 ```text
 M23 DISPMNT01.gcode
