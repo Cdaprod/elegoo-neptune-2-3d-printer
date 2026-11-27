@@ -162,7 +162,13 @@ Rendered screenshots are `docs/screenshots/native-sd-*-1280x400.png`.
 PR #36's latest failure was Controls navigation after a canvas already existed.
 Local repetitions and the new lifecycle stress test retain the visible-canvas
 assertion. No timeout has been increased and the navigation assertion is unchanged.
-Do not describe an unreproduced intermittent failure as a proven root-cause fix.
+A deterministic local reproduction suppresses the compatibility click after a
+valid touch: the original click-only Manage button strands the dialog. Manage now
+handles a bounded, single-finger native touchend directly, cancelling the duplicate
+compatibility click; drags and cancelled gestures do not activate navigation. The
+browser regression includes this case while preserving mouse/keyboard click handling.
+This addresses the demonstrated activation gap without changing canvas assertions
+or extending timeouts. CI event diagnostics retain evidence for other causes.
 
 ## Deployment and physical commissioning
 

@@ -228,7 +228,27 @@
   try{const result=await api('/api/native-sd/assets/'+inspected.file.sha256+'/import-local',{method:'POST'});text('native-sd-status',result.status+' · '+result.filename+' · no print selected');}
   catch(error){text('native-sd-status',error.message);}
  });
- $("manage-model").addEventListener("click",()=>{closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";});
+ function manageSelectedModel(){closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";}
+ const manageButton=$("manage-model");
+ manageButton.addEventListener("click",manageSelectedModel);
+ // A valid native tap must not depend on Chromium generating a compatibility click
+ // after a WebGL gesture. Cancel that synthetic click to avoid duplicate activation.
+ let manageTouch=null;
+ manageButton.addEventListener('touchstart',event=>{
+  const touch=event.touches.length===1?event.touches[0]:null;
+  manageTouch=touch?{id:touch.identifier,x:touch.clientX,y:touch.clientY,moved:false}:null;
+ },{passive:true});
+ manageButton.addEventListener('touchmove',event=>{
+  const touch=[...event.touches].find(item=>item.identifier===manageTouch?.id);
+  if(manageTouch&&(!touch||event.touches.length!==1||Math.hypot(touch.clientX-manageTouch.x,touch.clientY-manageTouch.y)>12))manageTouch.moved=true;
+ },{passive:true});
+ manageButton.addEventListener('touchcancel',()=>{manageTouch=null;},{passive:true});
+ manageButton.addEventListener('touchend',event=>{
+  const start=manageTouch;manageTouch=null;
+  const touch=[...event.changedTouches].find(item=>item.identifier===start?.id);
+  if(!start||start.moved||!touch||event.touches.length||Math.hypot(touch.clientX-start.x,touch.clientY-start.y)>12)return;
+  event.preventDefault();manageSelectedModel();
+ },{passive:false});
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;
  async function checkImportStatus(){

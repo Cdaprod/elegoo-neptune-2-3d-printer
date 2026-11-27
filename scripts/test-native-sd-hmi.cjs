@@ -61,6 +61,7 @@ const base=process.env.HMI_BASE_URL||'http://127.0.0.1:8000';
    await page.locator('.model[data-provider="native_cache"]').tap();
    await page.locator('#model-viewer-host canvas').waitFor();
    await page.locator('#inspector-status').filter({hasText:'Interactive 3D'}).waitFor();
+   if(i===0)await page.locator('#manage-model').evaluate(button=>button.addEventListener('touchend',event=>event.preventDefault(),{once:true,capture:true,passive:false}));
    await page.locator('#manage-model').tap();
    await page.locator('#view-controls.active').waitFor();
    assert.equal(await page.locator('#model-viewer-host canvas').count(),0);
