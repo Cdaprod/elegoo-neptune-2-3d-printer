@@ -28,6 +28,8 @@ try{
  const transition=e=>{cinematic=e.detail.active;engine.setCinematic(cinematic);if(!cinematic){previewOverride=null;engine.setMode(preferences.mode);}};window.addEventListener('hmi:cinematic',transition);
  const preview=e=>{previewOverride=e.detail?.mode||null;engine.setMode(previewOverride||preferences.mode);};
  window.addEventListener('hmi:studio-preview',preview);
+ const inspector=e=>{engine.setVisible(!e.detail.open);host.dataset.suspended=String(e.detail.open);};
+ window.addEventListener('hmi:inspector',inspector);
  host.dataset.renderer='ready';
- addEventListener('pagehide',event=>{if(event.persisted)return;request?.abort();unsubscribe();store.dispose();window.removeEventListener('hmi:cinematic',transition);window.removeEventListener('hmi:studio-preview',preview);stopPreferences();engine.dispose();});
+ addEventListener('pagehide',event=>{if(event.persisted)return;request?.abort();unsubscribe();store.dispose();window.removeEventListener('hmi:inspector',inspector);window.removeEventListener('hmi:cinematic',transition);window.removeEventListener('hmi:studio-preview',preview);stopPreferences();engine.dispose();});
 }catch(error){host.dataset.renderer='unavailable';console.warn('Sculpture renderer unavailable',error.message);}

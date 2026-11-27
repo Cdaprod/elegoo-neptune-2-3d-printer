@@ -13,7 +13,9 @@
  }
  let routeAnimation=null,leaveAnimation=null,departingPanel=null;
  function finishDeparture(){if(departingPanel){for(const key of ['display','position','inset','zIndex','pointerEvents'])departingPanel.style[key]='';departingPanel.inert=false;departingPanel=null;}}
- function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
+ function updateEmbeddedRendering(){const frame=$("print-bay-frame");frame?.contentWindow?.postMessage({type:"neptune:presentation",active:state.view==="print-bay"},location.origin);}
+ $("print-bay-frame").addEventListener("load",updateEmbeddedRendering);
+ function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}updateEmbeddedRendering();if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
@@ -97,6 +99,7 @@
    $("inspector-image").hidden=false;
    const dialog=$("model-inspector");
    if(dialog.open)dialog.close();
+   window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:false}}));
  }
  $("inspector-close").addEventListener("click",closeInspector);
  $("model-inspector").addEventListener("cancel",e=>{e.preventDefault();closeInspector();});
@@ -126,6 +129,7 @@
    $("copy-sd-local").hidden=source!=="native_cache";
    text("native-sd-status",source==="printer_native"?"Retrieve actual SD bytes before reconstruction.":"");
    $("model-inspector").showModal();
+   window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:true}}));
    if(!hasGeometry(file,source))return;
    try{
      const geometry=await api(source==="native_cache"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/geometry":"/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path),{signal:inspectorRequest.signal});
@@ -134,7 +138,9 @@
      if(epoch!==inspectorEpoch)return;
      const host=$("model-viewer-host");
      host.hidden=false;
-     inspectorViewer=module.mountViewer(host,geometry);
+     const viewer=inspectorViewer=module.mountViewer(host,geometry);
+     const ready=await viewer.ready;
+     if(epoch!==inspectorEpoch||!ready)return;
      preview.hidden=true;
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];

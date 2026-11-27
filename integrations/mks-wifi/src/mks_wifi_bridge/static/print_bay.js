@@ -4,6 +4,11 @@ import {OrbitControls} from '/static/vendor/OrbitControls.js';
 const $ = id => document.getElementById(id);
 const text = (tag, value) => {const e=document.createElement(tag);e.textContent=value;return e;};
 let projects=[], artifacts=[], selectedPlate=null, views=[], generation=0, worker={online:false}, jobs=[], renderKey=null, refreshing=false, deliveryInFlight=false;
+let presentationActive=window.parent===window||new URLSearchParams(location.search).get('presentation')!=='hmi';
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='neptune:presentation')return;
+ presentationActive=event.data.active===true;document.body.dataset.rendering=presentationActive?'active':'suspended';
+});
 async function api(path, body) {
   const r=await fetch('/api/manufacturing'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){let j;try{j=await r.json();}catch{}const error=Error(j?.detail||`Request failed (${r.status})`);error.status=r.status;throw error;}return r.json();
@@ -42,7 +47,7 @@ async function preview(canvas, plate, artifact){
     const view={renderer,controls,scene,camera};views.push(view);
   }catch(e){canvas.replaceWith(text('p',e.message));}
 }
-function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();}views=[];}
+function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();v.renderer.forceContextLoss();}views=[];}
 function stateFor(plate){return preparationState(project(),plate,artifacts,jobs,worker);}
 function selected(){return project()?.plates.find(p=>p.name===selectedPlate);}
 function renderPlates(){
@@ -113,4 +118,17 @@ $('projects').onchange=()=>{selectedPlate=project()?.plates[0]?.name;renderPlate
 $('retry').onclick=()=>queue('build-slice-stage');$('deploy').onclick=()=>artifactAction('deploy');$('export-sd').onclick=()=>artifactAction('export-sd');
 for(const button of document.querySelectorAll('[data-action]'))button.onclick=()=>queue(button.dataset.action);
 $('inventory-panel').addEventListener('toggle',async e=>{if(e.target.open)try{const rows=await api('/inventory');$('inventory').replaceChildren(...rows.map(r=>text('p',`${r.root}/${r.file} · ${r.status}`)));if(!rows.length)$('inventory').textContent='No inventory roots configured or no candidate files found.';}catch(err){message(err.message);}});
-function animate(){requestAnimationFrame(animate);for(const v of views){const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(!w||!h)continue;const ratio=Math.min(devicePixelRatio,2);if(v.renderer.domElement.width!==Math.floor(w*ratio)||v.renderer.domElement.height!==Math.floor(h*ratio))v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();v.controls.update();v.renderer.render(v.scene,v.camera);}}animate();refresh();setInterval(refresh,3000);
+let lastRender=0;
+function animate(now){
+ requestAnimationFrame(animate);
+ if(!presentationActive||document.hidden||now-lastRender<1000/30)return;
+ lastRender=now;
+ for(const v of views){
+  const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(!w||!h)continue;
+  const ratio=Math.min(devicePixelRatio,2),resized=v.renderer.domElement.width!==Math.floor(w*ratio)||v.renderer.domElement.height!==Math.floor(h*ratio);
+  if(resized){v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();}
+  const changed=v.controls.update();
+  if(v.drawn&&!resized&&!changed)continue;
+  v.renderer.render(v.scene,v.camera);v.drawn=true;
+ }
+}requestAnimationFrame(animate);refresh();setInterval(refresh,3000);

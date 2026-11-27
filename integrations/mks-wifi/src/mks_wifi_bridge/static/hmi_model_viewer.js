@@ -89,18 +89,22 @@ export function mountViewer(host, model) {
   const observer = new ResizeObserver(resize);
   observer.observe(host);
   setView("iso");resize();
-  function animate(){
+  let resolveReady,rejectReady,lastRender=0;
+  const ready=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;});
+  function animate(now){
     if(disposed)return;
     frame=requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene,camera);
+    if(document.hidden||now-lastRender<1000/30)return;
+    lastRender=now;controls.update();
+    try{renderer.render(scene,camera);resolveReady(true);}
+    catch(error){cancelAnimationFrame(frame);rejectReady(error);}
   }
-  animate();
+  frame=requestAnimationFrame(animate);
   return {
-    setView,
+    ready,setView,
     dispose() {
       if(disposed)return;
-      disposed=true;
+      disposed=true;resolveReady(false);
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
