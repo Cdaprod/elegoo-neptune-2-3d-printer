@@ -1,5 +1,6 @@
 """Source-neutral submission contract. Adapters never stage or print artifacts."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -14,6 +15,7 @@ class ArtifactSubmission:
     source_uri: str
     artifact_kind: str = "execution_gcode"
     schema_version: int = 1
+    expected_sha256: str | None = None
 
     def validate(self):
         if self.schema_version != 1 or self.artifact_kind != "execution_gcode":
@@ -22,6 +24,10 @@ class ArtifactSubmission:
             raise ValueError("Invalid source provenance")
         if any(ord(c) < 32 for c in self.provider + self.source_uri):
             raise ValueError("Invalid source provenance")
+        if self.expected_sha256 is not None and not re.fullmatch(
+            r"[a-f0-9]{64}", self.expected_sha256
+        ):
+            raise ValueError("Invalid expected artifact digest")
         validate_gcode_filename(self.filename, b"x")
 
 

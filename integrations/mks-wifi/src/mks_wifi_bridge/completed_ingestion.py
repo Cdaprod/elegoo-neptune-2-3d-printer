@@ -76,10 +76,16 @@ class CompletedDirectoryAdapter:
                 if time.monotonic() - since < self.settle_seconds:
                     continue
                 self.status.update(state="ingesting", current_file=str(relative))
+                prefix = re.match(r"^([a-f0-9]{64})_", path.name)
                 original = re.sub(r"^[a-f0-9]{64}_", "", path.name)
                 sha = self.service.submit_path(
                     path,
-                    ArtifactSubmission(original, "lilbitdrop", "file:" + str(path)),
+                    ArtifactSubmission(
+                        original,
+                        "lilbitdrop",
+                        "file:" + str(path),
+                        expected_sha256=prefix[1] if prefix else None,
+                    ),
                 )
                 with self.archive.db() as db:
                     db.execute(

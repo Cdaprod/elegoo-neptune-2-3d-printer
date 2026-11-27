@@ -1283,7 +1283,9 @@ def create_app(
             raise HTTPException(422, "Unsupported ingestion adapter")
         # Authenticated adapter-declared provenance; no URL fetching or filesystem access.
         source_uri = request.headers.get("x-artifact-source", "upload:" + filename)
-        submission = ArtifactSubmission(filename, provider, source_uri)
+        submission = ArtifactSubmission(
+            filename, provider, source_uri, expected_sha256=request.headers.get("x-content-sha256")
+        )
         try:
             submission.validate()
             with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stream:

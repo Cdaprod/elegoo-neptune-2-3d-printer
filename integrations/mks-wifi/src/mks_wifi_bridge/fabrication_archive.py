@@ -132,6 +132,8 @@ class FabricationArchive:
             if size == 0:
                 raise ValueError("Empty artifacts are not accepted")
             sha = digest.hexdigest()
+            if submission.expected_sha256 is not None and sha != submission.expected_sha256:
+                raise ValueError("Artifact failed expected SHA-256 verification")
             target = self.root / (sha + ".gcode")
             try:
                 os.link(temporary, target)

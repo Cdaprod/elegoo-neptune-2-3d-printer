@@ -284,6 +284,7 @@ def archive_card(mount: Path, apply=False, opener=None, env=None):
                                            "Content-Type": "application/octet-stream",
                                            "Content-Length": str(before.st_size),
                                            "X-Artifact-Provider": "removable_media",
+                                           "X-Content-SHA256": digest,
                                            "X-Artifact-Source": "removable:" + quote(str(path))},
                                   method="POST")
                 with opener.open(request, timeout=120) as response:

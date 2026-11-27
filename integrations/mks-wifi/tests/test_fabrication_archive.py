@@ -144,3 +144,19 @@ def test_http_ingestion_is_archive_only_and_enforces_origin(tmp_path):
             ).status_code
             == 422
         )
+
+
+def test_expected_digest_rejection_never_publishes_artifact(tmp_path):
+    from io import BytesIO
+
+    from mks_wifi_bridge.fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+    store = archive(tmp_path)
+    with pytest.raises(ValueError, match="SHA-256"):
+        FabricationIngestion(store).submit(
+            ArtifactSubmission("bad.gcode", "http", "upload:bad", expected_sha256="0" * 64),
+            BytesIO(b"wrong contents"),
+        )
+    assert not list(store.root.glob("*.gcode"))
+    with store.db() as db:
+        assert db.execute("SELECT count(*) FROM fabrication_artifacts").fetchone()[0] == 0
