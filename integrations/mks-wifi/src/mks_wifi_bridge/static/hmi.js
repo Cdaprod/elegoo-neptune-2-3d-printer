@@ -189,7 +189,7 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();}
  }
- $("manage-model").addEventListener("click",()=>{closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";});
+ $("manage-model").addEventListener("click",()=>{$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";route("controls");closeInspector();});
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;
  async function checkImportStatus(){
