@@ -28,6 +28,9 @@ export function mountViewer(host, model) {
   const dpr = Math.min(1.5, (window.devicePixelRatio || 1) * (segments.length > 20000 ? 1 : segments.length > 6000 ? 1.15 : 1.3));
   renderer.setPixelRatio(dpr);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.style.width = "100%";
+  renderer.domElement.style.height = "100%";
+  renderer.domElement.style.display = "block";
   renderer.domElement.style.touchAction = "none";
   renderer.domElement.setAttribute("aria-label", "Interactive reconstructed G-code extrusion model");
   host.replaceChildren(renderer.domElement);
