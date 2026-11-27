@@ -59,6 +59,12 @@ const assert=require('node:assert/strict');
   await page.waitForFunction(before=>Number(document.getElementById('model-viewer-host')?.dataset.viewerFrames)>before,before);
   await page.locator('#inspector-close').click();
   assert.equal(await page.locator('#model-viewer-host canvas').count(),0);
+  // A touchscreen can emit pointerup without a compatibility click after WebGL gestures.
+  // Both the model card and management action must still respond.
+  await page.locator('.model').first().tap();
+  await page.locator('#model-inspector[open]').waitFor();
+  await page.locator('#manage-model').tap();
+  await page.locator('#view-controls.active').waitFor();
   assert.deepEqual(writes,[]);
   assert.deepEqual(errors,[]);
   console.log('Three.js native studio resolution, crisp inspector, idle GPU suspension and controls passed');
