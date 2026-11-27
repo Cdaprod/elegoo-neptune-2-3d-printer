@@ -76,5 +76,4 @@ appliance-config:
 
 .PHONY: sd-import
 sd-import:
-	@test -n "$(SD_MOUNT)" || { echo 'Set SD_MOUNT to the mounted card path'; exit 1; }
-	@$(PYTHON) scripts/import_sd_gcode.py "$(SD_MOUNT)" $(if $(filter 1,$(APPLY)),--apply,)
+	@$(PYTHON) scripts/import_sd_gcode.py $(if $(SD_MOUNT),"$(SD_MOUNT)",) $(if $(filter 1,$(APPLY)),--apply,)
