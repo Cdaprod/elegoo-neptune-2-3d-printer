@@ -143,6 +143,7 @@ jobs:
           node scripts/test-hmi-cinematic.cjs
           node scripts/test-sculpture-browser.cjs
           node scripts/test-hmi-operator.cjs
+          node scripts/test-hmi-gcode-import.cjs
       - name: Upload HMI geometry gallery screenshot
         if: always()
         uses: actions/upload-artifact@v4
