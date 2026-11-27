@@ -88,6 +88,20 @@ const path=require('node:path');
   await page.locator('#inspector-status').filter({hasText:'Interactive 3D'}).waitFor();
   await swipe(400,180,90,25);
   assert.equal(await page.locator('#model-inspector[open]').count(),1);
+  await page.evaluate(()=>{
+   window.__manageTapTrace=[];
+   for(const name of ['pointerdown','pointerup','pointercancel','touchstart','touchend','click']){
+    document.addEventListener(name,e=>{
+     if(window.__manageTapTrace.length>=40)return;
+     const under=document.elementFromPoint(e.clientX??0,e.clientY??0);
+     window.__manageTapTrace.push({
+      event:name,target:e.target?.id||e.target?.tagName,
+      at:e.clientX==null?null:[Math.round(e.clientX),Math.round(e.clientY)],
+      under:under?.id||under?.tagName,defaultPrevented:e.defaultPrevented
+     });
+    },true);
+   }
+  });
   await page.locator('#manage-model').tap();
   try{await page.locator('#view-controls.active').waitFor({timeout:10000});}
   catch(error){
@@ -96,7 +110,15 @@ const path=require('node:path');
     appInert:document.getElementById('app').inert,
     inspectorOpen:document.getElementById('model-inspector').open,
     activeViews:[...document.querySelectorAll('.view.active')].map(el=>el.id),
-    iframeSrc:document.getElementById('operations-frame').getAttribute('src')
+    iframeSrc:document.getElementById('operations-frame').getAttribute('src'),
+    tapTrace:window.__manageTapTrace,
+    buttonHit:(()=>{
+     const button=document.getElementById('manage-model');
+     const r=button.getBoundingClientRect();
+     const x=r.x+r.width/2,y=r.y+r.height/2;
+     const top=document.elementFromPoint(x,y);
+     return {x,y,top:top?.id||top?.tagName,visible:getComputedStyle(button).visibility};
+    })()
    }));
    console.error('Manage model route diagnostic:',JSON.stringify(diagnostic));
    throw error;
