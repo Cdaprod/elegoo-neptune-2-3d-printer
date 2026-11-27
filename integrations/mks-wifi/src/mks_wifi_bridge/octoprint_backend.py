@@ -195,7 +195,13 @@ class OctoPrintBackend:
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         # Endpoints are fixed internal literals, never caller-controlled URLs.
-        if endpoint not in {"/api/connection", "/api/printer", "/api/job", "/api/files", "/api/plugin/neptune_sd_read"}:
+        if endpoint not in {
+            "/api/connection",
+            "/api/printer",
+            "/api/job",
+            "/api/files",
+            "/api/plugin/neptune_sd_read",
+        }:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
 

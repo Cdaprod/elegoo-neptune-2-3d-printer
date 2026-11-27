@@ -262,3 +262,6 @@ Native Robin Nano SD retrieval is documented in [docs/native-robin-sd.md](docs/n
 
 Factory USB observations, exclusive ownership checks and the one-time USB migration
 are documented in [Native Robin SD access](docs/native-robin-sd.md). Factory SD file-content retrieval remains unverified; no firmware flashing is part of deployment.
+
+The [fabrication lifecycle checkpoint](docs/architecture/fabrication-lifecycle.md)
+defines durable artifact identity and the remaining gates for a lifelong print archive.

@@ -801,6 +801,9 @@ def create_app(
         local_gcode_indexer.source_dir,
         os.getenv("NEPTUNE_HMI_PREVIEW_CACHE_DIR", "/data/hmi-previews"),
     )
+    from .fabrication_archive import FabricationArchive
+
+    fabrication_archive = FabricationArchive(motion_timeline)
     model_preview_slots = asyncio.Semaphore(2)
     hub = BroadcastHub()
     commands = DryRunCommandService()
@@ -1207,6 +1210,53 @@ def create_app(
                 "limit": limit,
                 "note": str(exc),
             }
+
+    @app.get("/api/fabrication/{collection}", dependencies=[Depends(require_auth)])
+    async def archive_collection(collection: str, before: str | None = None, limit: int = 40):
+        try:
+            return await asyncio.to_thread(
+                fabrication_archive.collection, collection, before, limit
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/fabrication/reconcile", dependencies=[Depends(require_control_auth)])
+    async def archive_reconcile():
+        def reconcile():
+            index = local_gcode_indexer.scan()
+            identities = []
+            root = local_gcode_indexer.source_dir
+            for item in index.get("files", []):
+                if root and item.get("source_present"):
+                    path = (root / item["relative_path"]).resolve()
+                    if path.is_relative_to(root.resolve()):
+                        identities.append(fabrication_archive.ingest(path))
+            return {"archived": len(set(identities))}
+
+        return await asyncio.to_thread(reconcile)
+
+    @app.get("/api/fabrication/artifacts/{sha}/{derivative}", dependencies=[Depends(require_auth)])
+    async def archive_derivative(sha: str, derivative: str):
+        try:
+            path = await asyncio.to_thread(fabrication_archive.verified, sha)
+            if derivative == "geometry":
+                return await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+            if derivative == "thumbnail":
+                svg = await asyncio.to_thread(fabrication_archive.previews.preview, path.name)
+                return Response(svg, media_type="image/svg+xml")
+            raise ValueError("Unknown derivative")
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/stage",
+        dependencies=[Depends(require_control_auth)],
+    )
+    async def archive_stage(execution_id: str):
+        try:
+            return await asyncio.to_thread(fabrication_archive.stage_again, execution_id)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/print/history", dependencies=[Depends(require_auth)])
     async def print_history(limit: int = 200) -> dict[str, Any]:

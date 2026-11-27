@@ -15,3 +15,11 @@
 - Finish the UI, backend, validation, error reporting, tests, documentation, and deployment for a feature; do not stop at a backend scaffold or preview-only placeholder when a safe documented operation can be implemented.
 - Keep read-only monitoring usable when machine control is unavailable. Explain the exact runtime prerequisite when an operation is blocked.
 - Preserve unrelated user changes and local runtime data. Never commit credentials, `.env`, databases, logs, caches, or machine-specific runtime state.
+
+## Efficient validation and durable fabrication history
+
+- Reuse existing worktrees, source inventories and valid test evidence. Inspect changed contracts and their callers before reading whole files.
+- Run focused tests during implementation and the required CI suite once at the final integration head. Repeat checks only for changed behavior, failures or invalidated evidence; do not add tests that merely mirror trivial implementation details.
+- Use deterministic software fixtures rather than physical printer actions. Keep fixtures outside production archives. Inspect representative saved/rendered results; avoid redundant screenshots and reports.
+- Extend the existing timeline/manufacturing persistence. Artifact bytes, model revisions and individual print attempts are distinct identities. Deduplicate bytes by SHA-256; never infer identity from a filename or infer success from missing evidence.
+- Historical artifacts and executions are durable records, not disposable preview caches. Preserve them across source removal, upgrades and reprints. Reprinting must retain the original execution unchanged and pass existing operator safety gates.
