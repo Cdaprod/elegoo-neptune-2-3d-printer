@@ -1004,7 +1004,7 @@ def create_app(
                     if not any(not task.done() for task in storage.tasks.values()):
                         entries = await storage.listing()
                         for entry in entries:
-                            # Failed/cancelled transfers require an operator retry, not an endless loop.
+                            # Failed/cancelled transfers require an operator retry.
                             attempted = any(
                                 job.get("filename") == entry["name"]
                                 for job in storage.jobs.values()
