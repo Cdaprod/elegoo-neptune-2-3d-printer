@@ -1,0 +1,3 @@
+
+# Preserve upstream context whitespace inside the reproducible firmware patch.
+firmware/robin-sd-read/*.patch -whitespace
