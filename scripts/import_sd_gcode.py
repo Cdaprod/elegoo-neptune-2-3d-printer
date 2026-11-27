@@ -1,84 +1,223 @@
 #!/usr/bin/env python3
-"""Import G-code from an explicitly selected mounted card into OctoPrint local storage.
-Never formats media, selects a job, or starts a print.
+"""Copy G-code from an explicitly mounted removable card to OctoPrint local storage.
+
+Dry-run by default. No media formatting, printer connection, file selection or print start.
 """
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
 import os
+import re
 import stat
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
+
 from authorize_octoprint import NoRedirects, local_url
 from setup_env import ENV, parse_env
 
 MAX_BYTES = 50 * 1024 * 1024
+MAX_FILES = 2000
 SUFFIXES = {".gcode", ".gco", ".gc", ".g"}
+SAFE_STEM = re.compile(r"[^A-Za-z0-9_-]+")
 
-def candidates(root):
-    for directory, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (Path(directory) / d).is_symlink())
-        for name in sorted(files):
-            p = Path(directory) / name
-            if not name.startswith(".") and p.suffix.lower() in SUFFIXES and not p.is_symlink() and p.is_file():
-                yield p
 
-def multipart(name, data):
-    boundary = "neptune-" + os.urandom(24).hex()
-    parts = []
-    for key in ("select", "print"):
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\nfalse\r\n'.encode())
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode() + data + b"\r\n")
-    return boundary, b"".join(parts) + f"--{boundary}--\r\n".encode()
+class ImportFailure(RuntimeError):
+    """A bounded, actionable import error."""
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mount", type=Path)
-    parser.add_argument("--apply", action="store_true", help="Upload copies; default is dry run")
-    args = parser.parse_args()
-    root = args.mount.resolve(strict=True)
+
+def verify_mount(path: Path) -> Path:
+    if path.is_symlink():
+        raise ImportFailure("The selected mount path must not be a symbolic link")
+    try:
+        root = path.resolve(strict=True)
+    except OSError as exc:
+        raise ImportFailure("The selected card is not accessible") from exc
     if root == Path("/") or not root.is_dir() or not os.path.ismount(root):
-        parser.error("Choose the actual mounted SD volume, not a parent or ordinary folder")
-    files = list(candidates(root))
-    if len(files) > 2000:
-        parser.error("More than 2000 files; import a smaller card")
-    env = parse_env(ENV)
-    base = local_url(env.get("OCTOPRINT_HOST_PORT", "5000"))
-    key = env.get("OCTOPRINT_API_KEY", "")
-    opener = build_opener(NoRedirects())
-    if args.apply and not key:
-        parser.error("Run make authorize-octoprint first")
-    existing = set()
-    if args.apply:
-        req = Request(base + "/api/files/local", headers={"X-Api-Key": key})
-        with opener.open(req, timeout=15) as response:
-            existing = {item.get("name", "").casefold() for item in json.load(response).get("files", [])}
-    for p in files:
-        if p.stat().st_size > MAX_BYTES:
-            print("Skipped oversized:", p.name)
-            continue
-        with os.fdopen(os.open(p, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+        raise ImportFailure("Select the card's actual mount point (not / or a normal folder)")
+    return root
+
+
+def candidates(root: Path):
+    """Bounded recursive traversal without following symlinks."""
+    count = 0
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = sorted(
+            name for name in dirs
+            if not name.startswith(".") and not (Path(directory) / name).is_symlink()
+        )
+        for name in sorted(files):
+            item = Path(directory) / name
+            if (
+                name.startswith(".")
+                or item.suffix.lower() not in SUFFIXES
+                or item.is_symlink()
+                or not item.is_file()
+            ):
                 continue
-            data = stream.read(MAX_BYTES + 1)
-        if len(data) > MAX_BYTES:
-            raise RuntimeError("File changed during read")
-        # Preserve firmware-compatible root names when possible. Never overwrite.
-        name = p.name
-        if not name.isascii() or any(not (c.isalnum() or c in "._- ") for c in name):
-            name = hashlib.sha256(data).hexdigest()[:20] + ".gcode"
-        if name.casefold() in existing:
-            print("Skipped existing name:", name)
+            count += 1
+            if count > MAX_FILES:
+                raise ImportFailure("Card contains more than 2000 G-code files; split the import")
+            yield item
+
+
+def read_source(path: Path, root: Path) -> bytes:
+    """Check the final path and descriptor; reject oversized or changing files."""
+    resolved = path.resolve(strict=True)
+    if not resolved.is_relative_to(root):
+        raise ImportFailure(f"File escaped the selected volume: {path.name}")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    with os.fdopen(os.open(path, flags), "rb") as source:
+        before = os.fstat(source.fileno())
+        if not stat.S_ISREG(before.st_mode):
+            raise ImportFailure(f"Not a regular file: {path.name}")
+        if before.st_size > MAX_BYTES:
+            raise ImportFailure(f"G-code exceeds 50 MiB preview limit: {path.name}")
+        data = source.read(MAX_BYTES + 1)
+        after = os.fstat(source.fileno())
+    if len(data) > MAX_BYTES:
+        raise ImportFailure(f"G-code exceeds 50 MiB preview limit: {path.name}")
+    if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+        after.st_size, after.st_mtime_ns, after.st_ctime_ns
+    ) or len(data) != before.st_size:
+        raise ImportFailure(f"File changed during import: {path.name}")
+    return data
+
+
+def filename_for(path: Path, root: Path, data: bytes, existing: dict) -> tuple[str, bool]:
+    """Prefer the original root name; content-address collisions without overwriting."""
+    relative = path.relative_to(root)
+    suffix = path.suffix.lower()
+    stem = SAFE_STEM.sub("-", path.stem.encode("ascii", "ignore").decode()).strip("-_")[:64]
+    stem = stem or "model"
+    original = path.name
+    safe_root = (
+        len(relative.parts) == 1
+        and original.isascii()
+        and len(original) <= 100
+        and re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_. -]*", original) is not None
+    )
+    preferred = original if safe_root else stem + "-" + hashlib.sha256(
+        relative.as_posix().encode("utf-8")
+    ).hexdigest()[:10] + suffix
+    fingerprint = hashlib.sha1(data).hexdigest()
+    present = existing.get(preferred.casefold())
+    if present is None:
+        return preferred, False
+    if present.get("hash") == fingerprint:
+        return preferred, True
+    alternate = stem[:48] + "-" + hashlib.sha256(data).hexdigest()[:16] + suffix
+    alternate_present = existing.get(alternate.casefold())
+    if alternate_present is not None:
+        if alternate_present.get("hash") in (fingerprint, None):
+            return alternate, True
+        raise ImportFailure(f"Content-addressed name collision: {alternate}")
+    return alternate, False
+
+
+def multipart(name: str, data: bytes) -> tuple[str, bytes]:
+    """Only the OctoPrint local-file endpoint receives bytes; never a print command."""
+    boundary = "neptune-" + os.urandom(18).hex()
+    parts = [
+        ('select', 'false'),
+        ('print', 'false'),
+    ]
+    body = b"".join(
+        (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"\r\n\r\n{value}\r\n'.encode()
+            for field, value in parts
+        )
+    )
+    body += (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
+        'Content-Type: application/octet-stream\r\n\r\n'
+    ).encode() + data + b"\r\n"
+    return boundary, body + f'--{boundary}--\r\n'.encode()
+
+
+def local_files(opener, base: str, key: str) -> dict:
+    request = Request(base + "/api/files/local", headers={"X-Api-Key": key})
+    with opener.open(request, timeout=15) as response:
+        payload = json.load(response)
+    if not isinstance(payload, dict) or not isinstance(payload.get("files"), list):
+        raise ImportFailure("OctoPrint returned an invalid local-file listing")
+    result = {}
+    for item in payload["files"]:
+        if isinstance(item, dict) and isinstance(item.get("name"), str):
+            result[item["name"].casefold()] = item
+    return result
+
+
+def upload(opener, base: str, key: str, name: str, data: bytes) -> None:
+    boundary, body = multipart(name, data)
+    request = Request(
+        base + "/api/files/local",
+        data=body,
+        headers={"X-Api-Key": key, "Content-Type": "multipart/form-data; boundary=" + boundary},
+        method="POST",
+    )
+    with opener.open(request, timeout=120) as response:
+        if response.status not in (200, 201):
+            raise ImportFailure(f"OctoPrint rejected upload of {name} (HTTP {response.status})")
+
+
+def import_card(mount: Path, apply: bool = False, opener=None, env: dict | None = None) -> dict:
+    root = verify_mount(mount)
+    existing = {}
+    base = ""
+    key = ""
+    if apply:
+        if env is None:
+            if not ENV.is_file():
+                raise ImportFailure("Missing root .env; run make setup and authorize-octoprint")
+            env = parse_env(ENV.read_text(encoding="utf-8"))
+        key = (env or {}).get("OCTOPRINT_API_KEY", "")
+        if not key:
+            raise ImportFailure("OctoPrint API key missing; run make authorize-octoprint")
+        base = local_url((env or {}).get("OCTOPRINT_HOST_PORT", "5001"))
+        opener = opener or build_opener(NoRedirects())
+        existing = local_files(opener, base, key)
+    seen = {}
+    summary = {"discovered": 0, "imported": 0, "skipped": 0, "dry_run": not apply}
+    for path in candidates(root):
+        summary["discovered"] += 1
+        try:
+            data = read_source(path, root)
+        except ImportFailure as exc:
+            print("SKIP", path.name, "-", exc)
+            summary["skipped"] += 1
             continue
-        print("Import" if args.apply else "Would import", name, len(data), "bytes")
-        if args.apply:
-            boundary, body = multipart(name, data)
-            req = Request(base + "/api/files/local", data=body, headers={"X-Api-Key": key, "Content-Type": "multipart/form-data; boundary=" + boundary}, method="POST")
-            with opener.open(req, timeout=120) as response:
-                if response.status not in (200, 201):
-                    raise RuntimeError("Unexpected upload response")
-            existing.add(name.casefold())
-    print("Refresh Fabrication gallery. No print was selected or started.")
+        # Track names within this card even on dry runs to disambiguate duplicate basenames.
+        target, duplicate = filename_for(path, root, data, {**existing, **seen})
+        if duplicate:
+            print("SKIP already stored:", target)
+            summary["skipped"] += 1
+            continue
+        print(("IMPORT" if apply else "DRY RUN") + ":", path.relative_to(root), "=>", target, len(data), "bytes")
+        if apply:
+            try:
+                upload(opener, base, key, target, data)
+            except (HTTPError, URLError, OSError) as exc:
+                raise ImportFailure(f"OctoPrint upload failed for {target}: {exc}") from exc
+            summary["imported"] += 1
+        seen[target.casefold()] = {"name": target, "hash": hashlib.sha1(data).hexdigest()}
+    print(json.dumps(summary, sort_keys=True))
+    print("No print selected or started. Refresh the HMI Fabrication gallery.")
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mount", type=Path, help="Actual mounted SD volume, e.g. /media/cdaprod/NEPTUNE")
+    parser.add_argument("--apply", action="store_true", help="Copy files into OctoPrint; default dry run")
+    args = parser.parse_args()
+    try:
+        import_card(args.mount, apply=args.apply)
+    except (ImportFailure, HTTPError, URLError, OSError, ValueError) as exc:
+        parser.exit(1, f"SD import failed: {exc}\n")
+
 
 if __name__ == "__main__":
     main()
