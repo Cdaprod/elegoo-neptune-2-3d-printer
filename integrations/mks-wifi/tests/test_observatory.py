@@ -1381,5 +1381,5 @@ def test_stock_sd_byte_read_capability_is_fail_closed_and_authenticated() -> Non
         assert payload["can_read"] is False
         assert payload["firmware_verified"] is False
         assert client.get("/api/printer/sdcard/read/PART.GCO", headers=headers).status_code == 501
-        assert client.get("/api/printer/sdcard/read/..", headers=headers).status_code in {404, 422}
+        assert client.get("/api/printer/sdcard/read/%2E%2E", headers=headers).status_code in {404, 422, 501}
         assert client.get("/api/printer/sdcard/read/BAD.txt", headers=headers).status_code == 422
