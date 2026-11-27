@@ -89,7 +89,18 @@ const path=require('node:path');
   await swipe(400,180,90,25);
   assert.equal(await page.locator('#model-inspector[open]').count(),1);
   await page.locator('#manage-model').tap();
-  await page.locator('#view-controls.active').waitFor();
+  try{await page.locator('#view-controls.active').waitFor({timeout:10000});}
+  catch(error){
+   const diagnostic=await page.evaluate(()=>({
+    idlePhase:document.body.dataset.idlePhase,
+    appInert:document.getElementById('app').inert,
+    inspectorOpen:document.getElementById('model-inspector').open,
+    activeViews:[...document.querySelectorAll('.view.active')].map(el=>el.id),
+    iframeSrc:document.getElementById('operations-frame').getAttribute('src')
+   }));
+   console.error('Manage model route diagnostic:',JSON.stringify(diagnostic));
+   throw error;
+  }
   await page.frameLocator('#operations-frame').locator('#view-sdcard.active').waitFor();
   assert.deepEqual(await overflow(),{x:false,y:false});
   await page.locator('nav [data-go="controls"]').tap();
