@@ -11,6 +11,8 @@ import json
 import os
 import re
 import stat
+import subprocess
+import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
@@ -38,6 +40,43 @@ def verify_mount(path: Path) -> Path:
     if root == Path("/") or not root.is_dir() or not os.path.ismount(root):
         raise ImportFailure("Select the card's actual mount point (not / or a normal folder)")
     return root
+
+
+def detect_mounts() -> list[Path]:
+    """Discover mounted removable USB media, excluding the Pi's OS and boot volumes.
+
+    This is discovery, never mounting or formatting. Multiple cards require a choice.
+    """
+    if sys.platform != "linux":
+        return []
+    try:
+        result = subprocess.run(
+            ["lsblk", "-J", "-o", "NAME,TYPE,TRAN,RM,MOUNTPOINTS,FSTYPE"],
+            check=True, capture_output=True, text=True, timeout=5,
+        )
+        devices = json.loads(result.stdout).get("blockdevices", [])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    found = []
+
+    def visit(node: dict, removable: bool = False) -> None:
+        eligible = removable or node.get("rm") in (1, True, "1") or node.get("tran") == "usb"
+        if node.get("type") == "part" and eligible:
+            for mount in node.get("mountpoints") or []:
+                if isinstance(mount, str) and (
+                    mount.startswith("/media/") or mount.startswith("/run/media/")
+                ):
+                    path = Path(mount)
+                    if path.is_dir() and os.path.ismount(path) and not path.is_symlink():
+                        found.append(path)
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                visit(child, eligible)
+
+    for device in devices:
+        if isinstance(device, dict):
+            visit(device)
+    return sorted(set(found))
 
 
 def candidates(root: Path):
@@ -210,11 +249,23 @@ def import_card(mount: Path, apply: bool = False, opener=None, env: dict | None 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mount", type=Path, help="Actual mounted SD volume, e.g. /media/cdaprod/NEPTUNE")
+    parser.add_argument("mount", nargs="?", type=Path, help="Optional mounted SD path; auto-detected if only one removable card")
     parser.add_argument("--apply", action="store_true", help="Copy files into OctoPrint; default dry run")
     args = parser.parse_args()
     try:
-        import_card(args.mount, apply=args.apply)
+        mount = args.mount
+        if mount is None:
+            options = detect_mounts()
+            if len(options) != 1:
+                detail = ", ".join(str(p) for p in options) if options else "none"
+                raise ImportFailure(
+                    f"Expected one mounted removable USB SD card; found {detail}. "
+                    "Insert and mount the card or specify SD_MOUNT explicitly. "
+                    "Use lsblk -o NAME,TRAN,RM,FSTYPE,LABEL,MOUNTPOINTS to inspect."
+                )
+            mount = options[0]
+            print("Detected removable card:", mount)
+        import_card(mount, apply=args.apply)
     except (ImportFailure, HTTPError, URLError, OSError, ValueError) as exc:
         parser.exit(1, f"SD import failed: {exc}\n")
 
