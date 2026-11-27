@@ -56,7 +56,9 @@ def test_chunked_sd_read_roundtrip():
     assert transport.reads[-1][1] + transport.reads[-1][2] == len(original)
 
 
-@pytest.mark.parametrize("name", ["../config.gcode", "folder/test.gcode", "M24\n.gcode", "", "data.txt"])
+@pytest.mark.parametrize(
+    "name", ["../config.gcode", "folder/test.gcode", "M24\n.gcode", "", "data.txt"]
+)
 def test_untrusted_filename_rejected(name):
     with pytest.raises(SdReadError):
         validate_sd_name(name)
