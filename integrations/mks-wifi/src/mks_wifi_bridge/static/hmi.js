@@ -155,6 +155,26 @@
      text("inspector-status","3D inspector unavailable: "+err.message+" · still-image fallback");
    }
  }
+ function bindTouchActivation(target,callback){
+  let touch=null,lastActivation=-Infinity;
+  const activate=()=>{
+   const now=performance.now();
+   if(now-lastActivation<500)return;
+   lastActivation=now;
+   callback();
+  };
+  target.addEventListener("pointerdown",e=>{
+   if(e.pointerType==="touch")touch={id:e.pointerId,x:e.clientX,y:e.clientY};
+  });
+  target.addEventListener("pointercancel",()=>{touch=null;});
+  target.addEventListener("pointerup",e=>{
+   const start=touch;touch=null;
+   if(start&&e.pointerType==="touch"&&start.id===e.pointerId&&
+      Math.hypot(e.clientX-start.x,e.clientY-start.y)<12)activate();
+  });
+  target.addEventListener("click",activate);
+  return activate;
+ }
  function card(file,source){
    const button=document.createElement("div");
    button.className="model";button.dataset.provider=source==="printer_native"||source==="printer"?"printer_sd":source;button.tabIndex=0;button.setAttribute("role","button");
@@ -178,9 +198,9 @@
      text("selected-file",(file.relative_path||file.name)+" · read-only model inspection");
      openInspector(file,source);
    };
-   button.addEventListener("click",select);
+   const activate=bindTouchActivation(button,select);
    button.addEventListener("keydown",e=>{
-     if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}
+     if(e.key==="Enter"||e.key===" "){e.preventDefault();activate();}
    });
    return button;
  }
@@ -234,27 +254,12 @@
   try{const result=await api('/api/native-sd/assets/'+inspected.file.sha256+'/import-local',{method:'POST'});text('native-sd-status',result.status+' · '+result.filename+' · no print selected');}
   catch(error){text('native-sd-status',error.message);}
  });
- function manageSelectedModel(){closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";}
- const manageButton=$("manage-model");
- manageButton.addEventListener("click",manageSelectedModel);
- // A valid native tap must not depend on Chromium generating a compatibility click
- // after a WebGL gesture. Cancel that synthetic click to avoid duplicate activation.
- let manageTouch=null;
- manageButton.addEventListener('touchstart',event=>{
-  const touch=event.touches.length===1?event.touches[0]:null;
-  manageTouch=touch?{id:touch.identifier,x:touch.clientX,y:touch.clientY,moved:false}:null;
- },{passive:true});
- manageButton.addEventListener('touchmove',event=>{
-  const touch=[...event.touches].find(item=>item.identifier===manageTouch?.id);
-  if(manageTouch&&(!touch||event.touches.length!==1||Math.hypot(touch.clientX-manageTouch.x,touch.clientY-manageTouch.y)>12))manageTouch.moved=true;
- },{passive:true});
- manageButton.addEventListener('touchcancel',()=>{manageTouch=null;},{passive:true});
- manageButton.addEventListener('touchend',event=>{
-  const start=manageTouch;manageTouch=null;
-  const touch=[...event.changedTouches].find(item=>item.identifier===start?.id);
-  if(!start||start.moved||!touch||event.touches.length||Math.hypot(touch.clientX-start.x,touch.clientY-start.y)>12)return;
-  event.preventDefault();manageSelectedModel();
- },{passive:false});
+ function openManagedFiles(){
+  $("operations-frame").src="/?presentation=hmi-operations&view=sdcard";
+  route("controls");
+  closeInspector();
+ }
+ bindTouchActivation($("manage-model"),openManagedFiles);
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;
  async function checkImportStatus(){

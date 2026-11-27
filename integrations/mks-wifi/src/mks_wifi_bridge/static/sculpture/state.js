@@ -44,6 +44,6 @@ export function chooseMode(state,time,hasGeometry=false){
 }
 export class AdaptiveProfile{
  constructor(name='balanced'){this.set(name);this.samples=0;this.average=0;}
- set(name){this.name=['low','balanced','cinematic'].includes(name)?name:'balanced';this.target=this.name==='low'?20:30;this.scale=this.name==='low'?.65:this.name==='cinematic'?1:.85;this.maximum=this.scale;this.particles=this.name==='low'?64:this.name==='cinematic'?256:128;this.bloom=this.name!=='low';this.samples=0;this.average=0;}
+ set(name){this.name=['low','balanced','cinematic'].includes(name)?name:'balanced';this.target=this.name==='low'?20:this.name==='cinematic'?30:24;this.scale=this.name==='low'?.75:this.name==='cinematic'?1.2:1;this.maximum=this.scale;this.particles=this.name==='low'?64:this.name==='cinematic'?256:128;this.bloom=this.name!=='low';this.samples=0;this.average=0;}
  sample(ms){this.average=this.average?this.average*.94+ms*.06:ms;if(++this.samples%90)return false;const before=this.scale;if(this.average>1000/this.target*.85)this.scale=Math.max(.45,this.scale-.1);else if(this.average<1000/this.target*.4)this.scale=Math.min(this.maximum,this.scale+.025);return before!==this.scale;}
 }
