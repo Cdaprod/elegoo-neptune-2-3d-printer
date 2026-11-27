@@ -149,3 +149,27 @@ USB bridge still require physical confirmation.
 UART3 configuration cross build: 57,696 bytes static RAM and 325,804 bytes flash;
 actual handler fixtures pass. The earlier UART1 candidate is superseded and must
 not be used. The compile-only CI regenerates checksums for this patch.
+
+## Operator-reported USB evidence — 2026-11-27
+
+The operator reports enumeration and selection through `/dev/ttyUSB0`, with this
+response from the currently installed, not-yet-identified firmware:
+
+```text
+M23 DISPMNT01.gcode
+File opened: DISPMNT01.gcode Size: 2113357
+File selected
+ok
+M27
+SD printing byte 0/2113357
+ok
+```
+
+This establishes reported file selection and a 2,113,357-byte size. The `M27` value
+is a print-file cursor, not file contents returned to the host. It does not verify
+RSD/1 installation, a READ chunk, a source SHA-256 match or native 3D reconstruction.
+The report does not authorize further printer commands or flashing. A selected
+print-file handle may make the read extension's concurrency guard refuse a transfer;
+that guard must not be bypassed, and no automatic deselection is performed.
+Use the alias returned by RSD LIST for future reads; do not guess or truncate an
+8.3 alias from the long display filename.
