@@ -108,6 +108,10 @@ class FabricationArchive:
         )
 
     def persist_stream(self, stream, submission):
+        try:
+            initial = os.fstat(stream.fileno())
+        except (AttributeError, OSError):
+            initial = None
         digest = hashlib.sha256()
         fd, temporary = tempfile.mkstemp(dir=self.root, prefix=".ingest-")
         size = 0
@@ -121,6 +125,10 @@ class FabricationArchive:
                     output.write(chunk)
                 output.flush()
                 os.fsync(output.fileno())
+            if initial is not None:
+                final = os.fstat(stream.fileno())
+                if (initial.st_size, initial.st_mtime_ns) != (final.st_size, final.st_mtime_ns):
+                    raise ValueError("Source changed during ingestion")
             if size == 0:
                 raise ValueError("Empty artifacts are not accepted")
             sha = digest.hexdigest()

@@ -1286,7 +1286,7 @@ def create_app(
         except (ValueError, TypeError, KeyError) as exc:
             raise HTTPException(422, str(exc)) from exc
 
-    @app.post("/api/fabrication/reconcile", dependencies=[Depends(require_control_auth)])
+    @app.post("/api/fabrication/reconcile", dependencies=[Depends(require_control_token)])
     async def archive_reconcile():
         def reconcile():
             index = local_gcode_indexer.scan()
@@ -1316,7 +1316,7 @@ def create_app(
 
     @app.post(
         "/api/fabrication/executions/{execution_id}/stage",
-        dependencies=[Depends(require_control_auth)],
+        dependencies=[Depends(require_control_token)],
     )
     async def archive_stage(execution_id: str):
         try:

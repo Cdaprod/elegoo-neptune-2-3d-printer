@@ -109,3 +109,36 @@ def test_source_neutral_ingestion_deduplicates_bytes_and_preserves_provenance(tm
             ArtifactSubmission("part.step", "http", "upload:part.step", "design"), BytesIO(content)
         )
     assert not list(store.root.glob(".ingest-*"))
+
+
+def test_http_ingestion_is_archive_only_and_enforces_origin(tmp_path):
+    from fastapi.testclient import TestClient
+    from test_observatory import make_service
+
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+    from mks_wifi_bridge.observatory import create_app
+
+    app = create_app(make_service(), timeline=MotionTimeline(tmp_path / "api.sqlite"))
+    with TestClient(app) as client:
+        headers = {"Content-Type": "application/octet-stream"}
+        result = client.post(
+            "/api/fabrication/ingest?filename=part.gcode",
+            content=b"G90\nG1 X10 E1",
+            headers=headers,
+        )
+        assert result.status_code == 200
+        assert result.json()["archived"] and not result.json()["printer_command_sent"]
+        assert (
+            client.post(
+                "/api/fabrication/ingest?filename=part.gcode",
+                content=b"G90",
+                headers={**headers, "Origin": "http://evil.example"},
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/fabrication/ingest?filename=../part.gcode", content=b"G90", headers=headers
+            ).status_code
+            == 422
+        )
