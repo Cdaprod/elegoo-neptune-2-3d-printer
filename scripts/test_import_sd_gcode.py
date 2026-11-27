@@ -100,6 +100,13 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(result["skipped"], 1)
         self.assertEqual(len(server.requests), 1)
 
+    def test_usb_mount_detection_propagates_removability(self):
+        payload = {'blockdevices': [{'name':'sda','type':'disk','tran':'usb','rm':0,'children':[{'name':'sda1','type':'part','mountpoints':[str(self.root)]}]}, {'name':'mmcblk0','type':'disk','rm':0,'children':[{'type':'part','mountpoints':['/boot/firmware']}]}]}
+        fake = mock.Mock(stdout=json.dumps(payload))
+        with mock.patch.object(sd.sys, 'platform', 'linux'), mock.patch.object(sd.subprocess, 'run', return_value=fake), mock.patch.object(sd.os.path, 'ismount', return_value=True):
+            # Candidate must be under a removable-media mount prefix; temp directories do not qualify.
+            self.assertEqual(sd.detect_mounts(), [])
+
     def test_mount_is_required_even_in_dry_run(self):
         self.mount.stop()
         with self.assertRaises(sd.ImportFailure):
