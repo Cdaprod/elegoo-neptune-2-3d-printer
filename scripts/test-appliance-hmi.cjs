@@ -83,13 +83,31 @@ const path=require('node:path');
   assert.ok(await page.locator('#models').evaluate(e=>e.scrollLeft)>before);
   assert.equal(await page.locator('#view-models.active').count(),1);
   await page.locator('#models').evaluate(e=>e.scrollLeft=0);
+  const hmiSnapshot=()=>page.evaluate(()=>({
+   idlePhase:document.body.dataset.idlePhase,
+   inspectorOpen:document.querySelector('#model-inspector')?.open,
+   inspectorStatus:document.querySelector('#inspector-status')?.textContent,
+   inspectorHostHidden:document.querySelector('#model-viewer-host')?.hidden,
+   inspectorCanvasCount:document.querySelectorAll('#model-viewer-host canvas').length,
+   controlsActive:document.querySelector('#view-controls')?.classList.contains('active'),
+   modelsActive:document.querySelector('#view-models')?.classList.contains('active'),
+   appInert:document.querySelector('#app')?.inert,
+  }));
+  async function awaitHmi(label,operation){
+   try{return await operation();}
+   catch(error){
+    const snapshot=await hmiSnapshot();
+    if(screenshots)await page.screenshot({path:screenshots+'/hmi-'+label+'-failure-1280x400.png'}).catch(()=>{});
+    throw new Error(label+' failed: '+JSON.stringify(snapshot)+'; '+error.message);
+   }
+  }
   await first.tap();
-  await page.locator('#model-viewer-host canvas').waitFor();
-  await page.locator('#inspector-status').filter({hasText:'Interactive 3D'}).waitFor();
+  await awaitHmi('inspector-canvas',()=>page.locator('#model-viewer-host canvas').waitFor());
+  await awaitHmi('inspector-status',()=>page.locator('#inspector-status').filter({hasText:'Interactive 3D'}).waitFor());
   await swipe(400,180,90,25);
   assert.equal(await page.locator('#model-inspector[open]').count(),1);
   await page.locator('#manage-model').tap();
-  await page.locator('#view-controls.active').waitFor();
+  await awaitHmi('controls-navigation',()=>page.locator('#view-controls.active').waitFor());
   await page.frameLocator('#operations-frame').locator('#view-sdcard.active').waitFor();
   assert.deepEqual(await overflow(),{x:false,y:false});
   await page.locator('nav [data-go="controls"]').tap();

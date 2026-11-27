@@ -148,7 +148,7 @@
    const name=document.createElement("strong");name.textContent=file.filename||file.name;
    const info=document.createElement("small");
    const meta=file.metadata||file.local_metadata?.metadata||{};
-   info.textContent=(source==="local"?"Local G-code geometry":"Printer SD listing")+
+   info.textContent=(source==="local"?"Local G-code geometry":"Printer SD only · bytes unavailable")+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
      (file.source_present===false?" · cached/offline":"");
    button.append(image,name,info);

@@ -1365,3 +1365,20 @@ def test_history_retains_reported_temperature_targets_for_spatial_regulation_rib
     assert sample["bed_c"] == 23.0
     assert sample["nozzle_target_c"] == 0.0
     assert sample["bed_target_c"] == 0.0
+
+
+def test_stock_sd_byte_read_capability_is_fail_closed_and_authenticated() -> None:
+    service = make_service(interval=30.0)
+    app = create_app(service, bind_host="0.0.0.0", auth_token="sd-read-test")
+    with TestClient(app) as client:
+        route = "/api/printer/sdcard/capabilities"
+        assert client.get(route).status_code == 401
+        headers = {"Authorization": "Bearer sd-read-test"}
+        response = client.get(route, headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["can_list"] is True
+        assert payload["can_read"] is False
+        assert payload["firmware_verified"] is False
+        assert client.get("/api/printer/sdcard/read/PART.GCO", headers=headers).status_code == 501
+        assert client.get("/api/printer/sdcard/read/BAD.txt", headers=headers).status_code == 422
