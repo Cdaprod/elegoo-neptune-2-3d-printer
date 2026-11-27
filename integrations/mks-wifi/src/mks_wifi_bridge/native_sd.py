@@ -69,6 +69,15 @@ class NativeSdStorage:
         except (OSError, ValueError):
             self.assets = {}
         self.directory = {}
+        for asset in self.assets.values():
+            digest = asset.get("sha256", "")
+            if (
+                not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not (self.blobs / (digest + ".gcode")).is_file()
+            ):
+                asset.update(
+                    cache_available=False, geometry_available=False, thumbnail_available=False
+                )
         self.jobs = {}
         self.tasks = {}
         self.lock = asyncio.Lock()
@@ -85,26 +94,41 @@ class NativeSdStorage:
     def prune(self, incoming=0):
         files = sorted(self.blobs.glob("*.gcode"), key=lambda p: p.stat().st_mtime)
         total = sum(p.stat().st_size for p in files)
+        evicted = False
         for path in files:
             if total + incoming <= self.quota:
                 break
             total -= path.stat().st_size
             path.unlink()
+            evicted = True
             for asset in self.assets.values():
                 if asset.get("cache_location") == path.name:
                     asset.update(
                         cache_available=False, geometry_available=False, thumbnail_available=False
                     )
 
+        if evicted:
+            self.persist()
+
+    def invalidate(self, digest):
+        for asset in self.assets.values():
+            if asset.get("sha256") == digest:
+                asset.update(
+                    cache_available=False, geometry_available=False, thumbnail_available=False
+                )
+        self.persist()
+
     def cached(self, digest):
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise SdReadError("Invalid content identity")
         path = self.blobs / (digest + ".gcode")
         if not path.is_file():
+            self.invalidate(digest)
             raise SdReadError("Cached file unavailable")
         with path.open("rb") as source:
             if hashlib.file_digest(source, "sha256").hexdigest() != digest:
                 path.unlink()
+                self.invalidate(digest)
                 raise SdReadError("Cached content failed SHA-256 verification")
         os.utime(path, None)
         return path
@@ -191,8 +215,12 @@ class NativeSdStorage:
                 sha = digest.hexdigest()
                 target = self.blobs / (sha + ".gcode")
                 if target.exists():
-                    self.cached(sha)
-                    temporary.unlink()
+                    try:
+                        self.cached(sha)
+                    except SdReadError:
+                        os.replace(temporary, target)
+                    else:
+                        temporary.unlink()
                 else:
                     os.replace(temporary, target)
                 identity = hashlib.sha256(

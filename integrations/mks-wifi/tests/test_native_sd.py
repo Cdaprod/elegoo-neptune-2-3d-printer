@@ -132,6 +132,7 @@ def test_cancel_recovery_and_cache_corruption(tmp_path):
         storage.cached(job["sha256"]).write_bytes(b"tampered")
         with pytest.raises(SdReadError, match="SHA-256"):
             storage.cached(job["sha256"])
+        assert not NativeSdStorage(tmp_path, firmware).assets[job["asset"]["id"]]["cache_available"]
 
     asyncio.run(run())
 
