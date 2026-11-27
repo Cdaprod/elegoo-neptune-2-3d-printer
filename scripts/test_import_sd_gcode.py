@@ -55,10 +55,10 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(summary, {"discovered": 1, "imported": 0, "skipped": 0, "dry_run": True})
 
     def test_reads_existing_env_file_as_text_and_uses_pi_api_port(self):
-        (self.root / "ENVTEST.GCO").write_text("G1 X14 E1\\n")
+        (self.root / "ENVTEST.GCO").write_text("G1 X14 E1\n")
         env_file = self.root / ".env"
         env_file.write_text(
-            "OCTOPRINT_API_KEY=fake-test-key\\nOCTOPRINT_HOST_PORT=5001\\n",
+            "OCTOPRINT_API_KEY=fake-test-key\nOCTOPRINT_HOST_PORT=5001\n",
             encoding="utf-8",
         )
         server = FakeOctoPrint()
