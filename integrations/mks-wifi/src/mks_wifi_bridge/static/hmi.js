@@ -191,7 +191,56 @@
  }
  $("manage-model").addEventListener("click",()=>{closeInspector();$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";route("controls");});
  $("refresh-files").addEventListener("click",loadFiles);
- $("login-form").addEventListener("submit",async e=>{e.preventDefault();text("login-error","");try{const res=await fetch("/api/auth/session",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:$("token").value})});if(!res.ok)throw new Error("Access token rejected");$("token").value="";$("login").classList.remove("visible");state.login=false;await refresh();}catch(err){text("login-error",err.message);}});
+ let hmiImportEnabled=false,uploading=false;
+ async function checkImportStatus(){
+  try{
+   const result=await api('/api/hmi/import-status');
+   hmiImportEnabled=Boolean(result.available);
+   text('sd-import-status',hmiImportEnabled?'Ready · OctoPrint local':result.note||'Import disabled');
+   $('import-gcode').title=result.note||'Import local G-code without printing';
+  }catch(error){
+   hmiImportEnabled=false;
+   if(error.message!=='Authentication required')text('sd-import-status','Import status unavailable');
+  }
+ }
+ $('import-gcode').addEventListener('click',()=>{
+  if(uploading)return;
+  if(!hmiImportEnabled){
+   text('sd-import-status','Enable NEPTUNE_HMI_IMPORT_ENABLED=true, redeploy');
+   return;
+  }
+  $('import-gcode-files').click();
+ });
+ $('import-gcode-files').addEventListener('change',async()=>{
+  if(uploading)return;
+  uploading=true;$('import-gcode').disabled=true;
+  const input=$('import-gcode-files'),files=[...input.files].slice(0,30);
+  let imported=0,skipped=0;
+  try{
+   for(const file of files){
+    if(!/\.(?:gcode|gco|gc|g)$/i.test(file.name)||file.size<1||file.size>50*1024*1024){
+     skipped++;text('sd-import-status','Skipped invalid or oversized: '+file.name);continue;
+    }
+    text('sd-import-status','Importing '+file.name+'…');
+    try{
+     const result=await api('/api/hmi/import-gcode?filename='+encodeURIComponent(file.name),{
+      method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file
+     });
+     if(result.status==='imported')imported++;else skipped++;
+    }catch(error){
+     skipped++;
+     if(error.message==='Authentication required')break;
+     text('sd-import-status','Import failed: '+error.message);break;
+    }
+   }
+  }finally{
+   input.value='';uploading=false;$('import-gcode').disabled=false;
+   text('sd-import-status','Imported '+imported+(skipped?' · '+skipped+' skipped':'')+' · no printing');
+   if(imported)await loadFiles();
+  }
+ });
+ checkImportStatus();
+ $("login-form").addEventListener("submit",async e=>{e.preventDefault();text("login-error","");try{const res=await fetch("/api/auth/session",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:$("token").value})});if(!res.ok)throw new Error("Access token rejected");$("token").value="";$("login").classList.remove("visible");state.login=false;await refresh();await checkImportStatus();}catch(err){text("login-error",err.message);}});
  async function refresh(){
   if(document.hidden||state.login)return;
   try{const s=await api("/api/printer/status");renderStatus(s);}catch(err){if(err.message!=="Authentication required"){text("health","● API unavailable");$("health").dataset.state="offline";text("integrity","Unavailable");text("observations-note",err.message);}}

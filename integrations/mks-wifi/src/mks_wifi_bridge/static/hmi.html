@@ -76,7 +76,7 @@ main{touch-action:pan-y;user-select:none}input{user-select:text}#view-print-bay{
 </section>
 <section id="view-print-bay" class="view" aria-label="Staged manufacturing artifacts"><div class="embedded-toolbar"><strong>PRINT BAY / STAGED ARTIFACTS</strong><span id="bay-source">Backend unverified</span><span>Submission requires existing operator confirmation</span></div><iframe id="print-bay-frame" title="Print Bay staged 3D models" src="/print-bay?presentation=hmi"></iframe></section>
 <section id="view-models" class="view" aria-label="Models and print files">
- <div class="models-head"><h2 class="heading">Swipe to browse print files</h2><span id="model-count" class="muted">Loading cached index…</span><input id="model-filter" type="search" aria-label="Filter print files" placeholder="Filter files…" autocomplete="off"><button id="refresh-files" type="button">Refresh listing</button></div>
+ <div class="models-head"><h2 class="heading">Swipe to browse print files</h2><span id="model-count" class="muted">Loading cached index…</span><input id="model-filter" type="search" aria-label="Filter print files" placeholder="Filter files…" autocomplete="off"><button id="refresh-files" type="button">Refresh listing</button><button id="import-gcode" type="button">Import G-code</button><input id="import-gcode-files" type="file" accept=".gcode,.gco,.gc,.g" multiple hidden aria-label="Choose local G-code files"><span id="sd-import-status" class="muted" role="status">Checking local import…</span></div>
  <div id="models" aria-label="Horizontally scrollable file previews" tabindex="0"><div class="card tile">Loading files…</div></div>
 </section>
 <section id="view-observations" class="view" aria-label="Printer observations">
