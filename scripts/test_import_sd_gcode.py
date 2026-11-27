@@ -54,6 +54,19 @@ class ImportTests(unittest.TestCase):
             summary = sd.import_card(self.root, apply=False)
         self.assertEqual(summary, {"discovered": 1, "imported": 0, "skipped": 0, "dry_run": True})
 
+    def test_reads_existing_env_file_as_text_and_uses_pi_api_port(self):
+        (self.root / "ENVTEST.GCO").write_text("G1 X14 E1\\n")
+        env_file = self.root / ".env"
+        env_file.write_text(
+            "OCTOPRINT_API_KEY=fake-test-key\\nOCTOPRINT_HOST_PORT=5001\\n",
+            encoding="utf-8",
+        )
+        server = FakeOctoPrint()
+        with mock.patch.object(sd, "ENV", env_file):
+            result = sd.import_card(self.root, apply=True, opener=server)
+        self.assertEqual(result["imported"], 1)
+        self.assertEqual([r.get_method() for r in server.requests], ["GET", "POST"])
+
     def test_real_octoprint_upload_disables_selection_and_print(self):
         (self.root / "BENCH.GCO").write_text("G1 X12 E1\n")
         server = FakeOctoPrint()
