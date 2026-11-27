@@ -140,6 +140,26 @@
      text("inspector-status","3D inspector unavailable: "+err.message+" · still-image fallback");
    }
  }
+ function bindTouchActivation(target,callback){
+  let touch=null,lastActivation=-Infinity;
+  const activate=()=>{
+   const now=performance.now();
+   if(now-lastActivation<500)return;
+   lastActivation=now;
+   callback();
+  };
+  target.addEventListener("pointerdown",e=>{
+   if(e.pointerType==="touch")touch={id:e.pointerId,x:e.clientX,y:e.clientY};
+  });
+  target.addEventListener("pointercancel",()=>{touch=null;});
+  target.addEventListener("pointerup",e=>{
+   const start=touch;touch=null;
+   if(start&&e.pointerType==="touch"&&start.id===e.pointerId&&
+      Math.hypot(e.clientX-start.x,e.clientY-start.y)<12)activate();
+  });
+  target.addEventListener("click",activate);
+  return activate;
+ }
  function card(file,source){
    const button=document.createElement("div");
    button.className="model";button.tabIndex=0;button.setAttribute("role","button");
@@ -163,9 +183,9 @@
      text("selected-file",(file.relative_path||file.name)+" · read-only model inspection");
      openInspector(file,source);
    };
-   button.addEventListener("click",select);
+   const activate=bindTouchActivation(button,select);
    button.addEventListener("keydown",e=>{
-     if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}
+     if(e.key==="Enter"||e.key===" "){e.preventDefault();activate();}
    });
    return button;
  }
@@ -189,7 +209,12 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();}
  }
- $("manage-model").addEventListener("click",()=>{closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";});
+ function openManagedFiles(){
+  $("operations-frame").src="/?presentation=hmi-operations&view=sdcard";
+  route("controls");
+  closeInspector();
+ }
+ bindTouchActivation($("manage-model"),openManagedFiles);
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;
  async function checkImportStatus(){
