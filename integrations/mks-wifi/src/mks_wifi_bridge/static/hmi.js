@@ -62,16 +62,19 @@
  }
 
  let inspectorViewer=null;
+ let inspectorRequest=null;
  let inspectorEpoch=0;
  let inspected=null;
- const modelUrl=(file,view="iso")=>"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
+ const geometrySource=source=>["local","native_cache"].includes(source);
+ const hasGeometry=(file,source)=>geometrySource(source)&&file.source_present!==false&&(source!=="native_cache"||file.geometry_available===true);
+ const modelUrl=(file,view="iso")=>file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
  const legacyPreview=(file,source)=>source==="local"
    ?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path)
    :"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
  function setPreviewImage(img,file,source){
    img.loading="lazy";
    img.alt="Shaded extrusion geometry for "+(file.filename||file.name);
-   if(source==="local"&&file.source_present!==false) {
+   if(hasGeometry(file,source)) {
      img.src=modelUrl(file);
      img.onerror=()=>{
        img.onerror=null;
@@ -87,6 +90,7 @@
  }
  function closeInspector(){
    inspectorEpoch++;
+   inspectorRequest?.abort();inspectorRequest=null;
    if(inspectorViewer){inspectorViewer.dispose();inspectorViewer=null;}
    $("model-viewer-host").replaceChildren();
    $("model-viewer-host").hidden=true;
@@ -99,27 +103,32 @@
  document.querySelectorAll("[data-view-angle]").forEach(button=>button.addEventListener("click",()=>{
    const view=button.dataset.viewAngle;
    if(inspectorViewer)inspectorViewer.setView(view);
-   else if(inspected?.source==="local"&&inspected.file.source_present!==false) $("inspector-image").src=modelUrl(inspected.file,view);
+   else if(geometrySource(inspected?.source)&&inspected.file.source_present!==false) $("inspector-image").src=modelUrl(inspected.file,view);
  }));
  async function openInspector(file,source){
    closeInspector();
    const epoch=++inspectorEpoch;
+   inspectorRequest=new AbortController();
    inspected={file,source};
    text("inspector-title",file.filename||file.name);
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
-   text("inspector-status",source==="local"?"Loading 3D extrusion…":"No local G-code geometry available; showing cached slicer preview.");
+   text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
    const preview=$("inspector-image");
    preview.hidden=false;
    preview.onerror=null;
-   if(source==="local"&&file.source_present!==false){
+   if(hasGeometry(file,source)){
      preview.src=modelUrl(file);
      preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
    }else if(file.preview_available)preview.src=legacyPreview(file,source);
    else preview.removeAttribute("src");
+   $("retrieve-sd").hidden=source!=="printer_native"||!file.retrievable;
+   $("cancel-sd").hidden=true;
+   $("copy-sd-local").hidden=source!=="native_cache";
+   text("native-sd-status",source==="printer_native"?"Retrieve actual SD bytes before reconstruction.":"");
    $("model-inspector").showModal();
-   if(source!=="local"||file.source_present===false)return;
+   if(!hasGeometry(file,source))return;
    try{
-     const geometry=await api("/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path));
+     const geometry=await api(source==="native_cache"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/geometry":"/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path),{signal:inspectorRequest.signal});
      if(epoch!==inspectorEpoch)return;
      const module=await import("/static/hmi_model_viewer.js");
      if(epoch!==inspectorEpoch)return;
@@ -142,18 +151,18 @@
  }
  function card(file,source){
    const button=document.createElement("div");
-   button.className="model";button.tabIndex=0;button.setAttribute("role","button");
+   button.className="model";button.dataset.provider=source==="printer_native"||source==="printer"?"printer_sd":source;button.tabIndex=0;button.setAttribute("role","button");
    button.setAttribute("aria-label","Inspect 3D print "+(file.filename||file.name));
    const image=document.createElement("img");
    const name=document.createElement("strong");name.textContent=file.filename||file.name;
    const info=document.createElement("small");
-   const meta=file.metadata||file.local_metadata?.metadata||{};
-   info.textContent=(source==="local"?"Local G-code geometry":"Printer SD only · bytes unavailable")+
+   const meta=file.metadata||file.print_metadata||file.local_metadata?.metadata||{};
+   info.textContent=(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
      (file.source_present===false?" · cached/offline":"");
    button.append(image,name,info);
    setPreviewImage(image,file,source);
-   if(source==="local"&&file.source_present!==false){
+   if(hasGeometry(file,source)){
      const pill=document.createElement("span");pill.className="render-pill";pill.textContent="3D G-CODE";button.append(pill);
    }
    const select=()=>{
@@ -172,23 +181,53 @@
  function filterModels(){
   const q=($('model-filter')?.value||'').trim().toLowerCase();
   const models=Array.from($('models').querySelectorAll('.model'));
-  let shown=0;for(const item of models){item.hidden=!!q&&!item.textContent.toLowerCase().includes(q);if(!item.hidden)shown++;}
+  let shown=0;for(const item of models){item.hidden=!!q&&!item.textContent.toLowerCase().includes(q);if($('storage-provider').value!=='all'&&item.dataset.provider!==$('storage-provider').value)item.hidden=true;if(!item.hidden)shown++;}
   if(models.length)text('model-count',shown+' of '+models.length+' files');
  }
  window.addEventListener('hmi:filter-models',filterModels);
+ $('storage-provider').addEventListener('change',filterModels);
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
   try{
    const listing=await api("/api/printer/sdcard");
+   const native=await api("/api/native-sd").catch(()=>({entries:[],assets:[]}));
    const local=listing.local_index?.files||[];const printer=(listing.entries||[]).filter(e=>e.kind==="file");
    host.replaceChildren();const seen=new Set();
    for(const item of local){const key=item.relative_path;if(!key||seen.has(key))continue;seen.add(key);host.append(card(item,"local"));}
-   for(const item of printer){if(!item.name)continue;const matched=local.some(x=>x.firmware_key===item.name.toLowerCase()&&x.source_present!==false);if(matched)continue;host.append(card(item,"printer"));}
+   for(const item of printer){if(!item.name)continue;if((native.entries||[]).some(x=>x.name===item.name))continue;host.append(card(item,"printer"));}
+   for(const item of native.entries||[])host.append(card({...item,filename:item.original_filename||item.name},"printer_native"));
+   for(const asset of native.assets||[])if(asset.cache_available)host.append(card({...asset,name:asset.original_filename,source_present:true},"native_cache"));
    text("model-count",host.childElementCount+" files · "+(listing.local_index?.status||listing.status||"unknown"));
    if(!host.childElementCount){const empty=document.createElement("div");empty.className="tile";empty.textContent=listing.local_index?.error||listing.error||"No indexed G-code available. Configure a read-only source volume or refresh the printer SD listing.";host.append(empty);}
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();}
  }
+ let nativeTransfer=null;
+ $("retrieve-sd").addEventListener("click",async()=>{
+  if(!inspected||nativeTransfer)return;
+  const selected=inspected,epoch=inspectorEpoch;
+  try{
+   const job=await api('/api/native-sd/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selected.file.name})});
+   nativeTransfer=job.id;$("retrieve-sd").hidden=true;$("cancel-sd").hidden=false;
+   while(nativeTransfer){
+    const progress=await api('/api/native-sd/transfers/'+job.id);
+    text('native-sd-status',progress.status+' · '+progress.received+' / '+(progress.size??'—')+' bytes');
+    if(['complete','failed','cancelled'].includes(progress.status)){
+     nativeTransfer=null;$("cancel-sd").hidden=true;
+     if(progress.status==='complete'&&epoch===inspectorEpoch)await openInspector({...progress.asset,name:selected.file.name,source_present:true},'native_cache');
+     else if(progress.error)text('native-sd-status',progress.error);
+     break;
+    }
+    await new Promise(resolve=>setTimeout(resolve,500));
+   }
+  }catch(error){nativeTransfer=null;text('native-sd-status',error.message);$("cancel-sd").hidden=true;}
+ });
+ $("cancel-sd").addEventListener('click',async()=>{if(nativeTransfer)try{await api('/api/native-sd/transfers/'+nativeTransfer,{method:'DELETE'});}catch(error){text('native-sd-status',error.message);}});
+ $("copy-sd-local").addEventListener('click',async()=>{
+  if(inspected?.source!=='native_cache')return;
+  try{const result=await api('/api/native-sd/assets/'+inspected.file.sha256+'/import-local',{method:'POST'});text('native-sd-status',result.status+' · '+result.filename+' · no print selected');}
+  catch(error){text('native-sd-status',error.message);}
+ });
  $("manage-model").addEventListener("click",()=>{closeInspector();route("controls");$("operations-frame").src="/?presentation=hmi-operations&view=sdcard";});
  $("refresh-files").addEventListener("click",loadFiles);
  let hmiImportEnabled=false,uploading=false;

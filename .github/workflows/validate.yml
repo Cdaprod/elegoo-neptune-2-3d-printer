@@ -144,6 +144,7 @@ jobs:
           node scripts/test-sculpture-browser.cjs
           node scripts/test-hmi-operator.cjs
           node scripts/test-hmi-gcode-import.cjs
+          node scripts/test-native-sd-hmi.cjs
       - name: Upload HMI geometry gallery screenshot
         if: always()
         uses: actions/upload-artifact@v4

@@ -147,3 +147,5 @@ physical printer's separate SD card is not modified. The USB card must be
 mounted and readable by the kiosk browser to select files from it; Chromium's
 native file picker and device permissions require final on-Pi acceptance.
 If the picker is inaccessible, `make sd-import` remains the headless fallback.
+
+Native Robin Nano SD retrieval is documented in [the native SD integration guide](native-robin-sd.md). Stock firmware remains unsupported for byte retrieval; experimental firmware is isolated and never flashed by `make deploy`.

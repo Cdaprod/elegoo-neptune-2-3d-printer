@@ -32,31 +32,32 @@ config_path = config_dir / "config.yaml"
 
 # Install the packaged, single-file read-only terminal bridge atomically to
 # the persistent user plugin directory before OctoPrint starts.
-plugin_source = Path("/opt/neptune-plugins/neptune_terminal.py")
-plugin_path = config_dir / "plugins" / "neptune_terminal.py"
-plugin_path.parent.mkdir(parents=True, exist_ok=True)
-if not plugin_source.is_file():
-    raise SystemExit("Bundled Neptune terminal plugin is missing")
-if not plugin_path.is_file() or plugin_path.read_bytes() != plugin_source.read_bytes():
-    reference = (
-        plugin_path.stat()
-        if plugin_path.exists()
-        else config_path.stat()
-        if config_path.exists()
-        else config_dir.stat()
-    )
-    fd, temporary_plugin = tempfile.mkstemp(prefix=".neptune-plugin-", dir=plugin_path.parent)
-    try:
-        os.fchmod(fd, stat.S_IMODE(reference.st_mode) if plugin_path.exists() else 0o644)
-        os.fchown(fd, reference.st_uid, reference.st_gid)
-        with os.fdopen(fd, "wb") as target, plugin_source.open("rb") as source:
-            shutil.copyfileobj(source, target)
-            target.flush()
-            os.fsync(target.fileno())
-        os.replace(temporary_plugin, plugin_path)
-    finally:
-        if os.path.exists(temporary_plugin):
-            os.unlink(temporary_plugin)
+for plugin_name in ("neptune_terminal", "neptune_sd_read"):
+    plugin_source = Path("/opt/neptune-plugins") / (plugin_name + ".py")
+    plugin_path = config_dir / "plugins" / (plugin_name + ".py")
+    plugin_path.parent.mkdir(parents=True, exist_ok=True)
+    if not plugin_source.is_file():
+        raise SystemExit("Bundled Neptune terminal plugin is missing")
+    if not plugin_path.is_file() or plugin_path.read_bytes() != plugin_source.read_bytes():
+        reference = (
+            plugin_path.stat()
+            if plugin_path.exists()
+            else config_path.stat()
+            if config_path.exists()
+            else config_dir.stat()
+        )
+        fd, temporary_plugin = tempfile.mkstemp(prefix=".neptune-plugin-", dir=plugin_path.parent)
+        try:
+            os.fchmod(fd, stat.S_IMODE(reference.st_mode) if plugin_path.exists() else 0o644)
+            os.fchown(fd, reference.st_uid, reference.st_gid)
+            with os.fdopen(fd, "wb") as target, plugin_source.open("rb") as source:
+                shutil.copyfileobj(source, target)
+                target.flush()
+                os.fsync(target.fileno())
+            os.replace(temporary_plugin, plugin_path)
+        finally:
+            if os.path.exists(temporary_plugin):
+                os.unlink(temporary_plugin)
 config = yaml.safe_load(config_path.read_text()) if config_path.is_file() else {}
 if config is None:
     config = {}

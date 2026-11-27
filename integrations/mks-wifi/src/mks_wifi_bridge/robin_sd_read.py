@@ -14,7 +14,7 @@ from typing import Protocol
 
 MAX_SD_BYTES = 50 * 1024 * 1024
 MAX_SD_CHUNK_BYTES = 4096
-SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,199}\.(?:gcode|gco|gc|g)", re.I)
+SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. ~-]{0,199}\.(?:gcode|gco|gc|g)", re.I)
 
 
 class SdReadError(RuntimeError):

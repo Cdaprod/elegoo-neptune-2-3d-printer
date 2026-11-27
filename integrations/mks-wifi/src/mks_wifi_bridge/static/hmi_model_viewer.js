@@ -105,8 +105,10 @@ export function mountViewer(host, model) {
       observer.disconnect();
       controls.dispose();
       cylinder.dispose();
+      grid.geometry.dispose();grid.material.dispose();
       for(const mesh of meshes)mesh.material.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     }
   };

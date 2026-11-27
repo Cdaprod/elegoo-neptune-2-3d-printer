@@ -987,6 +987,12 @@ def create_app(
         try:
             yield
         finally:
+            native_storage = getattr(app.state, "native_sd_storage", None)
+            if native_storage:
+                tasks = list(native_storage.tasks.values())
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
             await command_executor.shutdown()
             printer.stop_event.set()
             if printer.worker_task:
@@ -1091,6 +1097,9 @@ def create_app(
     from .manufacturing.api import install as install_print_bay
 
     install_print_bay(app, require_auth, require_control_token, printer)
+    from .native_sd_api import install as install_native_sd
+
+    native_sd_service = install_native_sd(app, require_auth, require_control_token, printer)
 
     def request_requires_auth(request: Request) -> bool:
         peer = request.client.host if request.client else ""
@@ -1379,6 +1388,11 @@ def create_app(
     @app.get("/api/printer/sdcard/capabilities", dependencies=[Depends(require_auth)])
     async def sdcard_capabilities() -> dict[str, Any]:
         """Report verified byte-read capabilities separately from M20 file listing."""
+        if os.getenv("NEPTUNE_NATIVE_SD_READ_ENABLED", "false").lower() == "true":
+            try:
+                return await native_sd_service().transport.capabilities()
+            except Exception:
+                return {**capability_for_device(), "note": "Configured SD bridge unavailable"}
         return {
             **capability_for_device(),
             "active_transport": "octoprint_serial" if octoprint_mode else "mks_wifi_tcp",
@@ -1388,12 +1402,37 @@ def create_app(
         }
 
     @app.get("/api/printer/sdcard/read/{filename}", dependencies=[Depends(require_auth)])
-    async def sdcard_read(filename: str) -> dict[str, Any]:
+    async def sdcard_read(filename: str):
         """Explicit refusal until a verified read-only STM32 protocol is installed."""
         try:
             validate_sd_name(filename)
         except SdReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if os.getenv("NEPTUNE_NATIVE_SD_READ_ENABLED", "false").lower() == "true":
+            try:
+                storage = native_sd_service()
+                matches = [
+                    asset
+                    for asset in storage.assets.values()
+                    if asset["original_path"].casefold() == filename.casefold()
+                    and asset.get("cache_available")
+                ]
+                if matches:
+                    latest = max(matches, key=lambda asset: asset["retrieved_at"])
+                    from fastapi.responses import FileResponse
+
+                    return FileResponse(
+                        await asyncio.to_thread(storage.cached, latest["sha256"]),
+                        media_type="text/plain",
+                        filename=latest["original_filename"],
+                        headers={
+                            "X-Neptune-SD-Source": "verified-cache",
+                            "X-Content-SHA256": latest["sha256"],
+                        },
+                    )
+            except SdReadError as exc:
+                raise HTTPException(423, str(exc)) from exc
+            raise HTTPException(409, "Retrieve this file with POST /api/native-sd/transfers first")
         raise HTTPException(
             status_code=501,
             detail=(
