@@ -180,3 +180,40 @@ credentials, mounts or printer state. Receiver implementation and directory
 provisioning need their own reviewed deployment; the configurable Observatory
 adapter is independently implemented and locally tested. Do not enable the overlay
 until the completed directory exists and its producer satisfies atomic publication.
+
+## Implemented receiver increment (not deployed)
+
+`integrations/lilbitdrop/receiver.py` is a standard-library transport adapter, not
+a second Observatory backend or canonical archive. It accepts authenticated
+`POST /receive?filename=part.gcode`, raw application/octet-stream, explicit bounded
+Content-Length and required X-Content-SHA256. The bearer credential comes from a
+private token file; it is never logged or passed as a command-line token value.
+Two concurrent transfers maximum, per-read timeout, 50 MiB file bound and a
+512 MiB free-space reserve protect the incoming store. Interrupted and checksum-
+failing uploads do not publish completed files; temporary files are cleaned up.
+Completed names contain a SHA prefix for idempotent publication. The ingestion
+adapter preserves the sender filename in canonical provenance. Original G-code
+never selects or starts a job merely by arriving.
+
+The supplied systemd unit is a reviewable template for the actual Pi checkout and
+cdaprod account. It runs unprivileged, binds 127.0.0.1:8091, writes only the incoming
+root and leaves BLE/network settings alone. Remote clients can use an authenticated
+SSH tunnel (`ssh -N -L 8091:127.0.0.1:8091 neptune`) or a separately provisioned TLS
+proxy. No unauthenticated LAN listener or native AirDrop implementation is implied.
+A future LilBitDrop client can use this HTTP contract; the existing BLE prototype
+does not yet initiate or advertise authenticated file-transfer sessions.
+
+Production installation, after review, requires creating incoming/{partial,completed}
+with cdaprod ownership and mode 0750 on one filesystem, a private 0600 receiver
+token of at least 32 random characters, installing the unit, and adding
+`compose.lilbitdrop.yaml` after the existing USB overlay. Match
+`NEPTUNE_LILBITDROP_READ_GID` to the actual cdaprod group (default 1000). Completed
+files are 0640; the app gains only that supplemental group and a read-only mount.
+Canonical storage stays in the existing /data volume. No installation commands
+have been executed on the physical Pi. Do not restart services while a print is
+active or its state is unknown. Incoming files are not deleted automatically;
+retention/cleanup requires verified archive receipts and an explicit policy.
+
+Local integration tests exercise real HTTP authentication, path/checksum failures,
+idempotent transfer, atomic handoff, ingestion, provenance and no staging. These
+are software validation, not physical wireless/BLE or printer acceptance.

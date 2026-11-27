@@ -1,6 +1,7 @@
 """Completed-file handoff adapter; receiver must atomically publish completed files."""
 
 import asyncio
+import re
 import time
 from pathlib import Path
 
@@ -75,9 +76,10 @@ class CompletedDirectoryAdapter:
                 if time.monotonic() - since < self.settle_seconds:
                     continue
                 self.status.update(state="ingesting", current_file=str(relative))
+                original = re.sub(r"^[a-f0-9]{64}_", "", path.name)
                 sha = self.service.submit_path(
                     path,
-                    ArtifactSubmission(path.name, "lilbitdrop", "file:" + str(path)),
+                    ArtifactSubmission(original, "lilbitdrop", "file:" + str(path)),
                 )
                 with self.archive.db() as db:
                     db.execute(

@@ -2,6 +2,8 @@
 # Receiver owns completed/ and publishes by atomic rename; Observatory reads only.
 services:
   neptune-observatory:
+    group_add:
+      - "${NEPTUNE_LILBITDROP_READ_GID:-1000}"
     volumes:
       - type: bind
         source: ${NEPTUNE_LILBITDROP_HOST_COMPLETED_DIR:-/srv/neptune/incoming/completed}
