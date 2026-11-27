@@ -195,7 +195,7 @@ class OctoPrintBackend:
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         # Endpoints are fixed internal literals, never caller-controlled URLs.
-        if endpoint not in {"/api/connection", "/api/printer", "/api/job", "/api/files"}:
+        if endpoint not in {"/api/connection", "/api/printer", "/api/job", "/api/files", "/api/plugin/neptune_sd_read"}:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
 
@@ -404,9 +404,13 @@ class OctoPrintBackend:
         from .factory_usb import catalog_visible, query
 
         if refresh and self.connection_transport == "usb":
-            result = await query(self, {"operation": "list_long"})
-            return result["data"]["entries"]
-        if refresh:
+            try:
+                result = await query(self, {"operation": "list_long"})
+                return result["data"]["entries"]
+            except OctoPrintError:
+                # Core catalog remains available without the optional bridge.
+                pass
+        elif refresh:
             await asyncio.to_thread(self._refresh_sd_sync)
         payload = await self.get("/api/files")
         entries: list[dict[str, Any]] = []
@@ -417,7 +421,7 @@ class OctoPrintBackend:
             if not isinstance(name, str) or not catalog_visible(name):
                 continue
             # Physical SD files only; OctoPrint uploads are a separate origin.
-            if item.get("origin") != "sdcard":
+            if item.get("origin") not in {"sdcard", "printer"}:
                 continue
             kind = "directory" if item.get("type") == "folder" else "file"
             entries.append(
