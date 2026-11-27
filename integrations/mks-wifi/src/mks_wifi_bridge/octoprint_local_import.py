@@ -66,7 +66,7 @@ def multipart(filename: str, data: bytes) -> tuple[str, bytes]:
         ).encode()
     body += (
         (
-            f'--{boundary}\r\nContent-Disposition: form-data; '
+            f"--{boundary}\r\nContent-Disposition: form-data; "
             f'name="file"; filename="{filename}"\r\n'
             "Content-Type: application/octet-stream\r\n\r\n"
         ).encode()
