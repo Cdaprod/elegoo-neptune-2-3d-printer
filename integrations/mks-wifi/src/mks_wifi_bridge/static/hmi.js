@@ -224,7 +224,7 @@
   if(models.length)text('model-count',shown+' of '+models.length+' files');
  }
  window.addEventListener('hmi:filter-models',filterModels);
- $('storage-provider').addEventListener('change',()=>loadModels());
+ $('storage-provider').addEventListener('change',()=>{filterModels();loadModels();});
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
   try{

@@ -149,3 +149,34 @@ interface, SSH trust or receiver changes are made by this adapter. GitHub search
 and direct repository lookup did not reveal an accessible LilBitDrop repository;
 its precise URL/access and receiving implementation still need reconciliation.
 No complete wireless-transfer or Pi deployment validation is claimed.
+
+## Read-only Pi reconciliation — 2026-11-27
+
+Verified SSH alias `neptune` with strict host checking returns
+`cda-rpi-4-printer`, user `cdaprod`, architecture `aarch64`. Inspected prototype
+`/home/cdaprod/lilbitdrop-lab/peripheral.py`, SHA-256
+`438b698dc99a3a126044766ac34eafa67cd6b6f4b7e257d87a3b77e101f7a759`.
+It implements BlueZ advertisement and read-only GATT characteristics for name,
+version and wlan0 address. It has no WriteValue, file upload server, filesystem
+receiver or atomic completed-file publication. The directory is not a Git checkout;
+no LilBitDrop service unit or accessible remote repository was found. The complete
+wireless transfer lifecycle is therefore not established by this prototype.
+
+Actual Observatory deployment is `/home/cdaprod/elegoo-neptune-2-3d-printer` at
+`82f76d5`; `/srv/neptune-observatory`, `/srv/neptune` and the proposed incoming
+directories do not currently exist. Both Docker containers are running/unpaused.
+Canonical `/data` already maps to `mks-wifi_commissioning-data`; OctoPrint storage
+is `elegoo-neptune-2-3d-printer_octoprint-data`, mounted read-only into Observatory.
+Retain these volumes and the existing checkout. Do not provision a redundant
+`/srv/neptune-observatory` deployment. Root storage had approximately 46 GiB free.
+Only the Pi's boot/root SD device was present; no external SD-reader volume was
+mounted. wlan0 is up, Bluetooth is powered, and the CH340 stable serial path is
+`/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` with `ch341-uart`. Existing .env
+selects USB and the existing USB Compose overlay. Preserve that overlay when adding
+the optional completed-directory mount.
+
+This inspection changed no Pi files, services, Bluetooth/network configuration,
+credentials, mounts or printer state. Receiver implementation and directory
+provisioning need their own reviewed deployment; the configurable Observatory
+adapter is independently implemented and locally tested. Do not enable the overlay
+until the completed directory exists and its producer satisfies atomic publication.
