@@ -99,8 +99,6 @@ def test_exact_bytes_and_no_printer_motion_side_effect():
 def test_small_chunks_can_exceed_default_chunk_count():
     original = b"G" * 12801
     transport = MemorySd(original)
-    data, _ = run(
-        collect_sd_file(transport, "PART.gcode", max_bytes=len(original), chunk_size=1)
-    )
+    data, _ = run(collect_sd_file(transport, "PART.gcode", max_bytes=len(original), chunk_size=1))
     assert data == original
     assert len(transport.reads) == len(original)
