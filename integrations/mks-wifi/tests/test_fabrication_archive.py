@@ -22,7 +22,9 @@ def test_deduplication_source_removal_restart_and_independent_staging(tmp_path):
     source = tmp_path / "part.gcode"
     source.write_text("G90\nM82\nG1 X0 Y0 Z.2\nG1 X10 E1\n")
     sha = store.ingest(source)
+    inode = store.verified(sha).stat().st_ino
     assert store.ingest(source) == sha
+    assert store.verified(sha).stat().st_ino == inode
     source.unlink()
     store = FabricationArchive(store.timeline)
     assert store.verified(sha).read_text().startswith("G90")

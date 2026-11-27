@@ -133,7 +133,15 @@ class FabricationArchive:
                 raise ValueError("Empty artifacts are not accepted")
             sha = digest.hexdigest()
             target = self.root / (sha + ".gcode")
-            os.replace(temporary, target)
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                self.verified(sha)
+            directory = os.open(self.root, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
             with self.db() as db:
                 db.execute(
                     "INSERT OR IGNORE INTO fabrication_artifacts VALUES(?,?,?,?,?)",
