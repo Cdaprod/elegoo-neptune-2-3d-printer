@@ -10,6 +10,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from threading import RLock
 from urllib.request import Request
 
 from .gcode_fabrication import FabricationPreviewService
@@ -50,10 +51,13 @@ class OctoPrintSdTransport:
 
 
 class NativeSdStorage:
-    def __init__(self, root: Path, transport, *, quota: int = 256 * 1024 * 1024):
+    def __init__(
+        self, root: Path, transport, *, quota: int = 256 * 1024 * 1024, preview_slots=None
+    ):
         if quota < MAX_SD_BYTES:
             raise ValueError("Cache quota must hold one maximum-sized file")
         self.root, self.transport, self.quota = root, transport, quota
+        self.metadata_lock = RLock()
         root.mkdir(parents=True, exist_ok=True)
         self.blobs = root / "blobs"
         self.blobs.mkdir(exist_ok=True)
@@ -81,42 +85,47 @@ class NativeSdStorage:
         self.jobs = {}
         self.tasks = {}
         self.lock = asyncio.Lock()
+        self.preview_slots = preview_slots or asyncio.Semaphore(2)
         self.previews = FabricationPreviewService(self.blobs, root / "geometry")
 
     def persist(self):
-        temporary = self.records.with_suffix(".part")
-        with temporary.open("w") as output:
-            json.dump(self.assets, output)
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, self.records)
+        with self.metadata_lock:
+            temporary = self.records.with_suffix(".part")
+            with temporary.open("w") as output:
+                json.dump(self.assets, output)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, self.records)
 
     def prune(self, incoming=0):
-        files = sorted(self.blobs.glob("*.gcode"), key=lambda p: p.stat().st_mtime)
-        total = sum(p.stat().st_size for p in files)
-        evicted = False
-        for path in files:
-            if total + incoming <= self.quota:
-                break
-            total -= path.stat().st_size
-            path.unlink()
-            evicted = True
+        with self.metadata_lock:
+            files = sorted(self.blobs.glob("*.gcode"), key=lambda p: p.stat().st_mtime)
+            total = sum(p.stat().st_size for p in files)
+            evicted = False
+            for path in files:
+                if total + incoming <= self.quota:
+                    break
+                total -= path.stat().st_size
+                path.unlink()
+                evicted = True
+                for asset in self.assets.values():
+                    if asset.get("cache_location") == path.name:
+                        asset.update(
+                            cache_available=False,
+                            geometry_available=False,
+                            thumbnail_available=False,
+                        )
+            if evicted:
+                self.persist()
+
+    def invalidate(self, digest):
+        with self.metadata_lock:
             for asset in self.assets.values():
-                if asset.get("cache_location") == path.name:
+                if asset.get("sha256") == digest:
                     asset.update(
                         cache_available=False, geometry_available=False, thumbnail_available=False
                     )
-
-        if evicted:
             self.persist()
-
-    def invalidate(self, digest):
-        for asset in self.assets.values():
-            if asset.get("sha256") == digest:
-                asset.update(
-                    cache_available=False, geometry_available=False, thumbnail_available=False
-                )
-        self.persist()
 
     def cached(self, digest):
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -127,7 +136,7 @@ class NativeSdStorage:
             raise SdReadError("Cached file unavailable")
         with path.open("rb") as source:
             if hashlib.file_digest(source, "sha256").hexdigest() != digest:
-                path.unlink()
+                path.unlink(missing_ok=True)
                 self.invalidate(digest)
                 raise SdReadError("Cached content failed SHA-256 verification")
         os.utime(path, None)
@@ -248,17 +257,19 @@ class NativeSdStorage:
                     "transfer_status": "verified",
                     "print_metadata": metadata or None,
                 }
-                self.assets[identity] = asset
-                while len(self.assets) > 512:
-                    oldest = min(
-                        self.assets, key=lambda key: self.assets[key].get("retrieved_at", 0)
-                    )
-                    del self.assets[oldest]
-                self.persist()
+                with self.metadata_lock:
+                    self.assets[identity] = asset
+                    while len(self.assets) > 512:
+                        oldest = min(
+                            self.assets, key=lambda key: self.assets[key].get("retrieved_at", 0)
+                        )
+                        del self.assets[oldest]
+                    self.persist()
                 job.update(status="reconstructing", sha256=sha)
                 try:
-                    geometry = await asyncio.to_thread(self.previews.geometry, target.name)
-                    await asyncio.to_thread(self.previews.preview, target.name)
+                    async with self.preview_slots:
+                        geometry = await asyncio.to_thread(self.previews.geometry, target.name)
+                        await asyncio.to_thread(self.previews.preview, target.name)
                     asset.update(
                         geometry_available=True,
                         thumbnail_available=True,

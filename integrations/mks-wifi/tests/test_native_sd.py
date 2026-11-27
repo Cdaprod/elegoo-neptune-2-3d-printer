@@ -15,7 +15,18 @@ GCODE = b"; fixture\nG90\nM83\nG1 X0 Y0 Z0.2\nG1 X10 Y0 E1\nG1 X10 Y10 E1\n"
 
 
 @pytest.mark.parametrize(
-    "name", ["../A.GCO", "A/B.GCO", "A.GCO\nM24", "longfilename.gcode", "", "A.BIN", "A\x00.GCO"]
+    "name",
+    [
+        "../A.GCO",
+        "A/B.GCO",
+        "A.GCO\nM24",
+        "longfilename.gcode",
+        "",
+        "A.BIN",
+        "A\x00.GCO",
+        "K.GCO",
+        "İ.GCO",
+    ],
 )
 def test_wire_rejects_paths_and_injection(name):
     with pytest.raises(SdReadError):

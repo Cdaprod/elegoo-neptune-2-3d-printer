@@ -1099,7 +1099,9 @@ def create_app(
     install_print_bay(app, require_auth, require_control_token, printer)
     from .native_sd_api import install as install_native_sd
 
-    native_sd_service = install_native_sd(app, require_auth, require_control_token, printer)
+    native_sd_service = install_native_sd(
+        app, require_auth, require_control_token, printer, model_preview_slots
+    )
 
     def request_requires_auth(request: Request) -> bool:
         peer = request.client.host if request.client else ""

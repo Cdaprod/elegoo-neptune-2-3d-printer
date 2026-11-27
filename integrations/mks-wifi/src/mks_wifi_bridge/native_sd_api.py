@@ -12,7 +12,7 @@ from .native_sd import NativeSdStorage, OctoPrintSdTransport
 from .robin_sd_read import SdReadError
 
 
-def install(app, read_auth, write_auth, printer):
+def install(app, read_auth, write_auth, printer, preview_slots=None):
     storage = None
 
     def service():
@@ -27,6 +27,7 @@ def install(app, read_auth, write_auth, printer):
             storage = NativeSdStorage(
                 Path(os.getenv("NEPTUNE_NATIVE_SD_CACHE", "/data/native-sd")),
                 OctoPrintSdTransport(printer.backend),
+                preview_slots=preview_slots,
             )
             app.state.native_sd_storage = storage
         return storage
@@ -95,20 +96,23 @@ def install(app, read_auth, write_auth, printer):
     async def asset(digest: str, representation: str):
         current = available()
         try:
-            path = await asyncio.to_thread(current.cached, digest)
-            if representation == "gcode":
-                return FileResponse(path, media_type="text/plain", filename=path.name)
-            if representation == "geometry":
-                return await asyncio.to_thread(current.previews.geometry, path.name)
-            if representation == "thumbnail":
-                return Response(
-                    await asyncio.to_thread(current.previews.preview, path.name),
-                    media_type="image/svg+xml",
-                    headers={
-                        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"
-                    },
-                )
-            raise HTTPException(404, "Representation not found")
+            async with current.preview_slots:
+                path = await asyncio.to_thread(current.cached, digest)
+                if representation == "gcode":
+                    return FileResponse(path, media_type="text/plain", filename=path.name)
+                if representation == "geometry":
+                    return await asyncio.to_thread(current.previews.geometry, path.name)
+                if representation == "thumbnail":
+                    return Response(
+                        await asyncio.to_thread(current.previews.preview, path.name),
+                        media_type="image/svg+xml",
+                        headers={
+                            "Content-Security-Policy": (
+                                "default-src 'none'; style-src 'unsafe-inline'"
+                            )
+                        },
+                    )
+                raise HTTPException(404, "Representation not found")
         except (SdReadError, ValueError) as exc:
             raise HTTPException(422, str(exc)) from exc
 

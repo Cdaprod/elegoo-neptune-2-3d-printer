@@ -17,7 +17,7 @@ from .robin_sd_read import MAX_SD_BYTES, SdReadError
 VERSION = 1
 CHUNK = 192
 OPERATIONS = ("CAPABILITIES", "LIST", "STAT", "OPEN", "READ", "CLOSE", "CANCEL")
-ALIAS = re.compile(r"[A-Z0-9_~-]{1,8}\.(?:GCO|GC|G)", re.I)
+ALIAS = re.compile(r"[A-Z0-9_~-]{1,8}\.(?:GCO|GC|G)", re.I | re.ASCII)
 
 
 def integer(value: object, maximum: int = 0xFFFFFFFF) -> int:
