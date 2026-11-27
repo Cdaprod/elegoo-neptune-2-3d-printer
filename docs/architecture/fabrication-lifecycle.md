@@ -103,9 +103,13 @@ it works without OctoPrint and performs no delivery or execution. HMI legacy
 uploads archive through the same service before their existing local delivery.
 
 Removable-media bulk hydration still needs adapter/UI integration with the existing
-SD importer. OrcaSlicer direct submission, LilBitDrop wireless transport, network
-storage protocols and non-G-code formats remain future adapters. No Apple AirDrop
-compatibility or operating wireless service is claimed. The contract currently
+SD importer. OrcaSlicer direct submission, network storage protocols and non-G-code formats
+remain future adapters. LilBitDrop is already installed and physically verified
+on the Pi according to the operator; only its Observatory ingestion handoff is
+pending. Reuse that established service rather than rebuilding its transport.
+The receiving directory/completion contract must be identified before wiring the
+adapter, so partially received files are never treated as complete artifacts.
+Native Apple AirDrop compatibility is not inferred from this handoff. The contract currently
 accepts execution_gcode only; unsupported artifact kinds fail explicitly. CAD,
 slicer projects, photos and derivatives must gain typed validation before being
 accepted, rather than masquerading as G-code. Source URIs are provenance labels,
