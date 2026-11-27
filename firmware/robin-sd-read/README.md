@@ -24,7 +24,9 @@ polarity and thermistor definitions must be preserved when this small handler is
 ported to the exact installed firmware fork. Porting that handler does not require
 changing ESP8266 firmware or replacing the whole printer firmware ecosystem.
 
-The installed firmware, MCU marking and bootloader have not been identified.
+The operator identified the installed firmware as `Robin_nano_v2.1.6.b` through M115
+and the board as MKS Robin Nano v1.2. The MCU marking and bootloader remain
+unverified; a firmware identifier does not establish the PCB revision.
 The public Elegoo distribution supplies factory binaries/configuration but does not
 establish that this Makerbase checkout is the installed Elegoo source revision.
 A successful build is not sufficient grounds to flash it.
@@ -173,3 +175,22 @@ print-file handle may make the read extension's concurrency guard refuse a trans
 that guard must not be bypassed, and no automatic deselection is performed.
 Use the alias returned by RSD LIST for future reads; do not guess or truncate an
 8.3 alias from the long display filename.
+
+## Factory USB handoff reconciliation
+
+No experimental firmware has been flashed. The operator verified CH340
+`1a86:7523`, Linux `ch341`, `/dev/ttyUSB0`, 115200 8N1, M115/M503/M105/M114
+and M21/M20/M20 L/M23/M27. `DISPMNT01.gcode` reports 2113357 bytes and cursor
+zero; selection/size does not verify file bytes or printing. The host branch
+preserves this transcript and exposes stock observations through the existing
+exclusive OctoPrint owner. RSD/1 is separately capability-negotiated and disabled.
+
+Makerbase factory-family source `MKS-Robin-Nano-Firmware` at
+`b346a1f3b6d3296b8efee87e06c92da504b5c0c3`, `Src/wifi_module.cpp:1425`,
+enqueues M105 from its internal WiFi handler. This is a plausible source of
+unsolicited echo/temperature traffic with no external USB writer, not proof of
+the installed binary's origin. Host tests require command-specific completion
+with interleaved temperature traffic. `Src/usart.c` maps USART3 to PB10/PB11 and
+USART1 to PA9/PA10. UART3 remains corrected in this reference patch; physical
+USB-to-UART routing and the exact factory fork/config still require verification.
+This compile-only image must not replace the factory firmware on that evidence.
