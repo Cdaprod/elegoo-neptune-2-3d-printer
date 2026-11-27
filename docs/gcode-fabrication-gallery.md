@@ -122,3 +122,28 @@ after import. The existing indexer and preview service then read the local copie
 This is explicit operator-triggered import, not a background hotplug service. Printer-slot-only SD
 entries still cannot supply raw geometry through M20; matching names alone do
 not prove identical contents. Inspect the actual file before printing.
+
+## Import directly from the 1280×400 HMI
+
+For a touchscreen-usable path, enable the separate local-library import permission
+in the root `.env` (never commit the actual key):
+
+```dotenv
+NEPTUNE_HMI_IMPORT_ENABLED=true
+```
+
+Run `make deploy`. In the **Fabrication gallery**, tap **Import G-code**.
+Choose up to 30 `.gcode`, `.gco`, `.gc`, or `.g` files in the browser's
+native file picker (from a mounted SD card or from a computer accessing the
+same HMI). Each file is limited to 50 MiB. The Observatory forwards bytes
+over the existing OctoPrint API connection to **local file storage**, with
+`select=false` and `print=false`; no firmware SD upload or motion command
+occurs. Gallery files are reindexed after successful import and true G-code
+geometry can be reconstructed from that local storage.
+
+The UI reports whether importing is disabled and leaves all other controls
+unchanged. Imported files are not automatically submitted or printed, and the
+physical printer's separate SD card is not modified. The USB card must be
+mounted and readable by the kiosk browser to select files from it; Chromium's
+native file picker and device permissions require final on-Pi acceptance.
+If the picker is inaccessible, `make sd-import` remains the headless fallback.
