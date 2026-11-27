@@ -1,4 +1,5 @@
 """Emulated, read-only SD file-transfer protocol contract tests."""
+
 from __future__ import annotations
 
 import asyncio
