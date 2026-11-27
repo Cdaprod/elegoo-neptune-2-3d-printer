@@ -10,6 +10,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -36,6 +37,8 @@ class Receiver(ThreadingHTTPServer):
                 "Partial and completed directories must share a filesystem"
             )
         self.token = token
+        self.read_timeout = 15
+        self.transfer_timeout = 300
         self.slots = threading.BoundedSemaphore(2)
         super().__init__(address, Handler)
 
@@ -76,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self):
-        self.connection.settimeout(15)
+        self.connection.settimeout(self.server.read_timeout)
         if not self.authorized():
             return self.respond(401, {"error": "Authentication required"})
         url = urlsplit(self.path)
@@ -110,9 +113,14 @@ class Handler(BaseHTTPRequestHandler):
             os.fchmod(fd, 0o640)
             digest = hashlib.sha256()
             remaining = size
+            deadline = time.monotonic() + self.server.transfer_timeout
             with os.fdopen(fd, "wb") as output:
                 while remaining:
-                    block = self.rfile.read(min(65536, remaining))
+                    budget = deadline - time.monotonic()
+                    if budget <= 0:
+                        raise ValueError("Transfer deadline exceeded")
+                    self.connection.settimeout(min(self.server.read_timeout, budget))
+                    block = self.rfile.read1(min(65536, remaining))
                     if not block:
                         raise ValueError("Interrupted upload")
                     output.write(block)
@@ -124,7 +132,33 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(422, {"error": "SHA-256 mismatch"})
             # Stable name preserves sender filename and makes retries idempotent.
             target = self.server.completed / (expected + "_" + filename)
-            os.replace(temporary, target)
+            try:
+                os.link(
+                    temporary, target
+                )  # Atomic create-if-absent; never replaces readers' inode.
+            except FileExistsError:
+                try:
+                    existing = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+                    with os.fdopen(existing, "rb") as source:
+                        before = os.fstat(source.fileno())
+                        valid = before.st_size == size and hmac.compare_digest(
+                            hashlib.file_digest(source, "sha256").hexdigest(), expected
+                        )
+                        after = os.fstat(source.fileno())
+                    current = target.lstat()
+                    valid = (
+                        valid
+                        and (before.st_ino, before.st_mtime_ns, before.st_size)
+                        == (after.st_ino, after.st_mtime_ns, after.st_size)
+                        and (current.st_dev, current.st_ino)
+                        == (after.st_dev, after.st_ino)
+                    )
+                except OSError:
+                    valid = False
+                if not valid:
+                    return self.respond(
+                        409, {"error": "Existing completed artifact failed integrity"}
+                    )
             descriptor = os.open(self.server.completed, os.O_RDONLY)
             try:
                 os.fsync(descriptor)

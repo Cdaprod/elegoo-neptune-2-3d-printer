@@ -49,7 +49,8 @@ jobs:
       - name: Lint and formatting
         run: |
           uv run --no-sync ruff check src tests ../../integrations/lilbitdrop/receiver.py
-          uv run --no-sync ruff format --check --diff src tests
+          uv run --no-sync ruff format --check --diff src tests ../../integrations/lilbitdrop/receiver.py
+          python -m py_compile ../../integrations/lilbitdrop/receiver.py
       - name: Compile dashboard JavaScript
         run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests

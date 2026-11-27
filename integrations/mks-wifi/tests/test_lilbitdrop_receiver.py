@@ -55,7 +55,13 @@ def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
         assert not list(server.completed.iterdir())
         result = send()
         assert result["status"] == "received_pending_ingestion" and not result["printing"]
-        send()
+        inode = list(server.completed.iterdir())[0].stat().st_ino
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: send(), range(2)))
+        assert all(item["sha256"] == sha for item in results)
+        assert list(server.completed.iterdir())[0].stat().st_ino == inode
         assert len(list(server.completed.iterdir())) == 1
         assert not list(server.partial.iterdir())
         assert list(server.completed.iterdir())[0].stat().st_mode & 0o777 == 0o640
@@ -64,6 +70,13 @@ def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
         adapter.scan()
         adapter.scan()
         assert archive.verified(sha).read_bytes() == data
+        target = list(server.completed.iterdir())[0]
+        target.write_bytes(b"corrupt")
+        with pytest.raises(HTTPError) as error:
+            send()
+        assert error.value.code == 409
+        assert target.read_bytes() == b"corrupt"
+
         with archive.db() as db:
             row = db.execute("SELECT * FROM artifact_provenance").fetchone()
             assert row["filename"] == "part.gcode" and row["provider"] == "lilbitdrop"
