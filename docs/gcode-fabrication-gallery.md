@@ -104,9 +104,12 @@ for actual 1280×400 fixture screenshots and deployment acceptance limits.
 
 Insert the card into a USB reader attached to the Pi (not its boot slot). Use
 `lsblk -o NAME,TRAN,FSTYPE,LABEL,MOUNTPOINTS` to identify its mounted path.
-With the printer idle, preview the import and then explicitly apply it:
+With the printer idle, preview the import and then explicitly apply it. A single\nmounted removable USB card is detected automatically; specify SD_MOUNT if\nmultiple cards are present or automatic discovery fails:
 
 ```sh
+make sd-import
+make sd-import APPLY=1
+# Optional explicit mount:
 make sd-import SD_MOUNT="/media/$USER/NEPTUNE"
 make sd-import SD_MOUNT="/media/$USER/NEPTUNE" APPLY=1
 ```
@@ -116,6 +119,6 @@ existing authenticated API, with select and print disabled. It skips existing
 names rather than intentionally replacing them; avoid concurrent uploads during
 import. The original card is not modified. Refresh the HMI Fabrication gallery
 after import. The existing indexer and preview service then read the local copies.
-This is explicit import, not automatic hotplug discovery. Printer-slot-only SD
+This is explicit operator-triggered import, not a background hotplug service. Printer-slot-only SD
 entries still cannot supply raw geometry through M20; matching names alone do
 not prove identical contents. Inspect the actual file before printing.

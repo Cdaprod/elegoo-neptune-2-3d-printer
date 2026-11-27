@@ -107,6 +107,17 @@ class ImportTests(unittest.TestCase):
             # Candidate must be under a removable-media mount prefix; temp directories do not qualify.
             self.assertEqual(sd.detect_mounts(), [])
 
+    def test_auto_detect_usb_card_without_touching_os_volume(self):
+        payload = {'blockdevices': [
+            {'name': 'sda', 'type': 'disk', 'tran': 'usb', 'rm': 0,
+             'children': [{'name':'sda1','type':'part','mountpoints':['/media/cdaprod/NEPTUNE']}]},
+            {'name': 'mmcblk0', 'type': 'disk', 'rm': 0,
+             'children': [{'name':'mmcblk0p1','type':'part','mountpoints':['/boot/firmware']}]},
+        ]}
+        fake = mock.Mock(stdout=json.dumps(payload))
+        with mock.patch.object(sd.sys,'platform','linux'), mock.patch.object(sd.subprocess,'run',return_value=fake), mock.patch.object(sd.Path,'is_dir',return_value=True), mock.patch.object(sd.Path,'is_symlink',return_value=False), mock.patch.object(sd.os.path,'ismount',return_value=True):
+            self.assertEqual(sd.detect_mounts(), [Path('/media/cdaprod/NEPTUNE')])
+
     def test_mount_is_required_even_in_dry_run(self):
         self.mount.stop()
         with self.assertRaises(sd.ImportFailure):
