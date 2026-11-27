@@ -46,6 +46,7 @@ from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_u
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
 from .octoprint_backend import OctoPrintBackend, OctoPrintError
+from .robin_sd_read import capability_for_device, validate_sd_name, SdReadError
 from .octoprint_local_import import (
     MAX_IMPORT_BYTES,
     LibraryImportError,
@@ -1374,6 +1375,33 @@ def create_app(
             else "cached_or_unavailable"
         )
         return payload
+
+    @app.get("/api/printer/sdcard/capabilities", dependencies=[Depends(require_auth)])
+    async def sdcard_capabilities() -> dict[str, Any]:
+        """Report verified byte-read capabilities separately from M20 file listing."""
+        return {
+            **capability_for_device(),
+            "active_transport": "octoprint_serial" if octoprint_mode else "mks_wifi_tcp",
+            "independent_file_bytes": False,
+            "firmware_extension_status": "not_installed_or_not_verified",
+            "safe_fallback": "Import a known local G-code copy using the HMI or Pi SD importer.",
+        }
+
+    @app.get("/api/printer/sdcard/read/{filename}", dependencies=[Depends(require_auth)])
+    async def sdcard_read(filename: str) -> dict[str, Any]:
+        """Explicit refusal until a verified read-only STM32 protocol is installed."""
+        try:
+            validate_sd_name(filename)
+        except SdReadError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Installed Robin Nano SD byte retrieval has not been verified. "
+                "M20 and MKS WiFi file listings cannot retrieve G-code contents. "
+                "Use HMI local import or a USB SD reader instead; no firmware command was sent."
+            ),
+        )
 
     @app.get("/api/hmi/import-status", dependencies=[Depends(require_auth)])
     async def hmi_import_status() -> dict[str, Any]:
