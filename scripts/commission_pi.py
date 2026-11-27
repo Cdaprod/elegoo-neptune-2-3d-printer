@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read-only remote appliance evidence. Never opens serial devices or sends G-code."""
+
 import argparse
 import json
 import re
@@ -84,12 +85,30 @@ def main():
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.host):
         parser.error("Use a configured SSH alias")
     try:
-        result = subprocess.run(["ssh", "-T", "-o", "BatchMode=yes", "-o",
-                                 "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5",
-                                 args.host, "python3 -"], input=PROBE, text=True,
-                                capture_output=True, timeout=120)
+        result = subprocess.run(
+            [
+                "ssh",
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=yes",
+                "-o",
+                "ConnectTimeout=5",
+                args.host,
+                "python3 -",
+            ],
+            check=False,
+            input=PROBE,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
         if result.returncode:
-            parser.exit(1, "Commissioning SSH probe failed; verify host trust and read access.\n")
+            parser.exit(
+                1,
+                "Commissioning SSH probe failed; verify host trust and read access.\n",
+            )
         report = json.loads(result.stdout)
         rendered = json.dumps(report, indent=2) + "\n"
         if args.output:

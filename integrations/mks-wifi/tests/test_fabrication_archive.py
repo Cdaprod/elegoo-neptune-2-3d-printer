@@ -160,3 +160,27 @@ def test_expected_digest_rejection_never_publishes_artifact(tmp_path):
     assert not list(store.root.glob("*.gcode"))
     with store.db() as db:
         assert db.execute("SELECT count(*) FROM fabrication_artifacts").fetchone()[0] == 0
+
+
+def test_printer_sd_discovery_never_matches_filename_and_size(tmp_path):
+    store = archive(tmp_path)
+    source = tmp_path / "PART.GCO"
+    source.write_bytes(b"G1 X10 E1")
+    sha = store.ingest(source, "removable_media")
+    entry = {"name": "PART.GCO", "kind": "file", "size_bytes": source.stat().st_size}
+    store.observe_discovery([entry])
+    row = store.collection("discovered")["items"][0]
+    assert row["sha256"] is None
+    assert row["lifecycle"]["identity"] == "discovered_not_archived"
+    assert row["lifecycle"]["execution"] == "not_started"
+    store.observe_discovery(
+        [{**entry, "verified_sha256": sha, "identity_evidence": "verified_content_snapshot"}]
+    )
+    row = store.collection("discovered")["items"][0]
+    assert row["sha256"] == sha and row["lifecycle"]["archive"] == "archived"
+    store.observe_discovery([], available=False)
+    source.unlink()
+    row = store.collection("discovered")["items"][0]
+    assert row["lifecycle"]["discovery"] == "unavailable"
+    assert row["lifecycle"]["archive"] == "archived"
+    assert store.verified(sha).is_file()

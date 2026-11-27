@@ -282,3 +282,41 @@ Authenticated HTTP adapters may declare `X-Artifact-Provider` as http,
 removable_media or orca_slicer and `X-Artifact-Source` as a bounded source URI.
 These are adapter-declared provenance, not hardware attestation; URIs are never
 fetched or interpreted as filesystem paths by the server.
+
+## Permanent remote commissioning command
+
+```sh
+make commission-pi
+make commission-pi SSH_HOST=neptune REPORT=/tmp/neptune-commissioning.json
+```
+
+The command uses strict-host-verified, noninteractive SSH and a fixed read-only
+Python probe. It collects OS architecture, container running/paused states, volume
+mounts, disk capacity, removable block devices, network-link state, Bluetooth/receiver/
+kiosk service state, touchscreen USB identity, stable serial paths and authenticated
+cached application observations. Credentials remain in the app container and never
+enter the report. The command opens no serial ports, sends no G-code, refreshes no
+printer catalog and performs no upload, print or firmware action. Missing permissions
+or unavailable APIs are reported rather than treated as successful validation.
+
+Executed against the actual Pi: hostname/architecture and both running/unpaused
+containers verified. Application SD catalog reports not_requested, zero cached
+entries; factory USB bridge reports available=false. The lifecycle ingestion status
+endpoint is HTTP 404 on the deployed older main revision. These are actual deployment
+gaps, not passed commissioning. Native SD enumeration remains operator-verified from
+prior transcripts; this command does not reissue M20/M23. Retrieval, wireless delivery
+and physical print acceptance remain unverified. No production services changed.
+
+## Independent lifecycle projection (schema migration 3)
+
+Printer SD catalog observations persist separately in artifact_discoveries. They
+remain metadata-only/discovered_not_archived until a verified content snapshot
+provides a SHA that passes canonical integrity verification. Matching names and
+sizes never link identities. Source disappearance marks discovery unavailable without
+erasing canonical bytes or observed executions. The gallery API returns independent
+discovery, archive/integrity, preview, delivery, execution and quality dimensions;
+SD discovery has its own existing-HMI filter and the inspector exposes these facts.
+Preview status is updated by canonical derivative generation, independent of SD
+availability. Unsupported native-SD write/delivery remains explicit; existing native
+SD execution is not removed or replaced by USB streaming. Historical transport is
+not guessed from a backend name or selected filename.

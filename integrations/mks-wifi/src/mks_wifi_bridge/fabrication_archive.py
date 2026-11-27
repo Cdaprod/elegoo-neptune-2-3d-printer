@@ -53,6 +53,14 @@ class FabricationArchive:
                     relationship TEXT NOT NULL CHECK(relationship IN
                     ('sliced_from','derived_from','observes','configured_by')),
                     PRIMARY KEY(parent_sha256,child_sha256,relationship));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(3);
+                CREATE TABLE IF NOT EXISTS artifact_discoveries(
+                    id TEXT PRIMARY KEY, provider TEXT NOT NULL, path TEXT NOT NULL,
+                    filename TEXT NOT NULL, size INTEGER, first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL, available INTEGER NOT NULL, sha256 TEXT);
+                CREATE TABLE IF NOT EXISTS artifact_derivatives(
+                    sha256 TEXT NOT NULL, kind TEXT NOT NULL, version TEXT NOT NULL,
+                    status TEXT NOT NULL, PRIMARY KEY(sha256,kind,version));
                 CREATE TABLE IF NOT EXISTS artifact_stages(
                     id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
                     source_execution_id TEXT, status TEXT NOT NULL DEFAULT 'staged',
@@ -186,17 +194,75 @@ class FabricationArchive:
                 raise ValueError("Archived artifact failed integrity verification")
         return path
 
+    def observe_discovery(self, entries, provider="printer_sd", available=True):
+        """Directory metadata is never content identity. Only verified snapshots may link bytes."""
+        from .factory_usb import catalog_visible
+
+        with self.db() as db:
+            db.execute("UPDATE artifact_discoveries SET available=0 WHERE provider=?", (provider,))
+            for entry in entries:
+                path = entry.get("name", "")
+                if entry.get("kind", "file") != "file" or not catalog_visible(path):
+                    continue
+                identity = hashlib.sha256((provider + "\0" + path).encode()).hexdigest()
+                sha = None
+                candidate = entry.get("verified_sha256")
+                if entry.get("identity_evidence") == "verified_content_snapshot" and candidate:
+                    try:
+                        self.verified(candidate)
+                        sha = candidate
+                    except (OSError, ValueError):
+                        pass
+                db.execute(
+                    "INSERT INTO artifact_discoveries VALUES(?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET size=excluded.size, "
+                    "last_seen=excluded.last_seen, "
+                    "available=excluded.available,sha256=excluded.sha256",
+                    (
+                        identity,
+                        provider,
+                        path,
+                        Path(path).name,
+                        entry.get("size_bytes"),
+                        now(),
+                        now(),
+                        int(available),
+                        sha,
+                    ),
+                )
+
+    def mark_derivative(self, sha, kind, status):
+        from .gcode_fabrication import CACHE_VERSION
+
+        with self.db() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO artifact_derivatives VALUES(?,?,?,?)",
+                (sha, kind, CACHE_VERSION, status),
+            )
+
     def collection(self, kind, before=None, limit=40):
-        if kind not in {"history", "unprinted"} or not 1 <= limit <= 100:
+        if kind not in {"history", "unprinted", "discovered"} or not 1 <= limit <= 100:
             raise ValueError("Invalid collection or page size")
         # Keyset cursors include a unique identity; insertions cannot shift old pages.
         cursor = json.loads(before) if before else ["9999", "~"]
+        if (
+            not isinstance(cursor, list)
+            or len(cursor) != 2
+            or not all(isinstance(v, str) for v in cursor)
+        ):
+            raise ValueError("Invalid chronological cursor")
         with self.db() as db:
             db.execute(
                 "INSERT OR IGNORE INTO execution_artifacts "
                 "SELECT p.id,g.sha256 FROM print_sessions p JOIN gcode_files g ON p.file_id=g.id"
             )
-            if kind == "history":
+            if kind == "discovered":
+                rows = db.execute(
+                    "SELECT *,first_seen AS ingested_at FROM artifact_discoveries "
+                    "WHERE (first_seen,id)<(?,?) ORDER BY first_seen DESC,id DESC LIMIT ?",
+                    (*cursor, limit + 1),
+                ).fetchall()
+            elif kind == "history":
                 rows = db.execute(
                     """SELECT p.*, e.sha256, a.filename AS archived_filename
                     FROM print_sessions p LEFT JOIN execution_artifacts e ON p.id=e.execution_id
@@ -220,6 +286,35 @@ class FabricationArchive:
             item["geometry_provenance"] = (
                 "approximate_deposited_filament" if item["bytes_available"] else "unavailable"
             )
+            sha = item.get("sha256")
+            with self.db() as db:
+                derivative = db.execute(
+                    "SELECT status FROM artifact_derivatives WHERE sha256=? AND kind='geometry'",
+                    (sha,),
+                ).fetchone()
+                stages = db.execute(
+                    "SELECT status FROM artifact_stages WHERE sha256=?", (sha,)
+                ).fetchall()
+            item["lifecycle"] = {
+                "discovery": "unavailable" if item.get("available") == 0 else "discovered",
+                "archive": "archived" if item["bytes_available"] else "metadata_only",
+                "archive_integrity": "verified_at_ingestion_recheck_on_access"
+                if item["bytes_available"]
+                else "unavailable",
+                "preview": derivative[0]
+                if derivative
+                else "pending"
+                if item["bytes_available"]
+                else "unavailable",
+                "delivery": stages[-1][0] if stages else "not_staged",
+                "execution": item.get("state", "not_started"),
+                "quality": "unassessed",
+                "identity": "verified_sha256" if sha else "discovered_not_archived",
+                "delivery_capabilities": {
+                    "octoprint_usb": "requires_readiness_check",
+                    "native_sd": "unsupported_unverified_write_transport",
+                },
+            }
         last = items[-1] if items else None
         return {
             "schema_version": 1,

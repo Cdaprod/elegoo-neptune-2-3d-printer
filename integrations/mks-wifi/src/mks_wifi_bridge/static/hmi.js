@@ -122,6 +122,7 @@
    inspectorRequest=new AbortController();
    inspected={file,source};
    text("inspector-title",file.filename||file.name);
+   text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
    const preview=$("inspector-image");
@@ -229,7 +230,7 @@
   if(state.loading)return;state.loading=true;const host=$("models");
   try{
    const collection=$('storage-provider').value;
-   if(['history','unprinted'].includes(collection)){
+   if(['history','unprinted','discovered'].includes(collection)){
     const page=await api('/api/fabrication/'+collection);
     host.replaceChildren();
     for(const item of page.items)host.append(card({...item,archive:true,filename:item.filename||item.archived_filename||'Unknown artifact',source_present:item.bytes_available},'archive'));

@@ -1337,9 +1337,12 @@ def create_app(
         try:
             path = await asyncio.to_thread(fabrication_archive.verified, sha)
             if derivative == "geometry":
-                return await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+                geometry = await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+                fabrication_archive.mark_derivative(sha, "geometry", "generated")
+                return geometry
             if derivative == "thumbnail":
                 svg = await asyncio.to_thread(fabrication_archive.previews.preview, path.name)
+                fabrication_archive.mark_derivative(sha, "thumbnail", "generated")
                 return Response(svg, media_type="image/svg+xml")
             raise ValueError("Unknown derivative")
         except (ValueError, FileNotFoundError) as exc:
@@ -1548,6 +1551,12 @@ def create_app(
                 )
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
+        await asyncio.to_thread(
+            fabrication_archive.observe_discovery,
+            entries,
+            "printer_sd",
+            payload.get("status") == "available",
+        )
         payload["printer_listing_source"] = (
             "factory_usb_m20"
             if octoprint_mode
