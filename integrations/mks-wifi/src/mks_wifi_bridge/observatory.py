@@ -46,6 +46,12 @@ from .mks_upload import MAX_UPLOAD_BYTES, UploadError, upload_to_mks, validate_u
 from .motion import AXES, build_motion_sample, query_m114
 from .motion_timeline import MotionTimeline
 from .octoprint_backend import OctoPrintBackend, OctoPrintError
+from .octoprint_local_import import (
+    MAX_IMPORT_BYTES,
+    LibraryImportError,
+    upload_local_gcode,
+    validate_gcode_filename,
+)
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
 from .workflows import GuidedWorkflowManager, WorkflowError
 
@@ -1039,6 +1045,10 @@ def create_app(
         not octoprint_mode and os.getenv("NEPTUNE_SD_UPLOAD_ENABLED", "false").lower() == "true"
     )
     app.state.sd_upload_in_progress = False
+    app.state.hmi_import_enabled = (
+        octoprint_mode and os.getenv("NEPTUNE_HMI_IMPORT_ENABLED", "false").lower() == "true"
+    )
+    app.state.hmi_import_lock = asyncio.Lock()
     app.state.octoprint_control_lock = asyncio.Lock()
     app.state.octoprint_command_last_accepted_at = {}
 
@@ -1364,6 +1374,61 @@ def create_app(
             else "cached_or_unavailable"
         )
         return payload
+
+    @app.get("/api/hmi/import-status", dependencies=[Depends(require_auth)])
+    async def hmi_import_status() -> dict[str, Any]:
+        """Describe operator-enabled library import, independent of printer control gates."""
+        return {
+            "available": bool(app.state.hmi_import_enabled),
+            "configured": bool(app.state.hmi_import_enabled),
+            "backend": "octoprint_local" if octoprint_mode else "unavailable",
+            "max_bytes": MAX_IMPORT_BYTES,
+            "note": (
+                "Upload G-code into OctoPrint local storage; never select or start printing."
+                if app.state.hmi_import_enabled
+                else "Set NEPTUNE_HMI_IMPORT_ENABLED=true in the root .env and redeploy."
+            ),
+        }
+
+    @app.post("/api/hmi/import-gcode", dependencies=[Depends(require_auth)])
+    async def hmi_import_gcode(filename: str, request: Request) -> dict[str, Any]:
+        """Accept a browser-picked G-code file; only copy into OctoPrint local storage."""
+        if not app.state.hmi_import_enabled or printer.backend is None:
+            raise HTTPException(status_code=423, detail="HMI G-code import is disabled.")
+        if not _origin_matches(request.headers.get("host", ""), request.headers.get("origin")):
+            raise HTTPException(status_code=403, detail="Same-origin upload required.")
+        content_type = request.headers.get("content-type", "").split(";")[0].lower()
+        if content_type != "application/octet-stream":
+            raise HTTPException(status_code=415, detail="Upload raw G-code bytes.")
+        declared = request.headers.get("content-length")
+        if declared is not None:
+            try:
+                if int(declared) < 1 or int(declared) > MAX_IMPORT_BYTES:
+                    raise HTTPException(status_code=413, detail="G-code must be 1 byte to 50 MiB.")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid Content-Length.") from exc
+        if app.state.hmi_import_lock.locked():
+            raise HTTPException(status_code=409, detail="Another G-code import is active.")
+        try:
+            validate_gcode_filename(filename, b"x")
+        except LibraryImportError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        async with app.state.hmi_import_lock:
+            data = bytearray()
+            async for chunk in request.stream():
+                if len(data) + len(chunk) > MAX_IMPORT_BYTES:
+                    raise HTTPException(status_code=413, detail="G-code exceeds the 50 MiB limit.")
+                data.extend(chunk)
+            if not data:
+                raise HTTPException(status_code=422, detail="G-code file is empty.")
+            backend = printer.backend
+            try:
+                result = await asyncio.to_thread(
+                    upload_local_gcode, backend.base_url, backend.api_key, filename, bytes(data)
+                )
+            except LibraryImportError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return {**result, "storage": "octoprint_local", "printer_command_sent": False}
 
     @app.get("/visual-lab", response_class=HTMLResponse, include_in_schema=False)
     def visualization_lab() -> HTMLResponse:
