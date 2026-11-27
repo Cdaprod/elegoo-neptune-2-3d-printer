@@ -20,7 +20,7 @@ receiver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(receiver)
 
 
-def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
+def test_wireless_http_to_completed_to_canonical_archive(tmp_path, monkeypatch):
     token = "local-test-only-" + "x" * 32
     server = receiver.Receiver(("127.0.0.1", 0), tmp_path / "incoming", token)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -53,11 +53,13 @@ def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
                 send(**bad)
             assert error.value.code == code
         assert not list(server.completed.iterdir())
-        result = send()
-        assert result["status"] == "received_pending_ingestion" and not result["printing"]
-        inode = list(server.completed.iterdir())[0].stat().st_ino
         from concurrent.futures import ThreadPoolExecutor
 
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first_results = list(pool.map(lambda _: send(), range(2)))
+        result = first_results[0]
+        assert result["status"] == "received_pending_ingestion" and not result["printing"]
+        inode = list(server.completed.iterdir())[0].stat().st_ino
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: send(), range(2)))
         assert all(item["sha256"] == sha for item in results)
@@ -75,6 +77,11 @@ def test_wireless_http_to_completed_to_canonical_archive(tmp_path):
         with pytest.raises(HTTPError) as error:
             send()
         assert error.value.code == 409
+        assert target.read_bytes() == b"corrupt"
+        monkeypatch.setattr(receiver.shutil, "disk_usage", lambda _: SimpleNamespace(free=0))
+        with pytest.raises(HTTPError) as error:
+            send()
+        assert error.value.code == 507
         assert target.read_bytes() == b"corrupt"
 
         with archive.db() as db:
@@ -119,6 +126,60 @@ def test_ssh_sender_bridge_to_real_loopback_receiver(tmp_path):
         assert not result["printing"]
         assert len(list(server.completed.iterdir())) == 1
     finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_incomplete_bodies_admission_timeout_and_startup_orphans(tmp_path):
+    import socket
+    import time
+
+    token = "bounded-receiver-test-" + "x" * 32
+    root = tmp_path / "incoming"
+    (root / "partial").mkdir(parents=True)
+    orphan = root / "partial/receive-old.part"
+    orphan.write_bytes(b"unfinished from prior process")
+    server = receiver.Receiver(("127.0.0.1", 0), root, token)
+    server.read_timeout = 1
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    sockets = []
+    header = (
+        "POST /receive?filename=slow.gcode HTTP/1.0\r\n"
+        f"Authorization: Bearer {token}\r\nContent-Length: 10\r\n"
+        "Content-Type: application/octet-stream\r\n"
+        f"X-Content-SHA256: {'a' * 64}\r\n\r\n"
+    ).encode()
+    try:
+        for _ in range(2):
+            client = socket.create_connection(server.server_address, timeout=3)
+            sockets.append(client)
+            client.sendall(header + b"G")
+        deadline = time.monotonic() + 2
+        while len(list(server.partial.glob("*.part"))) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        busy = socket.create_connection(server.server_address, timeout=3)
+        with busy:
+            busy.sendall(header)
+            assert b"429" in busy.recv(4096)
+        for client in sockets:
+            client.shutdown(socket.SHUT_WR)
+            assert b"400" in client.recv(4096)
+            client.close()
+        deadline = time.monotonic() + 2
+        while len(list(server.partial.glob("*.part"))) > 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert list(server.partial.glob("*.part")) == [orphan]
+        assert not list(server.completed.iterdir())
+        server.read_timeout = 0.1
+        with socket.create_connection(server.server_address, timeout=3) as client:
+            client.sendall(header)
+            assert b"400" in client.recv(4096)
+        assert not list(server.completed.iterdir())
+    finally:
+        for client in sockets:
+            client.close()
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)

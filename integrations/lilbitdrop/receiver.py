@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import time
@@ -40,10 +41,31 @@ class Receiver(ThreadingHTTPServer):
         self.read_timeout = 15
         self.transfer_timeout = 300
         self.slots = threading.BoundedSemaphore(2)
+        self.connections = threading.BoundedSemaphore(8)
         super().__init__(address, Handler)
+
+    def process_request(self, request, client_address):
+        if not self.connections.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.connections.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.connections.release()
 
 
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(self.server.read_timeout)
+
     # Never log URLs, authorization headers or uploaded content.
     def log_message(self, *_args):
         pass
@@ -93,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
         lengths = self.headers.get_all("Content-Length", [])
         if len(lengths) != 1 or not lengths[0].isdigit():
             return self.respond(411, {"error": "Content-Length required"})
+        if len(lengths[0]) > 10:
+            return self.respond(413, {"error": "Content-Length exceeds limit"})
         size = int(lengths[0])
         if not 0 < size <= MAX_BYTES:
             return self.respond(413, {"error": "File must be 1 byte to 50 MiB"})
@@ -138,11 +162,18 @@ class Handler(BaseHTTPRequestHandler):
                 )  # Atomic create-if-absent; never replaces readers' inode.
             except FileExistsError:
                 try:
-                    existing = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+                    existing = os.open(
+                        target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                    )
                     with os.fdopen(existing, "rb") as source:
                         before = os.fstat(source.fileno())
-                        valid = before.st_size == size and hmac.compare_digest(
-                            hashlib.file_digest(source, "sha256").hexdigest(), expected
+                        valid = (
+                            stat.S_ISREG(before.st_mode)
+                            and before.st_size == size
+                            and hmac.compare_digest(
+                                hashlib.file_digest(source, "sha256").hexdigest(),
+                                expected,
+                            )
                         )
                         after = os.fstat(source.fileno())
                     current = target.lstat()

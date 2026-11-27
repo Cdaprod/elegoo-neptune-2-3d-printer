@@ -217,3 +217,38 @@ retention/cleanup requires verified archive receipts and an explicit policy.
 Local integration tests exercise real HTTP authentication, path/checksum failures,
 idempotent transfer, atomic handoff, ingestion, provenance and no staging. These
 are software validation, not physical wireless/BLE or printer acceptance.
+
+## Reviewed sender and publication hardening
+
+Completed publication uses atomic no-clobber hard links on the same filesystem,
+not replacement. Duplicate SHA/name uploads verify the existing regular file's
+size, digest and inode before acknowledging it. Corrupt or symlink targets fail
+closed with HTTP 409 and are never overwritten. Concurrent first publication and
+retries are tested; readers keep the same inode. A whole-transfer deadline and
+bounded connection/upload slots complement socket timeouts. Failed incomplete
+requests clean up their own temporary files. Orphans from a prior process remain
+under partial/ and are never promoted automatically; storage reserve checks bound
+further admission rather than guessing whether an orphan is safe to delete.
+
+The MacBook/Orca post-processing sender is:
+
+```sh
+python3 integrations/lilbitdrop/send.py /path/to/part.gcode --ssh-host neptune
+```
+
+It streams through SSH with BatchMode and StrictHostKeyChecking enabled, executes a
+small remote Python HTTP bridge to loopback port 8091, and verifies the returned
+digest and size. The private bearer token stays on the Pi; it is not copied to the
+MacBook or placed in process arguments. The sender does not upload to OctoPrint,
+stage a job or initiate printing. SSH transport/authentication was physically
+verified separately; end-to-end tests simulate the SSH executable while executing
+the actual remote Python bridge against a real local receiver. A complete Mac-to-Pi
+file delivery has NOT been run because production receiver deployment is not
+authorized by this review. Receiver and adapter must first be commissioned using
+the existing checkout/volumes and supplemental read group.
+
+CI lints, format-checks and syntax-compiles both standalone Python programs.
+Receiver regression cases include simultaneous first publication, inode-preserving
+retries, corrupt-target rejection, authentication, checksum/path errors, disk-space
+rejection, incomplete concurrent bodies, admission saturation, timeout cleanup,
+startup orphans, original sender filename provenance and no automatic staging.
