@@ -999,6 +999,28 @@ def create_app(
         while True:
             try:
                 await asyncio.to_thread(fabrication_archive.reconcile, local_gcode_indexer)
+                if os.getenv("NEPTUNE_NATIVE_SD_AUTO_ARCHIVE", "false").lower() == "true":
+                    storage = native_sd_service()
+                    if not any(not task.done() for task in storage.tasks.values()):
+                        entries = await storage.listing()
+                        for entry in entries:
+                            # Failed/cancelled transfers require an operator retry, not an endless loop.
+                            attempted = any(
+                                job.get("filename") == entry["name"]
+                                for job in storage.jobs.values()
+                            )
+                            if entry.get("cached_sha256"):
+                                sha = entry["cached_sha256"]
+                                await asyncio.to_thread(
+                                    fabrication_archive.ingest,
+                                    storage.cached(sha),
+                                    "printer_sd",
+                                    entry["name"],
+                                )
+                            elif not attempted:
+                                storage.start(entry["name"])
+                                break
+
             except Exception:
                 logger.exception("Archive ingestion deferred; existing history preserved")
             await asyncio.sleep(60)

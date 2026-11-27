@@ -67,3 +67,17 @@ restore verification remain an explicit delivery gate.
 No physical print, heating, motion, upload or firmware operation is part of these
 software tests. Physical SD retrieval and Pi frame-rate validation remain separately
 commissioned capabilities.
+
+## Motherboard SD backup policy
+
+The default durable location is `/data/fabrication-archive`, beside the persisted
+timeline database, not on the removable card or in the evictable native-SD cache.
+A verified native transfer copies into this archive before reporting completion.
+`NEPTUNE_NATIVE_SD_AUTO_ARCHIVE=true` enables a bounded background pass (one new
+transfer per minute, exclusive existing USB owner); it also requires separately
+enabled, commissioned RSD/1 capability. Failed/cancelled transfers require an
+operator retry. Factory firmware metadata-only entries are never marked backed up.
+No automatic hardware operations were run to validate this experimental opt-in.
+Original bytes and execution records survive card reformatting only after bytes
+have actually been acquired. No software can reconstruct missing original bytes
+from M20 filenames or M23 sizes.
