@@ -226,10 +226,40 @@
  }
  window.addEventListener('hmi:filter-models',filterModels);
  $('storage-provider').addEventListener('change',()=>{filterModels();loadFiles();});
+ const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[]} ]));
+ async function renderArchiveLane(kind,lane){
+  const page=archivePages[kind];
+  const response=await api('/api/fabrication/'+kind+'?limit=20'+(page.before?'&before='+encodeURIComponent(page.before):''));
+  const track=lane.querySelector('.archive-track');track.replaceChildren();
+  for(const item of response.items){const node=card({...item,archive:true,filename:item.filename||item.archived_filename||'Unknown artifact',source_present:item.bytes_available},'archive');
+   if(localStorage.getItem('neptune.archive.selection')===kind+':'+item.id)node.classList.add('selected');
+   node.addEventListener('click',()=>localStorage.setItem('neptune.archive.selection',kind+':'+item.id));
+   track.append(node);
+  }
+  if(!response.items.length)track.textContent=kind==='history'?'No observed executions yet. Outcomes are never invented.':kind==='unprinted'?'No unprinted archived artifacts yet.':'No printer SD observations yet.';
+  const [previous,next]=lane.querySelectorAll('.archive-pages button');
+  previous.disabled=!page.previous.length;next.disabled=!response.next;
+  previous.onclick=async()=>{page.before=page.previous.pop();await renderArchiveLane(kind,lane);};
+  next.onclick=async()=>{page.previous.push(page.before);page.before=response.next;await renderArchiveLane(kind,lane);};
+ }
+ async function renderChronology(host){
+  host.dataset.layout='chronology';host.replaceChildren();
+  for(const [kind,title] of [['history','Print history'],['unprinted','Unprinted'],['discovered','SD discovery']]){
+   const lane=document.createElement('section');lane.className='archive-lane';lane.dataset.collection=kind;
+   const heading=document.createElement('h3');heading.textContent=title;
+   const track=document.createElement('div');track.className='archive-track';track.setAttribute('aria-label',title+' chronological previews');
+   const pages=document.createElement('div');pages.className='archive-pages';
+   for(const [label,symbol] of [['Previous page','←'],['Next page','→']]){const button=document.createElement('button');button.textContent=symbol;button.setAttribute('aria-label',title+' '+label);pages.append(button);}
+   lane.append(heading,track,pages);host.append(lane);await renderArchiveLane(kind,lane);
+  }
+ }
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
   try{
    const collection=$('storage-provider').value;
+   if(collection==='archive'){await renderChronology(host);return;}
+   delete host.dataset.layout;
+
    if(['history','unprinted','discovered'].includes(collection)){
     const page=await api('/api/fabrication/'+collection);
     host.replaceChildren();
