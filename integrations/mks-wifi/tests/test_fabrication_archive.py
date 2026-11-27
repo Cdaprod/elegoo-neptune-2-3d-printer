@@ -184,3 +184,30 @@ def test_printer_sd_discovery_never_matches_filename_and_size(tmp_path):
     assert row["lifecycle"]["discovery"] == "unavailable"
     assert row["lifecycle"]["archive"] == "archived"
     assert store.verified(sha).is_file()
+
+
+def test_backup_restore_preserves_originals_and_execution_identity(tmp_path):
+    from mks_wifi_bridge.archive_backup import backup, restore
+
+    store = archive(tmp_path)
+    source = tmp_path / "source.gcode"
+    source.write_bytes(b"G90\nG1 X10 E1")
+    sha = store.ingest(source)
+    with store.db() as db:
+        db.execute("INSERT INTO gcode_files VALUES(?,?)", ("g", sha))
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            ("old", "source.gcode", "2000", "2001", "failed", 10, "g", "printer_sd"),
+        )
+    store.collection("history")
+    path = tmp_path / "backup.tar.gz"
+    backup(store.timeline.path, path)
+    source.unlink()
+    target = tmp_path / "restored"
+    restore(path, target)
+    restored = FabricationArchive(type(store.timeline)(path=str(target / "ledger.sqlite")))
+    assert restored.verified(sha).read_bytes() == b"G90\nG1 X10 E1"
+    assert restored.collection("history")["items"][0]["id"] == "old"
+    assert restored.collection("history")["items"][0]["state"] == "failed"
+    with pytest.raises(ValueError):
+        restore(path, target)

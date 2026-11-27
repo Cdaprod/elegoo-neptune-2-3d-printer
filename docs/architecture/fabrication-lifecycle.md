@@ -320,3 +320,23 @@ Preview status is updated by canonical derivative generation, independent of SD
 availability. Unsupported native-SD write/delivery remains explicit; existing native
 SD execution is not removed or replaced by USB streaming. Historical transport is
 not guessed from a backend name or selected filename.
+
+## Implemented verified backup and restoration
+
+```sh
+python3 -m mks_wifi_bridge.archive_backup backup /data/neptune-observatory.db /backup/archive.tar.gz
+python3 -m mks_wifi_bridge.archive_backup restore /backup/archive.tar.gz /restore/new-location
+```
+
+Use the app's installed Python environment. These commands are operator operations,
+not part of read-only commissioning and were not run on production. Backup uses
+SQLite's consistent snapshot API and packages the canonical originals referenced
+by that snapshot, plus a checksum manifest. It refuses an existing backup filename.
+Restoration accepts only the manifest's regular files, verifies original SHA-256,
+database checksum, SQLite integrity and catalog identity, and requires a new target
+directory. Paths/symlinks/duplicate members are rejected rather than extracted with
+a generic tar extractor. Failed verification never installs a production database.
+Artifacts, print identities, outcomes, provenance and relationships are preserved;
+derivatives can regenerate from immutable originals. Test restoration before
+replacing a deployment's existing data volume, preserve its backup and set correct
+app ownership. No automatic production replacement or service restart is provided.
