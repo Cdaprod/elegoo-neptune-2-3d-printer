@@ -995,13 +995,25 @@ def create_app(
             logger.exception("Could not persist this telemetry timeline sample")
         await hub.publish(dashboard_snapshot(snapshot))
 
+    async def archive_worker():
+        while True:
+            try:
+                await asyncio.to_thread(fabrication_archive.reconcile, local_gcode_indexer)
+            except Exception:
+                logger.exception("Archive ingestion deferred; existing history preserved")
+            await asyncio.sleep(60)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         printer.stop_event.clear()
+        archive_task = asyncio.create_task(archive_worker())
         printer.worker_task = asyncio.create_task(printer.run_poller(publish_dashboard_snapshot))
         try:
             yield
         finally:
+            archive_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await archive_task
             native_storage = getattr(app.state, "native_sd_storage", None)
             if native_storage:
                 tasks = list(native_storage.tasks.values())
@@ -1118,7 +1130,7 @@ def create_app(
     from .native_sd_api import install as install_native_sd
 
     native_sd_service = install_native_sd(
-        app, require_auth, require_control_token, printer, model_preview_slots
+        app, require_auth, require_control_token, printer, model_preview_slots, fabrication_archive
     )
 
     def request_requires_auth(request: Request) -> bool:

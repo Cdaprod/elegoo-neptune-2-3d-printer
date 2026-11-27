@@ -43,7 +43,8 @@ explicit unavailable indicators for metadata-only history.
 
 ## Remaining integration gates — not yet production-complete
 
-- Automatic bounded ingestion of local, manufacturing and verified native-SD bytes.
+- Manufacturing source-model ingestion; local files now ingest automatically in bounded
+  four-file passes, and verified native-SD transfers archive before completion.
 - Durable execution-to-artifact links independent of timeline cache eviction, removal
   of legacy session retention, OctoPrint event reconciliation and explicit events.
 - Independently scrollable simultaneous chronological lanes, pagination controls,
@@ -54,8 +55,8 @@ explicit unavailable indicators for metadata-only history.
 - Full browser/ARM64/OctoPrint CI and target-resolution rendered archive screenshots.
 
 Do not merge this checkpoint as the complete lifecycle feature. Existing legacy
-history retention still applies until the migration above is finished; previously
-deleted history cannot be reconstructed without external records.
+session retention has now been removed. Execution-to-SHA links survive geometry
+cache eviction; previously deleted history cannot be reconstructed without external records.
 
 For an offline backup, stop the application normally, copy the existing timeline
 SQLite database and its adjacent fabrication-archive directory together, then

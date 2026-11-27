@@ -244,20 +244,20 @@ def test_octoprint_usb_missing_plugin_preserves_telemetry_and_catalog(monkeypatc
         if endpoint == "/api/plugin/neptune_sd_read":
             raise OctoPrintError("HTTP 404")
         return {
-            "/api/connection": {
-                "current": {"port": "/dev/ttyUSB-printer", "state": "Operational"}
-            },
+            "/api/connection": {"current": {"port": "/dev/ttyUSB-printer", "state": "Operational"}},
             "/api/printer": {
                 "state": {"flags": {"operational": True}},
                 "temperature": {"tool0": {"actual": 23.94}, "bed": {"actual": 23.91}},
             },
             "/api/job": {},
-            "/api/files": {"files": [
-                {"name": "AXOLOTL.GCO", "origin": "printer"},
-                {"name": "legacy.gcode", "origin": "sdcard"},
-                {"name": "._AXOLOTL.GCO", "origin": "printer"},
-                {"name": "local.gcode", "origin": "local"},
-            ]},
+            "/api/files": {
+                "files": [
+                    {"name": "AXOLOTL.GCO", "origin": "printer"},
+                    {"name": "legacy.gcode", "origin": "sdcard"},
+                    {"name": "._AXOLOTL.GCO", "origin": "printer"},
+                    {"name": "local.gcode", "origin": "local"},
+                ]
+            },
         }[endpoint]
 
     async def unavailable(*args):

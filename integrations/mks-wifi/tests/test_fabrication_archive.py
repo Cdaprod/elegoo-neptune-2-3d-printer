@@ -64,3 +64,22 @@ def test_same_filename_is_not_identity_and_metadata_does_not_invent_geometry(tmp
     assert row["sha256"] is None and not row["bytes_available"]
     with pytest.raises(ValueError):
         store.stage_again("unknown")
+
+
+def test_execution_link_survives_geometry_cache_eviction(tmp_path):
+    store = archive(tmp_path)
+    source = tmp_path / "part.gcode"
+    source.write_text("G1 X10 E1")
+    sha = store.ingest(source)
+    with store.db() as db:
+        db.execute("INSERT INTO gcode_files VALUES(?,?)", ("g", sha))
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            ("historic", "part.gcode", "2000-01-01", "2000-01-02", "failed", 5, "g", "observed"),
+        )
+    store.collection("history")
+    with store.db() as db:
+        db.execute("UPDATE print_sessions SET file_id=NULL")
+        db.execute("DELETE FROM gcode_files")
+    assert store.collection("history")["items"][0]["sha256"] == sha
+    assert store.stage_again("historic")["sha256"] == sha

@@ -12,7 +12,7 @@ from .native_sd import NativeSdStorage, OctoPrintSdTransport
 from .robin_sd_read import SdReadError
 
 
-def install(app, read_auth, write_auth, printer, preview_slots=None):
+def install(app, read_auth, write_auth, printer, preview_slots=None, archive=None):
     storage = None
 
     def service():
@@ -29,6 +29,7 @@ def install(app, read_auth, write_auth, printer, preview_slots=None):
                 OctoPrintSdTransport(printer.backend),
                 preview_slots=preview_slots,
             )
+            storage.archive = archive
             app.state.native_sd_storage = storage
         return storage
 

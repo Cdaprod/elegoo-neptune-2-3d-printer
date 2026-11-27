@@ -45,6 +45,7 @@ jobs:
           python ../../scripts/test_import_sd_gcode.py -q
           python ../../scripts/test_appliance_config.py -q
           python ../../scripts/test_usb_owner.py -q
+          python -m unittest discover -s ../../tests -p test_octoprint_startup.py -q
       - name: Lint and formatting
         run: |
           uv run --no-sync ruff check src tests

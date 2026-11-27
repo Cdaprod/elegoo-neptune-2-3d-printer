@@ -29,6 +29,8 @@ class FabricationArchive:
         self.previews = FabricationPreviewService(self.root, self.root / "derivatives")
         with self.db() as db:
             db.executescript("""
+                CREATE TABLE IF NOT EXISTS execution_artifacts(
+                    execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS fabrication_schema(version INTEGER PRIMARY KEY);
                 INSERT OR IGNORE INTO fabrication_schema VALUES(1);
                 CREATE TABLE IF NOT EXISTS fabrication_artifacts(
@@ -44,13 +46,47 @@ class FabricationArchive:
                     FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
             """)
 
+    def reconcile(self, indexer, limit=4):
+        """Bounded automatic ingestion; missing sources never delete the archive."""
+        root = indexer.source_dir
+        if root is None:
+            return 0
+        index = indexer.scan()
+        count = 0
+        for item in index.get("files", []):
+            if count >= limit:
+                break
+            if not item.get("source_present"):
+                continue
+            path = (root / item["relative_path"]).resolve()
+            if not path.is_relative_to(root.resolve()) or not path.is_file():
+                continue
+            signature = str(path.stat().st_mtime_ns) + ":" + str(path.stat().st_size)
+            with self.db() as db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS archive_ingestion "
+                    "(path TEXT PRIMARY KEY, signature TEXT NOT NULL)"
+                )
+                previous = db.execute(
+                    "SELECT signature FROM archive_ingestion WHERE path=?", (str(path),)
+                ).fetchone()
+            if previous and previous[0] == signature:
+                continue
+            self.ingest(path)
+            with self.db() as db:
+                db.execute(
+                    "INSERT OR REPLACE INTO archive_ingestion VALUES(?,?)", (str(path), signature)
+                )
+            count += 1
+        return count
+
     def db(self):
         db = sqlite3.connect(self.timeline.path, timeout=10)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         return db
 
-    def ingest(self, source, provider="local"):
+    def ingest(self, source, provider="local", original_filename=None):
         source = Path(source)
         if source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_SOURCE_BYTES:
             raise ValueError("Source must be a bounded regular file")
@@ -73,7 +109,13 @@ class FabricationArchive:
             with self.db() as db:
                 db.execute(
                     "INSERT OR IGNORE INTO fabrication_artifacts VALUES(?,?,?,?,?)",
-                    (sha, source.name, size, now(), json.dumps({"provenance": provider})),
+                    (
+                        sha,
+                        original_filename or source.name,
+                        size,
+                        now(),
+                        json.dumps({"provenance": provider}),
+                    ),
                 )
                 db.execute(
                     "INSERT OR REPLACE INTO artifact_locations VALUES(?,?,?,?)",
@@ -98,19 +140,22 @@ class FabricationArchive:
         # Keyset cursors include a unique identity; insertions cannot shift old pages.
         cursor = json.loads(before) if before else ["9999", "~"]
         with self.db() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO execution_artifacts "
+                "SELECT p.id,g.sha256 FROM print_sessions p JOIN gcode_files g ON p.file_id=g.id"
+            )
             if kind == "history":
                 rows = db.execute(
-                    """SELECT p.*, g.sha256, a.filename AS archived_filename
-                    FROM print_sessions p LEFT JOIN gcode_files g ON p.file_id=g.id
-                    LEFT JOIN fabrication_artifacts a ON a.sha256=g.sha256
+                    """SELECT p.*, e.sha256, a.filename AS archived_filename
+                    FROM print_sessions p LEFT JOIN execution_artifacts e ON p.id=e.execution_id
+                    LEFT JOIN fabrication_artifacts a ON a.sha256=e.sha256
                     WHERE (p.started_at,p.id)<(?,?) ORDER BY p.started_at DESC,p.id DESC LIMIT ?""",
                     (*cursor, limit + 1),
                 ).fetchall()
             else:
                 rows = db.execute(
                     """SELECT a.*, a.sha256 AS id FROM fabrication_artifacts a
-                    WHERE NOT EXISTS(SELECT 1 FROM print_sessions p JOIN gcode_files g
-                    ON p.file_id=g.id WHERE g.sha256=a.sha256)
+                    WHERE NOT EXISTS(SELECT 1 FROM execution_artifacts e WHERE e.sha256=a.sha256)
                     AND (a.ingested_at,a.sha256)<(?,?)
                     ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT ?""",
                     (*cursor, limit + 1),
@@ -135,11 +180,12 @@ class FabricationArchive:
     def stage_again(self, execution_id):
         with self.db() as db:
             row = db.execute(
-                "SELECT g.sha256 FROM print_sessions p JOIN gcode_files g "
-                "ON p.file_id=g.id WHERE p.id=?",
+                "SELECT COALESCE(e.sha256,g.sha256) FROM print_sessions p "
+                "LEFT JOIN execution_artifacts e ON e.execution_id=p.id "
+                "LEFT JOIN gcode_files g ON p.file_id=g.id WHERE p.id=?",
                 (execution_id,),
             ).fetchone()
-            if row is None:
+            if row is None or row[0] is None:
                 raise ValueError("This execution has no verified artifact association")
             self.verified(row[0])
             identity = uuid.uuid4().hex

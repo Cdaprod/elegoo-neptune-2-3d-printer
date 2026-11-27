@@ -867,12 +867,14 @@ class MotionTimeline:
     @staticmethod
     def _prune(db: sqlite3.Connection) -> None:
         cutoff = (datetime.now(UTC) - timedelta(days=RETENTION_DAYS)).isoformat()
-        history_cutoff = (
-            datetime.now(UTC) - timedelta(days=PRINT_HISTORY_RETENTION_DAYS)
-        ).isoformat()
+        # Execution identities and artifact links are durable; geometry/telemetry are caches.
         db.execute(
-            "DELETE FROM print_sessions WHERE ended_at IS NOT NULL AND ended_at < ?",
-            (history_cutoff,),
+            "CREATE TABLE IF NOT EXISTS execution_artifacts "
+            "(execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT OR IGNORE INTO execution_artifacts "
+            "SELECT p.id,g.sha256 FROM print_sessions p JOIN gcode_files g ON p.file_id=g.id"
         )
         db.execute(
             "DELETE FROM telemetry WHERE id NOT IN "
