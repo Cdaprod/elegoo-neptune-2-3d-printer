@@ -139,6 +139,7 @@ jobs:
         run: |
           node scripts/test-hmi-navigation.cjs
           node scripts/test-hmi-3d-gallery.cjs
+          node scripts/test-hmi-three-performance.cjs
           node scripts/test-appliance-hmi.cjs
           node scripts/test-hmi-cinematic.cjs
           node scripts/test-sculpture-browser.cjs
