@@ -107,3 +107,5 @@ The existing browser regressions continue to check navigation, desktop/mobile,
 shared authentication, overflow and absence of automatic printer writes. CI publishes
 the cinematic screenshot alongside the existing HMI preview artifacts. Physical
 Pi GPU performance and real touch wake remain on-device acceptance checks.
+
+Native Robin Nano SD retrieval is documented in [the native SD integration guide](native-robin-sd.md). Stock firmware remains unsupported for byte retrieval; experimental firmware is isolated and never flashed by `make deploy`.

@@ -257,3 +257,8 @@ part of UI validation; print submission keeps its existing operator gates.
 The HMI also supports a continuous cinematic idle experience after 2½ minutes:
 its shared Three.js scene becomes a full-width machine study, and a consumed wake
 gesture transitions back to the same panel. See [HMI motion and idle behavior](docs/waveshare-hmi.md#continuous-cinematic-idle-mode).
+
+Native Robin Nano SD retrieval is documented in [docs/native-robin-sd.md](docs/native-robin-sd.md). Stock firmware remains unsupported for byte retrieval; experimental firmware is isolated and never flashed by `make deploy`.
+
+Factory USB observations, exclusive ownership checks and the one-time USB migration
+are documented in [Native Robin SD access](docs/native-robin-sd.md). Factory SD file-content retrieval remains unverified; no firmware flashing is part of deployment.

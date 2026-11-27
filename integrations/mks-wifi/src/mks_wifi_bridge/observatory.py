@@ -53,6 +53,7 @@ from .octoprint_local_import import (
     validate_gcode_filename,
 )
 from .protocol import READ_ONLY_COMMANDS, telemetry_payload
+from .robin_sd_read import SdReadError, capability_for_device, validate_sd_name
 from .workflows import GuidedWorkflowManager, WorkflowError
 
 MAX_HISTORY = 1800
@@ -122,6 +123,9 @@ class SdEntry(BaseModel):
     name: str
     kind: str
     size_bytes: int | None = None
+    source: str | None = None
+    display_name: str | None = None
+    selected: bool = False
     preview_available: bool = False
     ambiguous: bool = False
     preview_source: str = "none"
@@ -308,7 +312,10 @@ class PrinterService:
             async with self.io_lock:
                 if self.backend is not None:
                     status = await self.backend.read_state()
-                    if self.physical_status_reader is not None:
+                    if (
+                        self.physical_status_reader is not None
+                        and status.get("connection_transport") != "usb"
+                    ):
                         try:
                             self.external_sd_status = await self.physical_status_reader.read_state()
                         except (MksHttpStatusError, OSError, TimeoutError) as exc:
@@ -410,6 +417,12 @@ class PrinterService:
             status if self.backend is not None else telemetry_payload(status, self.firmware)
         )
         if self.backend is not None:
+            firmware = self.telemetry.get("firmware_identification", {})
+            if firmware.get("status") == "available":
+                self.firmware = firmware["value"]
+                self.firmware_observed_at = utc_now()
+            if self.telemetry.get("connection_transport") == "usb":
+                self.external_sd_status = None
             self.telemetry["external_sd"] = self.external_sd_status or {
                 "status": "unavailable",
                 "state": "unknown",
@@ -986,6 +999,12 @@ def create_app(
         try:
             yield
         finally:
+            native_storage = getattr(app.state, "native_sd_storage", None)
+            if native_storage:
+                tasks = list(native_storage.tasks.values())
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
             await command_executor.shutdown()
             printer.stop_event.set()
             if printer.worker_task:
@@ -1090,6 +1109,14 @@ def create_app(
     from .manufacturing.api import install as install_print_bay
 
     install_print_bay(app, require_auth, require_control_token, printer)
+    from .factory_usb import install as install_factory_usb
+
+    install_factory_usb(app, require_auth, require_control_token, printer)
+    from .native_sd_api import install as install_native_sd
+
+    native_sd_service = install_native_sd(
+        app, require_auth, require_control_token, printer, model_preview_slots
+    )
 
     def request_requires_auth(request: Request) -> bool:
         peer = request.client.host if request.client else ""
@@ -1362,10 +1389,24 @@ def create_app(
             }
             for entry in payload.get("entries", [])
         ]
+        from .factory_usb import catalog_visible
+
+        entries = [entry for entry in entries if catalog_visible(entry.get("name", ""))]
+        if octoprint_mode and printer.backend.connection_transport == "usb":
+            selected = printer.backend.factory_observations.get("select", {}).get("data", {})
+            for entry in entries:
+                entry["selected"] = bool(
+                    selected.get("selected")
+                    and selected.get("filename", "").casefold() == entry.get("name", "").casefold()
+                )
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
         payload["printer_listing_source"] = (
-            "octoprint_sdcard"
+            "factory_usb_m20"
+            if octoprint_mode
+            and printer.backend.connection_transport == "usb"
+            and payload.get("status") == "available"
+            else "octoprint_sdcard"
             if octoprint_mode
             else "firmware_m20"
             if payload.get("status") == "available"
@@ -1374,6 +1415,63 @@ def create_app(
             else "cached_or_unavailable"
         )
         return payload
+
+    @app.get("/api/printer/sdcard/capabilities", dependencies=[Depends(require_auth)])
+    async def sdcard_capabilities() -> dict[str, Any]:
+        """Report verified byte-read capabilities separately from M20 file listing."""
+        if os.getenv("NEPTUNE_NATIVE_SD_READ_ENABLED", "false").lower() == "true":
+            try:
+                return await native_sd_service().transport.capabilities()
+            except Exception:
+                return {**capability_for_device(), "note": "Configured SD bridge unavailable"}
+        return {
+            **capability_for_device(),
+            "active_transport": "octoprint_serial" if octoprint_mode else "mks_wifi_tcp",
+            "independent_file_bytes": False,
+            "firmware_extension_status": "not_installed_or_not_verified",
+            "safe_fallback": "Import a known local G-code copy using the HMI or Pi SD importer.",
+        }
+
+    @app.get("/api/printer/sdcard/read/{filename}", dependencies=[Depends(require_auth)])
+    async def sdcard_read(filename: str):
+        """Explicit refusal until a verified read-only STM32 protocol is installed."""
+        try:
+            validate_sd_name(filename)
+        except SdReadError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if os.getenv("NEPTUNE_NATIVE_SD_READ_ENABLED", "false").lower() == "true":
+            try:
+                storage = native_sd_service()
+                matches = [
+                    asset
+                    for asset in storage.assets.values()
+                    if asset["original_path"].casefold() == filename.casefold()
+                    and asset.get("cache_available")
+                ]
+                if matches:
+                    latest = max(matches, key=lambda asset: asset["retrieved_at"])
+                    from fastapi.responses import FileResponse
+
+                    return FileResponse(
+                        await asyncio.to_thread(storage.cached, latest["sha256"]),
+                        media_type="text/plain",
+                        filename=latest["original_filename"],
+                        headers={
+                            "X-Neptune-SD-Source": "verified-cache",
+                            "X-Content-SHA256": latest["sha256"],
+                        },
+                    )
+            except SdReadError as exc:
+                raise HTTPException(423, str(exc)) from exc
+            raise HTTPException(409, "Retrieve this file with POST /api/native-sd/transfers first")
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Installed Robin Nano SD byte retrieval has not been verified. "
+                "M20 and MKS WiFi file listings cannot retrieve G-code contents. "
+                "Use HMI local import or a USB SD reader instead; no firmware command was sent."
+            ),
+        )
 
     @app.get("/api/hmi/import-status", dependencies=[Depends(require_auth)])
     async def hmi_import_status() -> dict[str, Any]:

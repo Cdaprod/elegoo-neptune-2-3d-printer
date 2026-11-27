@@ -100,3 +100,6 @@ body[data-idle-phase=waking] #idle-overlay{transition-duration:.7s}
 #view-models .models-head button:disabled{opacity:.5;cursor:wait}
 #view-models #import-gcode-files[hidden]{display:none}
 @media(max-width:900px){#view-models .models-head{gap:3px}#view-models .models-head .heading{min-width:75px;font-size:9px}#view-models #import-gcode,#view-models #refresh-files{padding:3px 5px;font-size:10px}#view-models #sd-import-status{display:none}}
+/* Storage identity is independent of filenames and of printer control state. */
+#storage-provider{min-height:39px;max-width:158px;padding:6px 9px;border:1px solid var(--border,#36566f);border-radius:8px;background:#0c1e30;color:#e5f6ff;font:inherit;font-size:12px}
+#native-sd-status:empty{display:none}

@@ -13,7 +13,9 @@
  }
  let routeAnimation=null,leaveAnimation=null,departingPanel=null;
  function finishDeparture(){if(departingPanel){for(const key of ['display','position','inset','zIndex','pointerEvents'])departingPanel.style[key]='';departingPanel.inert=false;departingPanel=null;}}
- function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
+ function updateEmbeddedRendering(){const frame=$("print-bay-frame");frame?.contentWindow?.postMessage({type:"neptune:presentation",active:state.view==="print-bay"},location.origin);}
+ $("print-bay-frame").addEventListener("load",updateEmbeddedRendering);
+ function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}updateEmbeddedRendering();if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
@@ -61,17 +63,22 @@
   }
  }
 
+ let factoryUsb={available:false,selection_enabled:false};
+ api("/api/factory-usb").then(value=>{factoryUsb=value;}).catch(()=>{});
  let inspectorViewer=null;
+ let inspectorRequest=null;
  let inspectorEpoch=0;
  let inspected=null;
- const modelUrl=(file,view="iso")=>"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
+ const geometrySource=source=>["local","native_cache"].includes(source);
+ const hasGeometry=(file,source)=>geometrySource(source)&&file.source_present!==false&&(source!=="native_cache"||file.geometry_available===true);
+ const modelUrl=(file,view="iso")=>file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
  const legacyPreview=(file,source)=>source==="local"
    ?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path)
    :"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
  function setPreviewImage(img,file,source){
    img.loading="lazy";
    img.alt="Shaded extrusion geometry for "+(file.filename||file.name);
-   if(source==="local"&&file.source_present!==false) {
+   if(hasGeometry(file,source)) {
      img.src=modelUrl(file);
      img.onerror=()=>{
        img.onerror=null;
@@ -87,45 +94,57 @@
  }
  function closeInspector(){
    inspectorEpoch++;
+   inspectorRequest?.abort();inspectorRequest=null;
    if(inspectorViewer){inspectorViewer.dispose();inspectorViewer=null;}
    $("model-viewer-host").replaceChildren();
    $("model-viewer-host").hidden=true;
    $("inspector-image").hidden=false;
    const dialog=$("model-inspector");
    if(dialog.open)dialog.close();
+   window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:false}}));
  }
  $("inspector-close").addEventListener("click",closeInspector);
  $("model-inspector").addEventListener("cancel",e=>{e.preventDefault();closeInspector();});
  document.querySelectorAll("[data-view-angle]").forEach(button=>button.addEventListener("click",()=>{
    const view=button.dataset.viewAngle;
    if(inspectorViewer)inspectorViewer.setView(view);
-   else if(inspected?.source==="local"&&inspected.file.source_present!==false) $("inspector-image").src=modelUrl(inspected.file,view);
+   else if(geometrySource(inspected?.source)&&inspected.file.source_present!==false) $("inspector-image").src=modelUrl(inspected.file,view);
  }));
  async function openInspector(file,source){
    closeInspector();
    const epoch=++inspectorEpoch;
+   inspectorRequest=new AbortController();
    inspected={file,source};
    text("inspector-title",file.filename||file.name);
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
-   text("inspector-status",source==="local"?"Loading 3D extrusion…":"No local G-code geometry available; showing cached slicer preview.");
+   text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
    const preview=$("inspector-image");
    preview.hidden=false;
    preview.onerror=null;
-   if(source==="local"&&file.source_present!==false){
+   if(hasGeometry(file,source)){
      preview.src=modelUrl(file);
      preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
    }else if(file.preview_available)preview.src=legacyPreview(file,source);
    else preview.removeAttribute("src");
+   $("factory-select-file").hidden=!["printer","printer_native"].includes(source);
+   $("factory-select-file").disabled=!(factoryUsb.available&&factoryUsb.selection_enabled);
+   $("retrieve-sd").hidden=source!=="printer_native"||!file.retrievable;
+   $("cancel-sd").hidden=true;
+   $("copy-sd-local").hidden=source!=="native_cache";
+   text("native-sd-status",source==="printer_native"?"Retrieve actual SD bytes before reconstruction.":"");
    $("model-inspector").showModal();
-   if(source!=="local"||file.source_present===false)return;
+   window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:true}}));
+   if(!hasGeometry(file,source))return;
    try{
-     const geometry=await api("/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path));
+     const geometry=await api(source==="native_cache"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/geometry":"/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path),{signal:inspectorRequest.signal});
      if(epoch!==inspectorEpoch)return;
      const module=await import("/static/hmi_model_viewer.js");
      if(epoch!==inspectorEpoch)return;
      const host=$("model-viewer-host");
      host.hidden=false;
-     inspectorViewer=module.mountViewer(host,geometry);
+     const viewer=inspectorViewer=module.mountViewer(host,geometry);
+     const ready=await viewer.ready;
+     if(epoch!==inspectorEpoch||!ready)return;
      preview.hidden=true;
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
@@ -162,18 +181,19 @@
  }
  function card(file,source){
    const button=document.createElement("div");
-   button.className="model";button.tabIndex=0;button.setAttribute("role","button");
+   button.className="model";button.dataset.provider=source==="printer_native"||source==="printer"?"printer_sd":source;button.tabIndex=0;button.setAttribute("role","button");
    button.setAttribute("aria-label","Inspect 3D print "+(file.filename||file.name));
    const image=document.createElement("img");
    const name=document.createElement("strong");name.textContent=file.filename||file.name;
    const info=document.createElement("small");
-   const meta=file.metadata||file.local_metadata?.metadata||{};
-   info.textContent=(source==="local"?"Local G-code geometry":"Printer SD listing")+
+   const meta=file.metadata||file.print_metadata||file.local_metadata?.metadata||{};
+   info.textContent=(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
+     (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
    button.append(image,name,info);
    setPreviewImage(image,file,source);
-   if(source==="local"&&file.source_present!==false){
+   if(hasGeometry(file,source)){
      const pill=document.createElement("span");pill.className="render-pill";pill.textContent="3D G-CODE";button.append(pill);
    }
    const select=()=>{
@@ -192,23 +212,58 @@
  function filterModels(){
   const q=($('model-filter')?.value||'').trim().toLowerCase();
   const models=Array.from($('models').querySelectorAll('.model'));
-  let shown=0;for(const item of models){item.hidden=!!q&&!item.textContent.toLowerCase().includes(q);if(!item.hidden)shown++;}
+  let shown=0;for(const item of models){item.hidden=!!q&&!item.textContent.toLowerCase().includes(q);if($('storage-provider').value!=='all'&&item.dataset.provider!==$('storage-provider').value)item.hidden=true;if(!item.hidden)shown++;}
   if(models.length)text('model-count',shown+' of '+models.length+' files');
  }
  window.addEventListener('hmi:filter-models',filterModels);
+ $('storage-provider').addEventListener('change',filterModels);
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");
   try{
    const listing=await api("/api/printer/sdcard");
+   const native=await api("/api/native-sd").catch(()=>({entries:[],assets:[]}));
    const local=listing.local_index?.files||[];const printer=(listing.entries||[]).filter(e=>e.kind==="file");
    host.replaceChildren();const seen=new Set();
    for(const item of local){const key=item.relative_path;if(!key||seen.has(key))continue;seen.add(key);host.append(card(item,"local"));}
-   for(const item of printer){if(!item.name)continue;const matched=local.some(x=>x.firmware_key===item.name.toLowerCase()&&x.source_present!==false);if(matched)continue;host.append(card(item,"printer"));}
+   for(const item of printer){if(!item.name)continue;if((native.entries||[]).some(x=>x.name===item.name))continue;host.append(card(item,"printer"));}
+   for(const item of native.entries||[])host.append(card({...item,filename:item.original_filename||item.name},"printer_native"));
+   for(const asset of native.assets||[])if(asset.cache_available)host.append(card({...asset,name:asset.original_filename,source_present:true},"native_cache"));
    text("model-count",host.childElementCount+" files · "+(listing.local_index?.status||listing.status||"unknown"));
    if(!host.childElementCount){const empty=document.createElement("div");empty.className="tile";empty.textContent=listing.local_index?.error||listing.error||"No indexed G-code available. Configure a read-only source volume or refresh the printer SD listing.";host.append(empty);}
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();}
  }
+ let nativeTransfer=null;
+ $("retrieve-sd").addEventListener("click",async()=>{
+  if(!inspected||nativeTransfer)return;
+  const selected=inspected,epoch=inspectorEpoch;
+  try{
+   const job=await api('/api/native-sd/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:selected.file.name})});
+   nativeTransfer=job.id;$("retrieve-sd").hidden=true;$("cancel-sd").hidden=false;
+   while(nativeTransfer){
+    const progress=await api('/api/native-sd/transfers/'+job.id);
+    text('native-sd-status',progress.status+' · '+progress.received+' / '+(progress.size??'—')+' bytes');
+    if(['complete','failed','cancelled'].includes(progress.status)){
+     nativeTransfer=null;$("cancel-sd").hidden=true;
+     if(progress.status==='complete'&&epoch===inspectorEpoch)await openInspector({...progress.asset,name:selected.file.name,source_present:true},'native_cache');
+     else if(progress.error)text('native-sd-status',progress.error);
+     break;
+    }
+    await new Promise(resolve=>setTimeout(resolve,500));
+   }
+  }catch(error){nativeTransfer=null;text('native-sd-status',error.message);$("cancel-sd").hidden=true;}
+ });
+ $("cancel-sd").addEventListener('click',async()=>{if(nativeTransfer)try{await api('/api/native-sd/transfers/'+nativeTransfer,{method:'DELETE'});}catch(error){text('native-sd-status',error.message);}});
+ $("copy-sd-local").addEventListener('click',async()=>{
+  if(inspected?.source!=='native_cache')return;
+  try{const result=await api('/api/native-sd/assets/'+inspected.file.sha256+'/import-local',{method:'POST'});text('native-sd-status',result.status+' · '+result.filename+' · no print selected');}
+  catch(error){text('native-sd-status',error.message);}
+ });
+ $("factory-select-file").addEventListener('click',async()=>{
+  const filename=inspected?.file.name;if(!filename||!confirm('I am beside an idle printer. Select '+filename+' only, without starting a print?'))return;
+  try{const result=await api('/api/factory-usb/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'select',filename,confirmation:'SELECT '+filename,attended:true,printer_idle_confirmed:true})});text('native-sd-status','Selected '+result.data.filename+' · '+result.data.size_bytes+' bytes · no print requested');}
+  catch(error){text('native-sd-status',error.message);}
+ });
  function openManagedFiles(){
   $("operations-frame").src="/?presentation=hmi-operations&view=sdcard";
   route("controls");

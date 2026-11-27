@@ -4,6 +4,11 @@ import {OrbitControls} from '/static/vendor/OrbitControls.js';
 const $ = id => document.getElementById(id);
 const text = (tag, value) => {const e=document.createElement(tag);e.textContent=value;return e;};
 let projects=[], artifacts=[], selectedPlate=null, views=[], generation=0, worker={online:false}, jobs=[], renderKey=null, refreshing=false, deliveryInFlight=false;
+let presentationActive=window.parent===window||new URLSearchParams(location.search).get('presentation')!=='hmi';
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='neptune:presentation')return;
+ presentationActive=event.data.active===true;document.body.dataset.rendering=presentationActive?'active':'suspended';
+});
 async function api(path, body) {
   const r=await fetch('/api/manufacturing'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){let j;try{j=await r.json();}catch{}const error=Error(j?.detail||`Request failed (${r.status})`);error.status=r.status;throw error;}return r.json();
@@ -25,24 +30,25 @@ function mesh(buffer){
 async function preview(canvas, plate, artifact){
   const currentGeneration=generation;
   if(!artifact&&!project()?.geometryAvailable){canvas.replaceWith(text('p','No exported geometry yet'));return;}
+  let renderer;
   try{
-    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
     const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(35,1,.1,10000);
     scene.add(new THREE.HemisphereLight(0xc1efff,0x203040,3));const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(80,140,90);scene.add(light);
     const group=new THREE.Group();scene.add(group);
     const geometries=await Promise.all(plate.objects.map(async obj=>{
       const r=await fetch(artifact?fileUrl(artifact,obj.export):`/api/manufacturing/projects/${encodeURIComponent(project().name)}/geometry/${encodeURIComponent(obj.export)}`);if(!r.ok)throw Error('Preview unavailable');return mesh(await r.arrayBuffer());
     }));
-    if(currentGeneration!==generation){geometries.forEach(g=>g.dispose());renderer.dispose();return;}
+    if(currentGeneration!==generation){geometries.forEach(g=>g.dispose());renderer.dispose();renderer.forceContextLoss();return;}
     for(const g of geometries)group.add(new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x69bbcc,roughness:.55,metalness:.15})));
     // CAD uses Z-up. Apply one assembly rotation, preserving relative object positions.
     group.rotation.x=-Math.PI/2;const box=new THREE.Box3().setFromObject(group), center=box.getCenter(new THREE.Vector3());group.position.sub(center);
     const size=box.getSize(new THREE.Vector3()).length();camera.position.set(size*.85,size*.65,size);camera.lookAt(0,0,0);
     const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.enablePan=false;
     const view={renderer,controls,scene,camera};views.push(view);
-  }catch(e){canvas.replaceWith(text('p',e.message));}
+  }catch(e){renderer?.dispose();renderer?.forceContextLoss();canvas.replaceWith(text('p',e.message));}
 }
-function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();}views=[];}
+function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();v.renderer.forceContextLoss();}views=[];}
 function stateFor(plate){return preparationState(project(),plate,artifacts,jobs,worker);}
 function selected(){return project()?.plates.find(p=>p.name===selectedPlate);}
 function renderPlates(){
@@ -113,4 +119,17 @@ $('projects').onchange=()=>{selectedPlate=project()?.plates[0]?.name;renderPlate
 $('retry').onclick=()=>queue('build-slice-stage');$('deploy').onclick=()=>artifactAction('deploy');$('export-sd').onclick=()=>artifactAction('export-sd');
 for(const button of document.querySelectorAll('[data-action]'))button.onclick=()=>queue(button.dataset.action);
 $('inventory-panel').addEventListener('toggle',async e=>{if(e.target.open)try{const rows=await api('/inventory');$('inventory').replaceChildren(...rows.map(r=>text('p',`${r.root}/${r.file} · ${r.status}`)));if(!rows.length)$('inventory').textContent='No inventory roots configured or no candidate files found.';}catch(err){message(err.message);}});
-function animate(){requestAnimationFrame(animate);for(const v of views){const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(!w||!h)continue;const ratio=Math.min(devicePixelRatio,2);if(v.renderer.domElement.width!==Math.floor(w*ratio)||v.renderer.domElement.height!==Math.floor(h*ratio))v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();v.controls.update();v.renderer.render(v.scene,v.camera);}}animate();refresh();setInterval(refresh,3000);
+let lastRender=0;
+function animate(now){
+ requestAnimationFrame(animate);
+ if(!presentationActive||document.hidden||now-lastRender<1000/30)return;
+ lastRender=now;
+ for(const v of views){
+  const w=v.renderer.domElement.clientWidth,h=v.renderer.domElement.clientHeight;if(!w||!h)continue;
+  const ratio=Math.min(devicePixelRatio,2),resized=v.renderer.domElement.width!==Math.floor(w*ratio)||v.renderer.domElement.height!==Math.floor(h*ratio);
+  if(resized){v.renderer.setSize(w,h,false);v.camera.aspect=w/h;v.camera.updateProjectionMatrix();}
+  const changed=v.controls.update();
+  if(v.drawn&&!resized&&!changed)continue;
+  v.renderer.render(v.scene,v.camera);v.drawn=true;
+ }
+}requestAnimationFrame(animate);refresh();setInterval(refresh,3000);

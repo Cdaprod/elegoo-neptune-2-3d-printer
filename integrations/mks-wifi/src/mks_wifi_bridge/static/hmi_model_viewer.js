@@ -80,6 +80,8 @@ export function mountViewer(host, model) {
     meshes.push(mesh);
   }
 
+  let resolveReady,rejectReady;
+  const ready=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;});
   let disposed=false,frame=0,interacting=false,drawing=false,settleUntil=0,renderFrames=0;
   function schedule() {
     if(!disposed&&!frame&&!document.hidden)frame=requestAnimationFrame(draw);
@@ -128,7 +130,8 @@ export function mountViewer(host, model) {
     drawing=true;
     controls.update();
     drawing=false;
-    renderer.render(scene,camera);
+    try{renderer.render(scene,camera);resolveReady(true);}
+    catch(error){rejectReady(error);return;}
     host.dataset.viewerFrames=String(++renderFrames);
     if(interacting||now<settleUntil)schedule();
   }
@@ -141,10 +144,10 @@ export function mountViewer(host, model) {
   setView("iso");
   resize();
   return {
-    setView,
+    ready,setView,
     dispose() {
       if(disposed)return;
-      disposed=true;
+      disposed=true;resolveReady(false);
       cancelAnimationFrame(frame);
       observer.disconnect();
       document.removeEventListener("visibilitychange",visibility);

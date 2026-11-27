@@ -209,3 +209,33 @@ from heat, idle status, or operator narration.
   original OrcaSlicer exports from a read-only Mac folder or use Observatory's
   existing one-file thumbnail import. These local previews are matched by
   filename only and do not prove the printer-side file bytes are identical.
+
+## Robin Nano read-only SD retrieval contract (host-side)
+
+The source-level investigation verified the Makerbase WiFi source's HTTP routes
+and ESP->MCU UART upload state. The source registers `/upload` and a TCP command
+server; its OctoPrint-shaped `/api/files` routes are compiled out under
+`#if 0`. The `TRANSFER_GET_FILE` state consumes bytes from `gFileFifo` and
+sends file fragments to the STM32. It is **not** a remote SD download.
+`FILE_DOWNLOAD_PORT` is defined but no listening socket is created in that
+source revision. Do not assume another firmware binary behaves identically.
+
+Observatory now exposes an authenticated, read-only capabilities endpoint:
+`GET /api/printer/sdcard/capabilities`. Its stock implementation returns
+`can_list=true`, `can_read=false`, firmware verification false and an explicit
+fallback. `GET /api/printer/sdcard/read/{filename}` rejects unverified reads
+with HTTP 501 rather than executing exploratory firmware commands.
+
+`robin_sd_read.py` implements a transport-neutral, asyncio-tested contract for
+a future separately authorized STM32 read extension: immutable file snapshot
+tokens, strict filenames, bounded chunks (<=4096 bytes), total length
+(<=50 MiB), deadline, exact lengths, SHA-256 and change detection. This
+contract does **not** implement or claim an on-printer firmware extension.
+No new TCP client is created and no SD reads are attempted on physical
+hardware by these endpoints.
+
+Next firmware-stage work requires the installed board/firmware version,
+a verified recovery image and a protocol extension with opt-in capability
+negotiation, no concurrent printing, and exclusive serial transport ownership.
+Keep any experimental firmware in a separate test-only artifact. Never flash
+the board or ESP in an automated repository workflow.

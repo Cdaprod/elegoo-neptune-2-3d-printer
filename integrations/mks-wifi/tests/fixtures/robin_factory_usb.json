@@ -1,0 +1,13 @@
+{
+  "evidence": "operator-reported physical validation, 2026-11-27; not independently rerun by Codex",
+  "printer": "Elegoo Neptune 2", "board": "MKS Robin Nano v1.2", "mcu_marking": null,
+  "firmware": "Robin_nano_v2.1.6.b", "experimental_firmware_flashed": false,
+  "usb": {"chipset": "CH340/CH341", "vid_pid": "1a86:7523", "driver": "ch341", "device": "/dev/ttyUSB0", "baud": 115200, "format": "8N1", "flow_control": false},
+  "verified_commands": ["M115", "M503", "M105", "M114", "M21", "M20", "M20 L", "M23", "M27"],
+  "firmware_response": ["Firmware: Robin_nano_v2.1.6.b", "Cap:SERIAL_XON_XOFF:0", "Cap:EEPROM:1", "Cap:VOLUMETRIC:1", "Cap:AUTOREPORT_TEMP:1", "Cap:PROGRESS:0", "Cap:PRINT_JOB:1", "Cap:AUTOLEVEL:1", "Cap:Z_PROBE:1", "Cap:LEVELING_DATA:1", "Cap:BUILD_PERCENT:0", "Cap:SOFTWARE_POWER:0", "Cap:TOGGLE_LIGHTS:0", "Cap:CASE_LIGHT_BRIGHTNESS:0", "Cap:EMERGENCY_PARSER:0", "ok"],
+  "selection_response": ["File opened: DISPMNT01.gcode Size: 2113357", "File selected", "ok"],
+  "status_response": ["SD printing byte 0/2113357", "ok"],
+  "unsolicited": ["echo:enqueueing \"M105\"", "ok T:23.26 /0.00 B:23.51 /0.00 T0:23.26 /0.00 @:0 B@:0 @0:0"],
+  "unsolicited_origin": "unknown; persisted with both containers paused, M155 S0 did not stop it; picocom was the only identified USB owner",
+  "not_verified": ["RSD/1", "SD content retrieval", "SD uploads", "remote print execution", "USB-to-UART PCB routing", "compatible recovery/bootloader"]
+}
