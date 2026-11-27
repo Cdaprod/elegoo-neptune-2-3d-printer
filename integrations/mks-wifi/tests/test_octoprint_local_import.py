@@ -116,7 +116,11 @@ def test_hmi_endpoint_requires_auth_origin_and_opt_in(monkeypatch, tmp_path):
         assert (
             client.post(
                 "/api/hmi/import-gcode?filename=Part.gcode",
-                headers={**headers, "Origin": "http://testserver", "Content-Type": "application/octet-stream"},
+                headers={
+                    **headers,
+                    "Origin": "http://testserver",
+                    "Content-Type": "application/octet-stream",
+                },
                 content=b"G1 X1 E1",
             ).status_code
             == 423

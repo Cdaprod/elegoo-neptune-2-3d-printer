@@ -1397,7 +1397,8 @@ def create_app(
             raise HTTPException(status_code=423, detail="HMI G-code import is disabled.")
         if not _origin_matches(request.headers.get("host", ""), request.headers.get("origin")):
             raise HTTPException(status_code=403, detail="Same-origin upload required.")
-        if request.headers.get("content-type", "").split(";")[0].lower() != "application/octet-stream":
+        content_type = request.headers.get("content-type", "").split(";")[0].lower()
+        if content_type != "application/octet-stream":
             raise HTTPException(status_code=415, detail="Upload raw G-code bytes.")
         declared = request.headers.get("content-length")
         if declared is not None:

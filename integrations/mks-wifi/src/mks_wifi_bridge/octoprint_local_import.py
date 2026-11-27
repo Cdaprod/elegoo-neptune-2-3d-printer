@@ -112,7 +112,11 @@ def upload_local_gcode(
             if duplicate is not None:
                 if duplicate.get("hash") in (expected, None):
                     return {
-                        "status": "existing_name_unverified" if duplicate.get("hash") is None else "already_imported",
+                        "status": (
+                            "existing_name_unverified"
+                            if duplicate.get("hash") is None
+                            else "already_imported"
+                        ),
                         "filename": filename, "sha256": digest,
                         "size_bytes": len(data), "selected": False, "printing": False,
                     }
