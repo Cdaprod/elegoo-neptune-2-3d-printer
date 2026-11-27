@@ -54,6 +54,11 @@ class FabricationArchive:
                     ('sliced_from','derived_from','observes','configured_by')),
                     PRIMARY KEY(parent_sha256,child_sha256,relationship));
                 INSERT OR IGNORE INTO fabrication_schema VALUES(3);
+                INSERT OR IGNORE INTO fabrication_schema VALUES(4);
+                CREATE TABLE IF NOT EXISTS execution_identity(
+                    execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL,
+                    evidence TEXT NOT NULL, transport TEXT NOT NULL,
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
                 CREATE TABLE IF NOT EXISTS artifact_discoveries(
                     id TEXT PRIMARY KEY, provider TEXT NOT NULL, path TEXT NOT NULL,
                     filename TEXT NOT NULL, size INTEGER, first_seen TEXT NOT NULL,
@@ -194,6 +199,32 @@ class FabricationArchive:
                 raise ValueError("Archived artifact failed integrity verification")
         return path
 
+    def link_execution(self, execution_id, sha, evidence, transport):
+        """Trusted reconciler entry point; never called from name/size matching."""
+        if evidence not in {
+            "operator_supplied",
+            "octoprint_verified_bytes",
+            "native_sd_verified_snapshot",
+        }:
+            raise ValueError("Explicit content identity evidence required")
+        if transport not in {"native_sd", "octoprint_usb", "unknown"}:
+            raise ValueError("Unknown execution transport")
+        self.verified(sha)
+        with self.db() as db:
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            previous = db.execute(
+                "SELECT sha256 FROM execution_identity WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            if previous and previous[0] != sha:
+                raise ValueError("Execution identity cannot be silently replaced")
+            db.execute(
+                "INSERT OR IGNORE INTO execution_identity VALUES(?,?,?,?)",
+                (execution_id, sha, evidence, transport),
+            )
+
     def observe_discovery(self, entries, provider="printer_sd", available=True):
         """Directory metadata is never content identity. Only verified snapshots may link bytes."""
         from .factory_usb import catalog_visible
@@ -264,8 +295,9 @@ class FabricationArchive:
                 ).fetchall()
             elif kind == "history":
                 rows = db.execute(
-                    """SELECT p.*, e.sha256, a.filename AS archived_filename
-                    FROM print_sessions p LEFT JOIN execution_artifacts e ON p.id=e.execution_id
+                    """SELECT p.*, e.sha256, e.evidence AS identity_evidence,
+                    e.transport AS execution_transport, a.filename AS archived_filename
+                    FROM print_sessions p LEFT JOIN execution_identity e ON p.id=e.execution_id
                     LEFT JOIN fabrication_artifacts a ON a.sha256=e.sha256
                     WHERE (p.started_at,p.id)<(?,?) ORDER BY p.started_at DESC,p.id DESC LIMIT ?""",
                     (*cursor, limit + 1),
@@ -273,7 +305,7 @@ class FabricationArchive:
             else:
                 rows = db.execute(
                     """SELECT a.*, a.sha256 AS id FROM fabrication_artifacts a
-                    WHERE NOT EXISTS(SELECT 1 FROM execution_artifacts e WHERE e.sha256=a.sha256)
+                    WHERE NOT EXISTS(SELECT 1 FROM execution_identity e WHERE e.sha256=a.sha256)
                     AND (a.ingested_at,a.sha256)<(?,?)
                     ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT ?""",
                     (*cursor, limit + 1),
@@ -309,7 +341,8 @@ class FabricationArchive:
                 "delivery": stages[-1][0] if stages else "not_staged",
                 "execution": item.get("state", "not_started"),
                 "quality": "unassessed",
-                "identity": "verified_sha256" if sha else "discovered_not_archived",
+                "identity": item.get("identity_evidence")
+                or ("verified_sha256" if sha else "discovered_not_archived"),
                 "delivery_capabilities": {
                     "octoprint_usb": "requires_readiness_check",
                     "native_sd": "unsupported_unverified_write_transport",
@@ -327,9 +360,8 @@ class FabricationArchive:
     def stage_again(self, execution_id):
         with self.db() as db:
             row = db.execute(
-                "SELECT COALESCE(e.sha256,g.sha256) FROM print_sessions p "
-                "LEFT JOIN execution_artifacts e ON e.execution_id=p.id "
-                "LEFT JOIN gcode_files g ON p.file_id=g.id WHERE p.id=?",
+                "SELECT e.sha256 FROM print_sessions p "
+                "LEFT JOIN execution_identity e ON e.execution_id=p.id WHERE p.id=?",
                 (execution_id,),
             ).fetchone()
             if row is None or row[0] is None:

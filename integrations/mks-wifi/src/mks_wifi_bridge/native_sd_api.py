@@ -44,6 +44,22 @@ def install(app, read_auth, write_auth, printer, preview_slots=None, archive=Non
         try:
             current = service()
             entries = await current.listing()
+            if archive is not None:
+                await asyncio.to_thread(
+                    archive.observe_discovery,
+                    [
+                        {
+                            "name": entry["name"],
+                            "kind": "file",
+                            "size_bytes": entry.get("size"),
+                            "verified_sha256": entry.get("cached_sha256"),
+                            "identity_evidence": "verified_content_snapshot"
+                            if entry.get("cached_sha256")
+                            else None,
+                        }
+                        for entry in entries
+                    ],
+                )
             return {
                 "status": "available",
                 "provider": "printer_sd",

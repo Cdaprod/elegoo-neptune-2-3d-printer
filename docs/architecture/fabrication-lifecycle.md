@@ -340,3 +340,14 @@ Artifacts, print identities, outcomes, provenance and relationships are preserve
 derivatives can regenerate from immutable originals. Test restoration before
 replacing a deployment's existing data volume, preserve its backup and set correct
 app ownership. No automatic production replacement or service restart is provided.
+
+Migration 4 separates proven execution identity from legacy timeline previews.
+The old timeline may associate a local visualization file by filename; that is an
+inferred visualization hint, not a verified executed-artifact relationship.
+Canonical history and repeat staging now require the independent execution_identity
+record with explicit evidence and transport. No old filename association is silently
+promoted into it. Evidence distinguishes operator_supplied from OctoPrint-verified
+bytes and native-SD verified snapshots. Native SD executions can remain unknown/
+metadata-only indefinitely without disappearing. Proven native-SD cache snapshots
+reconcile discovery records only after canonical integrity verification. No new
+firmware mechanism or printer command was added to obtain identity evidence.

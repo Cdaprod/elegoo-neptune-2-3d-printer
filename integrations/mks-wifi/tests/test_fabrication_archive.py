@@ -36,6 +36,8 @@ def test_deduplication_source_removal_restart_and_independent_staging(tmp_path):
                 "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
                 (identity, "part.gcode", "2026-01-01", "2026-01-02", state, 20, "g", "observed"),
             )
+    for identity in ("one", "two"):
+        store.link_execution(identity, sha, "operator_supplied", "unknown")
     first = store.stage_again("one")
     second = store.stage_again("one")
     assert first["id"] != second["id"]
@@ -79,6 +81,7 @@ def test_execution_link_survives_geometry_cache_eviction(tmp_path):
             "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
             ("historic", "part.gcode", "2000-01-01", "2000-01-02", "failed", 5, "g", "observed"),
         )
+    store.link_execution("historic", sha, "operator_supplied", "unknown")
     store.collection("history")
     with store.db() as db:
         db.execute("UPDATE print_sessions SET file_id=NULL")
@@ -199,6 +202,7 @@ def test_backup_restore_preserves_originals_and_execution_identity(tmp_path):
             "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
             ("old", "source.gcode", "2000", "2001", "failed", 10, "g", "printer_sd"),
         )
+    store.link_execution("old", sha, "operator_supplied", "native_sd")
     store.collection("history")
     path = tmp_path / "backup.tar.gz"
     backup(store.timeline.path, path)
@@ -211,3 +215,34 @@ def test_backup_restore_preserves_originals_and_execution_identity(tmp_path):
     assert restored.collection("history")["items"][0]["state"] == "failed"
     with pytest.raises(ValueError):
         restore(path, target)
+
+
+def test_legacy_filename_association_is_not_verified_execution_identity(tmp_path):
+    store = archive(tmp_path)
+    source = tmp_path / "same.gcode"
+    source.write_bytes(b"G1 X20 E1")
+    sha = store.ingest(source)
+    with store.db() as db:
+        db.execute("INSERT INTO gcode_files VALUES(?,?)", ("guessed_by_name", sha))
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            (
+                "native",
+                "same.gcode",
+                "2000",
+                "2001",
+                "unknown",
+                None,
+                "guessed_by_name",
+                "printer_sd",
+            ),
+        )
+    row = store.collection("history")["items"][0]
+    assert row["sha256"] is None
+    assert row["lifecycle"]["execution"] == "unknown"
+    with pytest.raises(ValueError):
+        store.stage_again("native")
+    store.link_execution("native", sha, "operator_supplied", "native_sd")
+    row = store.collection("history")["items"][0]
+    assert row["identity_evidence"] == "operator_supplied"
+    assert row["execution_transport"] == "native_sd"
