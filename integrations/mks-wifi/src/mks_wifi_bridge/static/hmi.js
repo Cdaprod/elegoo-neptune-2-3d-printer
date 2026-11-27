@@ -133,7 +133,8 @@
      preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
    }else if(file.preview_available)preview.src=legacyPreview(file,source);
    else preview.removeAttribute("src");
-   $("print-again").hidden=!(file.archive&&file.started_at&&file.bytes_available);
+   $("print-again").hidden=!(file.archive&&file.bytes_available);
+   $("print-again").textContent=file.started_at?"Print again · stage copy":"Stage archived artifact";
    if(file.archive)text("inspector-details",[file.state||"Unprinted",file.started_at||file.ingested_at,file.ended_at||"Outcome not recorded",file.source||"Archived bytes"].join(" · "));
    $("factory-select-file").hidden=!["printer","printer_native"].includes(source);
    $("factory-select-file").disabled=!(factoryUsb.available&&factoryUsb.selection_enabled);
@@ -196,7 +197,7 @@
    const name=document.createElement("strong");name.textContent=file.filename||file.name;
    const info=document.createElement("small");
    const meta=file.metadata||file.print_metadata||file.local_metadata?.metadata||{};
-   info.textContent=file.archive?[file.state||"Unprinted",file.started_at||file.ingested_at,file.bytes_available?"Archived original":"Bytes unavailable"].join(" · "):(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
+   info.textContent=file.archive?[file.archive_collection==="discovered"?"History unknown":file.started_at?"Reported "+(file.state||"unknown"):"No recorded executions",file.started_at||file.ingested_at,file.bytes_available?"Archived original":"Bytes unavailable"].join(" · "):(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
      (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
@@ -209,6 +210,7 @@
      document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));
      button.classList.add("selected");
      state.selected=file;
+     if(file.archive_collection)localStorage.setItem("neptune.archive.selection",file.archive_collection+":"+file.id);
      text("selected-file",(file.relative_path||file.name)+" · read-only model inspection");
      openInspector(file,source);
    };
@@ -229,11 +231,11 @@
  const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[]} ]));
  async function renderArchiveLane(kind,lane){
   const page=archivePages[kind];
+  lane.querySelectorAll(".archive-pages button").forEach(button=>button.disabled=true);
   const response=await api('/api/fabrication/'+kind+'?limit=20'+(page.before?'&before='+encodeURIComponent(page.before):''));
   const track=lane.querySelector('.archive-track');track.replaceChildren();
-  for(const item of response.items){const node=card({...item,archive:true,filename:item.filename||item.archived_filename||'Unknown artifact',source_present:item.bytes_available},'archive');
+  for(const item of response.items){const node=card({...item,archive:true,filename:item.filename||item.archived_filename||'Unknown artifact',archive_collection:kind,source_present:item.bytes_available},'archive');
    if(localStorage.getItem('neptune.archive.selection')===kind+':'+item.id)node.classList.add('selected');
-   node.addEventListener('click',()=>localStorage.setItem('neptune.archive.selection',kind+':'+item.id));
    track.append(node);
   }
   if(!response.items.length)track.textContent=kind==='history'?'No observed executions yet. Outcomes are never invented.':kind==='unprinted'?'No unprinted archived artifacts yet.':'No printer SD observations yet.';
@@ -254,7 +256,7 @@
   }
  }
  async function loadFiles(){
-  if(state.loading)return;state.loading=true;const host=$("models");
+  if(state.loading)return;state.loading=true;const host=$("models");const requestedProvider=$("storage-provider").value;
   try{
    const collection=$('storage-provider').value;
    if(collection==='archive'){await renderChronology(host);return;}
@@ -278,10 +280,14 @@
    text("model-count",host.childElementCount+" files · "+(listing.local_index?.status||listing.status||"unknown"));
    if(!host.childElementCount){const empty=document.createElement("div");empty.className="tile";empty.textContent=listing.local_index?.error||listing.error||"No indexed G-code available. Configure a read-only source volume or refresh the printer SD listing.";host.append(empty);}
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
-  finally{state.loading=false;filterModels();}
+  finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value)loadFiles();}
  }
  $('archive-files').addEventListener('click',async()=>{try{const result=await api('/api/fabrication/reconcile',{method:'POST'});text('model-count',result.archived+' immutable artifacts preserved');}catch(error){text('model-count',error.message);}});
- $('print-again').addEventListener('click',async()=>{if(!inspected?.file?.archive)return;try{const stage=await api('/api/fabrication/executions/'+encodeURIComponent(inspected.file.id)+'/stage',{method:'POST'});text('inspector-status','Archived copy staged · compatibility and operator confirmation required · '+stage.id);}catch(error){text('inspector-status',error.message);}});
+ $('print-again').addEventListener('click',async()=>{if(!inspected?.file?.archive)return;try{
+  const file=inspected.file;const endpoint=file.started_at?'/api/fabrication/executions/'+encodeURIComponent(file.id)+'/stage':'/api/fabrication/artifacts/'+file.sha256+'/stage';
+  await api(endpoint,{method:'POST'});closeInspector();route('print-bay');
+ }catch(error){text('inspector-status',error.message);}});
+
  let nativeTransfer=null;
  $("retrieve-sd").addEventListener("click",async()=>{
   if(!inspected||nativeTransfer)return;

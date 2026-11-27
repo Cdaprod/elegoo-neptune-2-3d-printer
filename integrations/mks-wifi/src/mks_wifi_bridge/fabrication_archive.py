@@ -357,6 +357,37 @@ class FabricationArchive:
             else None,
         }
 
+    def stages(self):
+        with self.db() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT s.*,a.filename FROM artifact_stages s JOIN fabrication_artifacts a "
+                    "ON s.sha256=a.sha256 ORDER BY s.created_at DESC,s.id DESC LIMIT 100"
+                )
+            ]
+
+    def stage_artifact(self, sha, source_execution_id=None):
+        self.verified(sha)
+        identity = uuid.uuid4().hex
+        with self.db() as db:
+            db.execute(
+                "INSERT INTO artifact_stages VALUES(?,?,?,?,?)",
+                (
+                    identity,
+                    sha,
+                    now(),
+                    source_execution_id,
+                    "staged_requires_compatibility_confirmation",
+                ),
+            )
+        return {
+            "id": identity,
+            "sha256": sha,
+            "status": "staged_requires_compatibility_confirmation",
+            "physical_execution": False,
+        }
+
     def stage_again(self, execution_id):
         with self.db() as db:
             row = db.execute(
@@ -366,21 +397,5 @@ class FabricationArchive:
             ).fetchone()
             if row is None or row[0] is None:
                 raise ValueError("This execution has no verified artifact association")
-            self.verified(row[0])
-            identity = uuid.uuid4().hex
-            db.execute(
-                "INSERT INTO artifact_stages VALUES(?,?,?,?,?)",
-                (
-                    identity,
-                    row[0],
-                    now(),
-                    execution_id,
-                    "staged_requires_compatibility_confirmation",
-                ),
-            )
-            return {
-                "id": identity,
-                "sha256": row[0],
-                "status": "staged_requires_compatibility_confirmation",
-                "physical_execution": False,
-            }
+            sha = row[0]
+        return self.stage_artifact(sha, execution_id)

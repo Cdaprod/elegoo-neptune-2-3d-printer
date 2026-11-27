@@ -197,6 +197,7 @@ class OctoPrintBackend:
         # Endpoints are fixed internal literals, never caller-controlled URLs.
         if endpoint not in {
             "/api/connection",
+            "/api/printerprofiles",
             "/api/printer",
             "/api/job",
             "/api/files",

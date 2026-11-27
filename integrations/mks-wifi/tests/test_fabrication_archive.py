@@ -246,3 +246,66 @@ def test_legacy_filename_association_is_not_verified_execution_identity(tmp_path
     row = store.collection("history")["items"][0]
     assert row["identity_evidence"] == "operator_supplied"
     assert row["execution_transport"] == "native_sd"
+
+
+def test_print_bay_archive_delivery_is_confirmed_profile_checked_and_receive_only(
+    tmp_path, monkeypatch
+):
+    from fastapi.testclient import TestClient
+    from test_observatory import make_service
+
+    import mks_wifi_bridge.observatory as module
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+
+    monkeypatch.setenv("NEPTUNE_HMI_IMPORT_ENABLED", "true")
+    calls = []
+
+    async def get(endpoint):
+        calls.append(endpoint)
+        if endpoint == "/api/connection":
+            return {"current": {"state": "Operational", "port": "/dev/ttyUSB-printer"}}
+        assert endpoint == "/api/printerprofiles"
+        return {
+            "profiles": {
+                "current": {
+                    "current": True,
+                    "volume": {
+                        "origin": "lowerleft",
+                        "formFactor": "rectangular",
+                        "width": 220,
+                        "depth": 220,
+                        "height": 250,
+                    },
+                }
+            }
+        }
+
+    backend = SimpleNamespace(get=get, base_url="http://octoprint", api_key="test-only")
+    timeline = MotionTimeline(tmp_path / "bay.sqlite")
+    store = FabricationArchive(timeline)
+    source = tmp_path / "plate.gcode"
+    source.write_bytes(b"G90\nM82\nG1 X0 Y0 Z0.2\nG1 X10 Y10 E1\n")
+    sha = store.ingest(source)
+    uploads = []
+
+    def upload(base, key, name, data):
+        uploads.append((name, data))
+        return {"selected": False, "print_started": False}
+
+    monkeypatch.setattr(module, "upload_local_gcode", upload)
+    client = TestClient(module.create_app(make_service(backend=backend), timeline=timeline))
+    stage = client.post(f"/api/fabrication/artifacts/{sha}/stage").json()
+    endpoint = f"/api/fabrication/staging/{stage['id']}/deliver"
+    assert client.post(endpoint, json={}).status_code == 422
+    assert not uploads
+    assert (
+        client.post(f"/api/fabrication/artifacts/{sha}/stage?transport=native_sd").status_code
+        == 423
+    )
+    confirmation = {"confirmation": "DELIVER " + stage["id"], "compatibility_acknowledged": True}
+    result = client.post(endpoint, json=confirmation)
+    assert result.status_code == 200 and result.json()["print_started"] is False
+    assert len(uploads) == 1 and uploads[0][1] == source.read_bytes()
+    assert calls == ["/api/connection", "/api/printerprofiles"]
+    assert client.post(endpoint, json=confirmation).status_code == 409
+    assert len(uploads) == 1

@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import hmac
 import ipaddress
+import json
 import logging
 import math
 import os
@@ -1348,11 +1349,131 @@ def create_app(
         except (ValueError, FileNotFoundError) as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get("/api/fabrication/staging/queue", dependencies=[Depends(require_auth)])
+    async def archive_stages():
+        return {
+            "items": await asyncio.to_thread(fabrication_archive.stages),
+            "usb_delivery_enabled": app.state.hmi_import_enabled,
+            "native_sd_delivery": "unsupported_unverified_write_transport",
+        }
+
+    @app.post(
+        "/api/fabrication/artifacts/{sha}/stage", dependencies=[Depends(require_control_token)]
+    )
+    async def archive_stage_artifact(sha: str, transport: str = "octoprint_usb"):
+        if transport != "octoprint_usb":
+            raise HTTPException(423, "Native SD writing/delivery is not verified; no file sent")
+        try:
+            return await asyncio.to_thread(fabrication_archive.stage_artifact, sha)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/staging/{stage_id}/deliver", dependencies=[Depends(require_control_token)]
+    )
+    async def archive_deliver(stage_id: str, request: Request):
+        if not app.state.hmi_import_enabled or printer.backend is None:
+            raise HTTPException(
+                423, "Local delivery is disabled; existing OctoPrint owner required"
+            )
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > 1024:
+                raise HTTPException(413, "Confirmation exceeds limit")
+        try:
+            confirmation = json.loads(data)
+        except ValueError as exc:
+            raise HTTPException(422, "Explicit delivery confirmation required") from exc
+        if not isinstance(confirmation, dict) or confirmation != {
+            "confirmation": "DELIVER " + stage_id,
+            "compatibility_acknowledged": True,
+        }:
+            raise HTTPException(
+                422, "Confirm compatibility and exact local delivery; no print starts"
+            )
+        async with printer.io_lock:
+            try:
+                connection = (await printer.backend.get("/api/connection")).get("current", {})
+                if str(connection.get("state", "")).lower() != "operational" or not str(
+                    connection.get("port", "")
+                ).startswith(("/dev/ttyUSB", "/dev/serial/")):
+                    raise ValueError("An idle connected OctoPrint USB owner is required")
+                profiles = (await printer.backend.get("/api/printerprofiles")).get("profiles", {})
+                profile = next((value for value in profiles.values() if value.get("current")), None)
+                if profile is None:
+                    raise ValueError("Current printer profile unavailable")
+                volume = profile.get("volume", {})
+                if volume.get("origin") != "lowerleft" or volume.get("formFactor") != "rectangular":
+                    raise ValueError("Unsupported or unknown printer build volume")
+                with fabrication_archive.db() as db:
+                    row = db.execute(
+                        "SELECT * FROM artifact_stages WHERE id=?", (stage_id,)
+                    ).fetchone()
+                if row is None or row["status"] != "staged_requires_compatibility_confirmation":
+                    raise ValueError(
+                        "Stage unavailable or delivery outcome uncertain; inspect before retry"
+                    )
+                path = await asyncio.to_thread(fabrication_archive.verified, row["sha256"])
+                geometry = await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+                limits = [float(volume[key]) for key in ("width", "depth", "height")]
+                bounds = geometry["bounds"]
+                if any(not math.isfinite(limit) or limit <= 0 for limit in limits) or any(
+                    bounds[0][axis] < -0.01 or bounds[1][axis] > limits[axis] + 0.01
+                    for axis in range(3)
+                ):
+                    raise ValueError("Deposited geometry exceeds the current printer profile")
+                payload = await asyncio.to_thread(path.read_bytes)
+                if hashlib.sha256(payload).hexdigest() != row["sha256"]:
+                    raise ValueError("Archived original changed before delivery")
+                with fabrication_archive.db() as db:
+                    changed = db.execute(
+                        "UPDATE artifact_stages SET status='delivery_in_progress' "
+                        "WHERE id=? AND status='staged_requires_compatibility_confirmation'",
+                        (stage_id,),
+                    ).rowcount
+                    if changed != 1:
+                        raise ValueError("Delivery already pending")
+                try:
+                    result = await asyncio.to_thread(
+                        upload_local_gcode,
+                        printer.backend.base_url,
+                        printer.backend.api_key,
+                        stage_id + ".gcode",
+                        payload,
+                    )
+                except Exception:
+                    with fabrication_archive.db() as db:
+                        db.execute(
+                            "UPDATE artifact_stages SET status='delivery_unknown' WHERE id=?",
+                            (stage_id,),
+                        )
+                    raise ValueError(
+                        "Delivery outcome unknown; inspect OctoPrint, never retry automatically"
+                    ) from None
+                with fabrication_archive.db() as db:
+                    db.execute(
+                        "UPDATE artifact_stages SET status='delivered_octoprint_local' WHERE id=?",
+                        (stage_id,),
+                    )
+                return {
+                    **result,
+                    "sha256": row["sha256"],
+                    "stage_id": stage_id,
+                    "compatibility": "deposited_envelope_and_operator_acknowledgment",
+                    "selected": False,
+                    "print_started": False,
+                }
+            except (OSError, ValueError, KeyError, TypeError, OctoPrintError) as exc:
+                raise HTTPException(409, str(exc)) from exc
+
     @app.post(
         "/api/fabrication/executions/{execution_id}/stage",
         dependencies=[Depends(require_control_token)],
     )
-    async def archive_stage(execution_id: str):
+    async def archive_stage(execution_id: str, transport: str = "octoprint_usb"):
+        if transport != "octoprint_usb":
+            raise HTTPException(423, "Native SD writing/delivery is not verified; no file sent")
         try:
             return await asyncio.to_thread(fabrication_archive.stage_again, execution_id)
         except (ValueError, FileNotFoundError) as exc:

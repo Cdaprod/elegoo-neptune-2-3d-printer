@@ -133,3 +133,20 @@ function animate(now){
   v.renderer.render(v.scene,v.camera);v.drawn=true;
  }
 }requestAnimationFrame(animate);refresh();setInterval(refresh,3000);
+
+let archiveStageKey='';
+async function refreshArchiveStages(){
+ try{const response=await fetch('/api/fabrication/staging/queue');if(!response.ok)return;
+  const data=await response.json();const items=data.items||[];const key=JSON.stringify(data);
+  if(key===archiveStageKey)return;archiveStageKey=key;
+  $('archive-stage-panel').hidden=!items.length;$('archive-stage-cards').replaceChildren();
+  for(const item of items){const card=text('article','');card.className='plate';
+   const image=document.createElement('img');image.src='/api/fabrication/artifacts/'+item.sha256+'/thumbnail';image.loading='lazy';image.alt='Archived deposited-filament approximation';image.style.cssText='width:100%;height:95px;object-fit:contain';image.onerror=()=>image.replaceWith(text('p','Preview unavailable · original retained'));
+   const button=text('button','Copy to OctoPrint local');button.disabled=!data.usb_delivery_enabled||item.status!=='staged_requires_compatibility_confirmation';
+   button.onclick=async()=>{if(!confirm('Confirm this artifact is suitable for the configured printer. Check its material, temperatures and slicer settings. Copy to OctoPrint local storage? No print will start.'))return;
+    button.disabled=true;try{const result=await fetch('/api/fabrication/staging/'+item.id+'/deliver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation:'DELIVER '+item.id,compatibility_acknowledged:true})});const body=await result.json();if(!result.ok)throw Error(body.detail||'Delivery rejected');message('Verified archived copy delivered to OctoPrint local storage. No print selected or started.');}catch(error){message(error.message);}finally{archiveStageKey='';refreshArchiveStages();}};
+   card.append(image,text('h3',item.filename),text('p',item.status.replaceAll('_',' ')),button);$('archive-stage-cards').append(card);
+  }
+ }catch(error){message('Archived staging unavailable: '+error.message);}
+}
+refreshArchiveStages();setInterval(refreshArchiveStages,3000);

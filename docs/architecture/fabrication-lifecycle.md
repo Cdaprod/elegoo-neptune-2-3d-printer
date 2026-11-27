@@ -351,3 +351,32 @@ bytes and native-SD verified snapshots. Native SD executions can remain unknown/
 metadata-only indefinitely without disappearing. Proven native-SD cache snapshots
 reconcile discovery records only after canonical integrity verification. No new
 firmware mechanism or printer command was added to obtain identity evidence.
+
+## Chronological interface and Print Bay delivery
+
+Choose Chronological archive in the existing gallery to see simultaneous independent
+history, unprinted and SD-discovery lanes. Each lane renders at most 20 cached-image
+cards with keyset Next/Previous paging; only the selected inspector owns interactive
+WebGL. Selected identity persists locally. Unprinted means no recorded execution,
+not proof that the object has never been manufactured. Discovery cards explicitly
+say history unknown. Rendered fixtures are marked simulated and never inserted into
+production history. CI captures native 1280x400 chronology/inspector screenshots.
+
+Archived artifact staging and Print Again create independent receipts in the
+existing Print Bay. The archived-queue panel uses static canonical thumbnails.
+Local delivery is disabled unless the existing HMI import flag is enabled; an
+explicit per-stage confirmation and compatibility acknowledgment are required.
+The backend checks the exclusive OctoPrint USB connection is Operational, validates
+deposited bounds against the actual current rectangular lower-left printer profile,
+rechecks archived SHA-256 and uses the existing local-upload helper with select and
+print false. This envelope check is not a claim to validate every G-code command,
+material or thermal setting; the operator must review those before physical print
+confirmation. Profile geometry came from read-only Pi inspection: 220x220x250 mm.
+The same inspection reported USB Operational, /dev/ttyUSB-printer, 115200 baud.
+
+A delivery attempt is latched before upload. Ambiguous failure becomes
+ delivery_unknown and is never retried automatically. A successful local upload
+is not print execution or physical acceptance. Native SD upload/delivery requests
+are explicitly blocked while no verified write transport exists; native SD printing
+itself remains supported through observed execution history and existing guarded
+operator controls. No automated validation issued a printer command or upload.
