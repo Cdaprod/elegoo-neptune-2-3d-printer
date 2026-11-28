@@ -21,9 +21,9 @@ from xml.sax.saxutils import escape
 
 MAX_SOURCE_BYTES = 50 * 1024 * 1024
 MAX_SOURCE_LINES = 1_500_000
-MAX_SEGMENTS = 7500
+MAX_SEGMENTS = 350_000
 MAX_CACHE_BYTES = 80 * 1024 * 1024
-CACHE_VERSION = "filament-v3"
+CACHE_VERSION = "filament-v4-connected"
 COMMAND = re.compile(r"^\s*(?:N\d+\s*)?([GMT])\s*(\d+)", re.I)
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 PARAMETER = re.compile(r"([XYZEIFJR])\s*(" + NUMBER + r")", re.I)
@@ -48,6 +48,42 @@ def _feature(comment: str, current: int) -> int:
     return 0
 
 
+def simplify_path(points, tolerance):
+    """Bounded-error RDP: endpoints, closed rings and separate deposition runs survive."""
+    if len(points) <= 3:
+        return points
+    keep = {0, len(points) - 1}
+    stack = [(0, len(points) - 1)]
+    operations = 0
+    while stack:
+        first, last = stack.pop()
+        a, b = points[first], points[last]
+        direction = [b[i] - a[i] for i in range(3)]
+        length = sum(v * v for v in direction)
+        farthest, distance = None, tolerance * tolerance
+        for index in range(first + 1, last):
+            operations += 1
+            if operations > 20_000_000:
+                raise ModelPreviewError("Connected path simplification exceeded CPU budget")
+            point = points[index]
+            factor = (
+                max(0, min(1, sum((point[i] - a[i]) * direction[i] for i in range(3)) / length))
+                if length
+                else 0
+            )
+            error = sum((point[i] - a[i] - factor * direction[i]) ** 2 for i in range(3))
+            if error > distance:
+                farthest, distance = index, error
+        if farthest is not None:
+            keep.add(farthest)
+            stack.extend(((first, farthest), (farthest, last)))
+    result = [points[index] for index in sorted(keep)]
+    # Small closed features must not collapse into a line or triangle.
+    if points[0] == points[-1] and len(result) < min(9, len(points)):
+        return points
+    return result
+
+
 def reconstruct(stream: TextIO) -> dict[str, Any]:
     """Read G0/G1 extrusion, G90/G91, M82/M83, G92, and XY I/J arcs."""
     position = {axis: 0.0 for axis in "XYZE"}
@@ -63,7 +99,42 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
     minimum = [math.inf] * 3
     maximum = [-math.inf] * 3
     emitted = 0
-    stride = 1
+    ranges = []
+    path = []
+    path_kind = 0
+    path_width = width
+    layer_height = 0.2
+    last_layer_z = None
+    path_source_count = 0
+    max_error = 0.0
+
+    def flush_path():
+        nonlocal path, path_source_count, max_error
+        if len(path) < 2:
+            path = []
+            return
+        tolerance = min(0.035, path_width * 0.08)
+        reduced = simplify_path(path, tolerance)
+        start = len(segments)
+        if start + len(reduced) - 1 > MAX_SEGMENTS:
+            raise ModelPreviewError(
+                "Connected geometry exceeds display budget; original is preserved"
+            )
+        for a, b in zip(reduced, reduced[1:], strict=False):
+            segments.append([*(round(v, 3) for v in a + b), round(path_width, 3), path_kind])
+        ranges.append(
+            {
+                "start": start,
+                "count": len(reduced) - 1,
+                "source_segments": path_source_count,
+                "closed": reduced[0] == reduced[-1],
+                "height": layer_height,
+            }
+        )
+        max_error = max(max_error, tolerance)
+        path = []
+        path_source_count = 0
+
     chord_arcs = 0
     lines = 0
     for lines, raw in enumerate(stream, 1):
@@ -72,6 +143,12 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
         code, _, comment = raw.partition(";")
         if comment:
             tag = comment.strip().upper()
+            if tag.startswith(("TYPE:", "FEATURE:")):
+                flush_path()
+            height = re.match(r"^\s*layer_height\s*=\s*(" + NUMBER + r")", comment, re.I)
+            if height and 0.03 <= float(height[1]) <= 1.2:
+                flush_path()
+                layer_height = float(height[1])
             if tag.startswith(("TYPE:", "FEATURE:")):
                 # Explicit slicer feature evidence, never a spatial outlier heuristic.
                 part_feature = any(
@@ -117,6 +194,7 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
         if any(not math.isfinite(v) or abs(v) > 10000 for v in args.values()):
             continue
         if operation == 92:
+            flush_path()
             for axis in "XYZE":
                 if axis in args:
                     position[axis] = args[axis]
@@ -131,6 +209,7 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
             continue
         delta_e = args.get("E", 0.0) if e_relative else position["E"] - old["E"]
         if delta_e <= 0.000001:
+            flush_path()
             continue
         start = (old["X"], old["Y"], old["Z"])
         end = (position["X"], position["Y"], position["Z"])
@@ -172,16 +251,27 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
                 if part_feature:
                     part_minimum[i] = min(part_minimum[i], a[i], b[i])
                     part_maximum[i] = max(part_maximum[i], a[i], b[i])
-            if emitted % stride == 0:
-                segments.append([*(round(v, 3) for v in a + b), round(width, 3), kind])
-                if len(segments) > MAX_SEGMENTS:
-                    segments = segments[::2]
-                    stride *= 2
+            if path and (path[-1] != a or path_kind != kind or path_width != width):
+                flush_path()
+            if not path:
+                if a[2] == b[2] and a[2] > 0:
+                    inferred = a[2] - (last_layer_z or 0)
+                    if 0.03 <= inferred <= 1.2:
+                        layer_height = inferred
+                    last_layer_z = a[2]
+                path = [a]
+                path_kind, path_width = kind, width
+            path.append(b)
+            path_source_count += 1
+            if len(path) >= 8192:
+                flush_path()  # Bounded memory; the next run starts at the same endpoint.
+    flush_path()
     if not emitted or not segments:
         raise ModelPreviewError("No deposited filament paths found in G-code")
     return {
         "source": "reconstructed_gcode_extrusion",
         "segments": segments,
+        "path_ranges": ranges,
         "bounds": [minimum, maximum],
         "display_bounds": [part_minimum, part_maximum]
         if all(math.isfinite(v) for v in part_minimum + part_maximum)
@@ -189,7 +279,11 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
         "stats": {
             "extrusion_segments": emitted,
             "rendered_segments": len(segments),
-            "sampling_stride": stride,
+            "sampling_stride": 1,
+            "simplification": "connected_rdp_v1",
+            "max_deviation_mm": max_error + 0.001,
+            "deposition_runs": len(ranges),
+            "original_toolpath": "immutable_canonical_gcode",
             "arcs_represented_as_chords": chord_arcs,
             "source_lines": lines,
             "approximate": True,
@@ -270,7 +364,7 @@ def render_svg(model: dict[str, Any], view: str = "iso") -> bytes:
             f'<text x="31" y="691" fill="#a4c1d5" font-family="monospace" '
             f'font-size="16">{sizes[0]:.1f} × {sizes[1]:.1f} × {sizes[2]:.1f} mm'
             f" | {escape(view.upper())} | "
-            f"{model['stats']['rendered_segments']:,} sampled paths</text>",
+            f"{model['stats']['rendered_segments']:,} connected spans</text>",
             "</svg>",
         ]
     )

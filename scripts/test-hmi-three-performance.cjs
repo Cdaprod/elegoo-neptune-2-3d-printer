@@ -27,7 +27,8 @@ const assert=require('node:assert/strict');
     source:'reconstructed_gcode_extrusion',
     bounds:[[0,0,.2],[30,30,12]],
     segments:[[0,0,.2,30,0,.2,.44,0],[30,0,.2,30,30,.2,.44,0],[30,30,.2,0,30,.2,.44,0],[0,30,.2,0,0,.2,.44,0]],
-    stats:{extrusion_segments:4,rendered_segments:4,sampling_stride:1}
+    path_ranges:[{start:0,count:4,source_segments:4,closed:true,height:.2}],
+    stats:{extrusion_segments:4,rendered_segments:4,sampling_stride:1,simplification:"connected_rdp_v1",max_deviation_mm:.036}
    })
   }));
   await page.goto('http://127.0.0.1:8000/hmi');
@@ -49,6 +50,8 @@ const assert=require('node:assert/strict');
   });
   assert.ok(quality.pixelRatio>=1&&quality.pixelRatio<=1.5,'Pixel ratio must be bounded');
   assert.ok(quality.width>quality.cssWidth,'Small model should supersample silhouette');
+  assert.equal(await page.locator('#model-viewer-host').getAttribute('data-viewer-pipeline'),'connected_sweep');
+  assert.ok(Number(await page.locator('#model-viewer-host').getAttribute('data-viewer-draw-calls'))<=5,'Connected surfaces must remain batched');
   await page.waitForFunction(()=>Number(document.getElementById('model-viewer-host')?.dataset.viewerFrames)>=2);
   await page.waitForTimeout(950);
   const before=Number(await page.locator('#model-viewer-host').getAttribute('data-viewer-frames'));

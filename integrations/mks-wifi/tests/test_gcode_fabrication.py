@@ -50,13 +50,17 @@ def test_relative_extrusion_and_retraction_never_draw_travel() -> None:
         reconstruct(io.StringIO("G90\nG0 X20 Y20\nG1 X35 F1800\n"))
 
 
-def test_progressive_sampling_covers_entire_large_gcode() -> None:
+def test_connected_simplification_covers_entire_large_gcode() -> None:
     commands = ["G90", "M83"]
     commands.extend(f"G1 X{n % 200} Y{n // 200} E0.1" for n in range(16000))
     model = reconstruct(io.StringIO("\n".join(commands)))
     assert model["stats"]["extrusion_segments"] == 15999
     assert model["stats"]["rendered_segments"] <= MAX_SEGMENTS
-    assert model["stats"]["sampling_stride"] > 1
+    assert model["stats"]["sampling_stride"] == 1
+    assert model["stats"]["rendered_segments"] < 1000
+    for run in model["path_ranges"]:
+        spans = model["segments"][run["start"] : run["start"] + run["count"]]
+        assert all(a[3:6] == b[:3] for a, b in zip(spans, spans[1:], strict=False))
     assert model["bounds"][1][1] == 79
 
 
@@ -134,3 +138,25 @@ def test_explicit_slicer_features_frame_part_without_discarding_prime_paths():
     assert len(model["segments"]) == 4  # All paths remain inspectable.
     unlabelled = reconstruct(io.StringIO("M83\nG1 X60 E2\n"))
     assert unlabelled["display_bounds"] == unlabelled["bounds"]
+
+
+def test_closed_perimeters_and_travel_gaps_survive_simplification():
+    import math
+
+    commands = ["G90", "M83"]
+    for x in (0, 20):
+        commands.append(f"G0 X{x + 5} Y0 Z0.2")
+        commands.extend(
+            f"G1 X{x + 5 * math.cos(i * math.tau / 360):.6f} "
+            f"Y{5 * math.sin(i * math.tau / 360):.6f} E0.1"
+            for i in range(1, 361)
+        )
+    model = reconstruct(io.StringIO("\n".join(commands)))
+    assert len(model["path_ranges"]) == 2
+    assert all(run["closed"] for run in model["path_ranges"])
+    assert model["stats"]["extrusion_segments"] == 720
+    assert model["stats"]["rendered_segments"] < 150
+    for run in model["path_ranges"]:
+        spans = model["segments"][run["start"] : run["start"] + run["count"]]
+        assert spans[0][:3] == spans[-1][3:6]
+        assert all(a[3:6] == b[:3] for a, b in zip(spans, spans[1:], strict=False))
