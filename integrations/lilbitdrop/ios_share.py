@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import http.client
 import json
-import os
 import re
 import stat
 import tempfile
