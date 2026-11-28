@@ -377,6 +377,12 @@ class OctoPrintBackend:
                     digest = info.get("hash")
                     if (
                         selected == job_file
+                        and info.get("path") == path
+                        and all(
+                            info.get(key) == job_file[key]
+                            for key in ("name", "date", "size")
+                            if key in job_file
+                        )
                         and isinstance(digest, str)
                         and len(digest) == 40
                         and all(c in "0123456789abcdef" for c in digest.lower())

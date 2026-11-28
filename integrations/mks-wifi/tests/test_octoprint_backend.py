@@ -310,7 +310,7 @@ def test_octoprint_history_endpoint_is_authenticated_and_read_only(tmp_path: Any
 
 
 @pytest.mark.parametrize(
-    "case", ["verified", "changed_selection", "missing_metadata", "unsafe_path"]
+    "case", ["verified", "changed_selection", "missing_metadata", "unsafe_path", "modified_file"]
 )
 def test_active_content_identity_is_optional_and_never_filename_matching(case):
     class ContentBackend(StubBackend):
@@ -335,7 +335,12 @@ def test_active_content_identity_is_optional_and_never_filename_matching(case):
             if endpoint == "/api/files/local/part.gcode":
                 if case == "missing_metadata":
                     raise OctoPrintError("Metadata unavailable")
-                return {"hash": "a" * 40}
+                return {
+                    "hash": "a" * 40,
+                    "path": "part.gcode",
+                    "name": "part.gcode",
+                    "date": 2 if case == "modified_file" else 1,
+                }
             raise AssertionError(endpoint)
 
     backend = ContentBackend()

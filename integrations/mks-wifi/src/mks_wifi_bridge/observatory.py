@@ -1402,7 +1402,10 @@ def create_app(
                     headers={"X-Content-Type-Options": "nosniff"},
                 )
             if derivative == "geometry":
-                geometry = await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+                async with model_preview_slots:
+                    geometry = await asyncio.to_thread(
+                        fabrication_archive.previews.geometry, path.name
+                    )
                 fabrication_archive.mark_derivative(sha, "geometry", "generated")
                 return geometry
             if derivative == "thumbnail":
@@ -1413,7 +1416,8 @@ def create_app(
                     if format == "png"
                     else fabrication_archive.previews.preview
                 )
-                svg = await asyncio.to_thread(method, path.name)
+                async with model_preview_slots:
+                    svg = await asyncio.to_thread(method, path.name)
                 fabrication_archive.mark_derivative(sha, "thumbnail", "generated")
                 return Response(svg, media_type="image/png" if format == "png" else "image/svg+xml")
             raise ValueError("Unknown derivative")
