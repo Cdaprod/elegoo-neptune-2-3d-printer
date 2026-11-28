@@ -364,10 +364,74 @@ class FabricationArchive:
         return {
             "schema_version": 1,
             "items": items,
-            "next": json.dumps([last.get("started_at") or last["ingested_at"], last["id"]])
+            "next": json.dumps(
+                [
+                    last.get("started_at", "") if kind == "history" else last["ingested_at"],
+                    last["id"],
+                ]
+            )
             if last and len(rows) > limit
             else None,
         }
+
+    def import_execution_history(self, records):
+        """Import source records, preserving unknown dates/outcomes and no guessed byte identity."""
+        count = 0
+        with self.db() as db:
+            for record in records[:100]:
+                identity = str(record.get("id", ""))
+                if not identity.startswith("octoprint-") or identity.endswith("unknown"):
+                    continue
+                started = record.get("started_at") or ""
+                ended = record.get("ended_at")
+                try:
+                    started = datetime.fromisoformat(started.replace("Z", "+00:00")).isoformat()
+                except (TypeError, ValueError, AttributeError):
+                    started = ""  # Explicit unknown start, not fabricated ingestion time.
+                try:
+                    ended = (
+                        datetime.fromisoformat(ended.replace("Z", "+00:00")).isoformat()
+                        if ended
+                        else None
+                    )
+                except (TypeError, ValueError, AttributeError):
+                    ended = None
+                state = {"success": "completed", "cancel": "cancelled", "fail": "failed"}.get(
+                    record.get("state"), record.get("state") or "unknown"
+                )
+                db.execute(
+                    "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET state=excluded.state,ended_at=excluded.ended_at "
+                    "WHERE print_sessions.source='OctoPrint PrintJobHistory plugin'",
+                    (
+                        identity,
+                        record.get("filename"),
+                        started,
+                        ended,
+                        state,
+                        record.get("progress"),
+                        None,
+                        "OctoPrint PrintJobHistory plugin",
+                    ),
+                )
+                payload = json.dumps(
+                    {"record": record, "identity": "unavailable", "date_available": bool(started)},
+                    sort_keys=True,
+                )
+                event_id = hashlib.sha256((identity + payload).encode()).hexdigest()
+                db.execute(
+                    "INSERT OR IGNORE INTO execution_events VALUES(?,?,?,?,?,?)",
+                    (
+                        event_id,
+                        identity,
+                        now(),
+                        "history_import",
+                        payload,
+                        "OctoPrint PrintJobHistory plugin",
+                    ),
+                )
+                count += 1
+        return count
 
     def assess_quality(self, execution_id, result, notes=""):
         if (

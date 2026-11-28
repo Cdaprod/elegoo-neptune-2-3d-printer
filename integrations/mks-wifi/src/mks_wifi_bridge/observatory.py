@@ -1008,6 +1008,38 @@ def create_app(
         while True:
             try:
                 await asyncio.to_thread(fabrication_archive.reconcile, local_gcode_indexer)
+                if printer.backend is not None and hasattr(printer.backend, "print_job_history"):
+                    try:
+                        recent = await printer.backend.print_job_history(100)
+                        await asyncio.to_thread(
+                            fabrication_archive.import_execution_history, recent.get("sessions", [])
+                        )
+                        with fabrication_archive.db() as db:
+                            db.execute(
+                                "CREATE TABLE IF NOT EXISTS history_reconcile_state "
+                                "(provider TEXT PRIMARY KEY,offset INTEGER NOT NULL)"
+                            )
+                            position = db.execute(
+                                "SELECT offset FROM history_reconcile_state "
+                                "WHERE provider='octoprint'"
+                            ).fetchone()
+                        offset = position[0] if position else 100
+                        if offset < recent.get("total", 0):
+                            older = await printer.backend.print_job_history(100, offset=offset)
+                            await asyncio.to_thread(
+                                fabrication_archive.import_execution_history,
+                                older.get("sessions", []),
+                            )
+                            with fabrication_archive.db() as db:
+                                db.execute(
+                                    "INSERT OR REPLACE INTO history_reconcile_state VALUES(?,?)",
+                                    ("octoprint", offset + len(older.get("sessions", []))),
+                                )
+                    except Exception:
+                        logger.info(
+                            "OctoPrint historical reconciliation unavailable; archive retained"
+                        )
+
                 if os.getenv("NEPTUNE_NATIVE_SD_AUTO_ARCHIVE", "false").lower() == "true":
                     storage = native_sd_service()
                     if not any(not task.done() for task in storage.tasks.values()):

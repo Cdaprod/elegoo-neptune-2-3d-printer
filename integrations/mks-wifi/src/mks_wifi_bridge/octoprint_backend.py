@@ -206,16 +206,18 @@ class OctoPrintBackend:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
 
-    async def print_job_history(self, limit: int = 200) -> dict[str, Any]:
+    async def print_job_history(self, limit: int = 200, offset: int = 0) -> dict[str, Any]:
         """Read-only, bounded PrintJobHistory plugin API, never direct printer I/O."""
         if isinstance(limit, bool) or not 1 <= limit <= 500:
             raise ValueError("History limit must be between 1 and 500")
+        if isinstance(offset, bool) or not isinstance(offset, int) or not 0 <= offset <= 10000000:
+            raise ValueError("Invalid history offset")
         from urllib.parse import urlencode
 
         query = urlencode(
             {
-                "from": 0,
-                "to": limit,
+                "from": offset,
+                "to": offset + limit,
                 "sortColumn": "printStartDateTime",
                 "sortOrder": "desc",
                 "filterName": "all",

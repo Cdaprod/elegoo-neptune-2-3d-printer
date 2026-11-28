@@ -326,3 +326,21 @@ def test_quality_is_append_only_and_never_rewrites_machine_outcome(tmp_path):
     assert len(detail["quality_assessments"]) == 2
     assert all(row["source"] == "operator_supplied" for row in detail["quality_assessments"])
     assert detail["execution"]["sha256"] is None
+
+
+def test_external_history_import_is_idempotent_and_does_not_guess_artifact(tmp_path):
+    store = archive(tmp_path)
+    record = {
+        "id": "octoprint-42",
+        "filename": "same.gcode",
+        "state": "failed",
+        "started_at": "2026-01-01T10:00:00+00:00",
+        "ended_at": None,
+    }
+    assert store.import_execution_history([record]) == 1
+    store.import_execution_history([record])
+    rows = store.collection("history")["items"]
+    assert len(rows) == 1 and rows[0]["sha256"] is None
+    assert rows[0]["state"] == "failed"
+    store.import_execution_history([{**record, "id": "octoprint-43", "started_at": "unknown"}])
+    assert len(store.collection("history")["items"]) == 2
