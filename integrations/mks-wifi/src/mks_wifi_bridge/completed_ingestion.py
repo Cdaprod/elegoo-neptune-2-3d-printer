@@ -5,6 +5,7 @@ import re
 import time
 from pathlib import Path
 
+from .artifact_policy import transport_kind, validate_transport_content
 from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
 from .octoprint_local_import import LibraryImportError
 
@@ -53,7 +54,10 @@ class CompletedDirectoryAdapter:
             relative = path.relative_to(self.directory)
             if any(part.startswith(".") or part.lower() == "partial" for part in relative.parts):
                 continue
-            if path.suffix.lower() not in {".gcode", ".gco", ".gc", ".g"}:
+            original = re.sub(r"^[a-f0-9]{64}_", "", path.name)
+            try:
+                kind = transport_kind(original)
+            except ValueError:
                 continue
             if not path.resolve().is_relative_to(root):
                 continue
@@ -77,13 +81,14 @@ class CompletedDirectoryAdapter:
                     continue
                 self.status.update(state="ingesting", current_file=str(relative))
                 prefix = re.match(r"^([a-f0-9]{64})_", path.name)
-                original = re.sub(r"^[a-f0-9]{64}_", "", path.name)
+                validate_transport_content(path, original)
                 sha = self.service.submit_path(
                     path,
                     ArtifactSubmission(
                         original,
                         "lilbitdrop",
-                        "file:" + str(path),
+                        "file:" + str(path) + "#mtime_ns=" + str(stat.st_mtime_ns),
+                        artifact_kind=kind,
                         expected_sha256=prefix[1] if prefix else None,
                     ),
                 )

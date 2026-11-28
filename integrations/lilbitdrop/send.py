@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send G-code over verified SSH to the Pi's loopback HTTP receiver; never print."""
+"""Send engineering artifacts over verified SSH to the Pi's loopback HTTP receiver; never print."""
 
 import argparse
 import hashlib
@@ -7,7 +7,12 @@ import json
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
+
+# Host scripts use the same dependency-free policy shipped with Observatory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mks-wifi/src/mks_wifi_bridge"))
+import artifact_policy  # noqa: E402
 
 BRIDGE = r"""
 import http.client,json,os,sys
@@ -20,7 +25,8 @@ try:
     connection=http.client.HTTPConnection("127.0.0.1",int(port),timeout=30)
     connection.request("POST","/receive?"+urlencode({"filename":name}),body=sys.stdin.buffer,
         headers={"Authorization":"Bearer "+token,"Content-Type":"application/octet-stream",
-                 "Content-Length":length,"X-Content-SHA256":digest})
+                 "Content-Length":length,"X-Content-SHA256":digest,
+                 "X-LilBitDrop-Transport":"ssh"})
     response=connection.getresponse()
     raw=response.read(65537)
     if response.status != 201 or len(raw)>65536:
@@ -46,17 +52,14 @@ def send(
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", host):
         raise ValueError("Use a configured SSH host alias")
     if path.is_symlink() or not path.is_file():
-        raise ValueError("Supply a regular G-code file")
-    if not re.fullmatch(
-        r"[A-Za-z0-9][A-Za-z0-9_. -]{0,160}\.(gcode|gco|gc|g)", path.name, re.IGNORECASE
-    ):
-        raise ValueError("Unsupported G-code filename")
+        raise ValueError("Supply a regular engineering file")
+    artifact_policy.transport_kind(path.name)
     if not 1 <= port <= 65535:
         raise ValueError("Invalid loopback receiver port")
     with path.open("rb") as source:
         size = path.stat().st_size
-        if not 0 < size <= 50 * 1024 * 1024:
-            raise ValueError("G-code must be 1 byte to 50 MiB")
+        if not 0 < size <= artifact_policy.MAX_BYTES:
+            raise ValueError("Artifact must be 1 byte to 50 MiB")
         digest = hashlib.file_digest(source, "sha256").hexdigest()
         source.seek(0)
         command = " ".join(
