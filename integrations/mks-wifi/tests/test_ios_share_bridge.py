@@ -43,7 +43,7 @@ def test_ios_share_handoff_to_completed(tmp_path):
 
     def send(name="from-iphone.gcode", secret=token, data=content):
         req = Request(
-            "http://127.0.0.1:%s/share?filename=%s" % (gateway.server_port, name),
+            f"http://127.0.0.1:{gateway.server_port}/share?filename={name}",
             method="POST",
             data=data,
             headers={

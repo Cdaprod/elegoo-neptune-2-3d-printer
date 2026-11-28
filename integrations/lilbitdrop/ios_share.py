@@ -117,7 +117,9 @@ class ShareHandler(BaseHTTPRequestHandler):
                     digest.update(block)
                     remaining -= len(block)
                 body.seek(0)
-                conn = http.client.HTTPConnection("127.0.0.1", self.server.receiver_port, timeout=30)
+                conn = http.client.HTTPConnection(
+                    "127.0.0.1", self.server.receiver_port, timeout=30
+                )
                 try:
                     conn.putrequest("POST", "/receive?" + urlencode({"filename": filename}))
                     conn.putheader("Authorization", "Bearer " + self.server.token)
