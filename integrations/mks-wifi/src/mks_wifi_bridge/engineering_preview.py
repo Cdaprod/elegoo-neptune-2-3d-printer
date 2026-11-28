@@ -42,10 +42,22 @@ class EngineeringPreview:
         if cached.is_file():
             model = json.loads(cached.read_text())
             if model.get("artifact_sha256") == sha:
+                with self.archive.db() as db:
+                    row = db.execute(
+                        "SELECT metadata FROM fabrication_artifacts WHERE sha256=?", (sha,)
+                    ).fetchone()
+                metadata = json.loads(row["metadata"]) if row else {}
+                if metadata.get("source_3mf"):
+                    model.update(
+                        source="derived_3mf_surface",
+                        units=metadata.get("units"),
+                        provenance=metadata.get("geometry_provenance"),
+                        display=metadata.get("display"),
+                    )
                 return model
         with self.archive.db() as db:
             row = db.execute(
-                "SELECT filename FROM fabrication_artifacts WHERE sha256=?", (sha,)
+                "SELECT filename,metadata FROM fabrication_artifacts WHERE sha256=?", (sha,)
             ).fetchone()
             sources = [
                 item[0]
@@ -113,6 +125,14 @@ class EngineeringPreview:
             "provenance": "fingerprint_verified_source_geometry",
         }
 
+        metadata = json.loads(row["metadata"])
+        if metadata.get("source_3mf"):
+            result.update(
+                source="derived_3mf_surface",
+                units=metadata.get("units", "source_coordinates_unverified"),
+                provenance=metadata.get("geometry_provenance"),
+                display=metadata.get("display"),
+            )
         self.cache_write(cached, json.dumps(result, separators=(",", ":")).encode())
         return result
 

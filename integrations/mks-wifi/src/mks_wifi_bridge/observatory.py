@@ -1202,6 +1202,9 @@ def create_app(
     model_registry = install_model_registry(
         app, require_auth, require_control_token, fabrication_archive
     )
+    from .slicer_library import install as install_slicer_library
+
+    install_slicer_library(app, require_auth, require_control_token, fabrication_archive)
     inventory_file = os.getenv("NEPTUNE_ENGINEERING_INVENTORY_FILE")
     if inventory_file:
         try:
@@ -1392,13 +1395,17 @@ def create_app(
     async def archive_derivative(sha: str, derivative: str, format: str = "svg"):
         try:
             path = await asyncio.to_thread(fabrication_archive.verified, sha)
-            if derivative == "observation":
+            if derivative in {"observation", "original"}:
                 from fastapi.responses import FileResponse
 
+                with fabrication_archive.db() as db:
+                    row = db.execute(
+                        "SELECT filename FROM fabrication_artifacts WHERE sha256=?", (sha,)
+                    ).fetchone()
                 return FileResponse(
                     path,
                     media_type="application/octet-stream",
-                    filename=sha + ".bin",
+                    filename=row["filename"] if derivative == "original" else sha + ".bin",
                     headers={"X-Content-Type-Options": "nosniff"},
                 )
             if derivative == "geometry":

@@ -156,6 +156,16 @@
    $("cancel-sd").hidden=true;
    $("copy-sd-local").hidden=source!=="native_cache";
    text("native-sd-status",source==="printer_native"?"Retrieve actual SD bytes before reconstruction.":"");
+   $('slicer-detail').hidden=!(file.source_project_sha||file.metadata?.source_3mf);
+   $('slicer-metadata').replaceChildren();
+   const sourceProject=file.source_project_sha||file.metadata?.source_3mf;
+   if(sourceProject)api('/api/fabrication/slicer-projects/'+sourceProject,{signal:inspectorRequest.signal}).then(project=>{
+    if(epoch!==inspectorEpoch)return;
+    const root=$('slicer-metadata');const description=document.createElement('p');description.textContent=project.bodies.length+' extracted bodies · '+project.plates.length+' plates · '+project.units+' · Original 3MF archived; model identity/authority unresolved';root.append(description);
+    for(const plate of project.plates){const row=document.createElement('p');row.textContent=plate.name+' · '+plate.instances.length+' placed instances';root.append(row);}
+    const link=document.createElement('a');link.href='/api/fabrication/artifacts/'+sourceProject+'/original';link.textContent='Download original 3MF';root.append(link);
+    const settings=document.createElement('pre');settings.style.cssText='font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere';settings.textContent=JSON.stringify(project.settings,null,2);root.append(settings);
+   }).catch(error=>{if(error.name!=='AbortError')text('slicer-metadata',error.message);});
    $('model-tools').hidden=!(file.sha256||file.model_id);$('model-tools').open=!!file.model_id;
    if(file.sha256||file.model_id)populateRegistry(file);
    $("model-inspector").showModal();
@@ -176,8 +186,8 @@
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
-     if(geometry.source==='original_stl_surface'){
-      text('inspector-details',dims+' source coordinate units · units unverified');
+     if(geometry.surface_vertices){
+      text('inspector-details',dims+(geometry.units==='mm'?' mm · 3MF-declared units; not physical measurement':' source coordinate units · units unverified'));
       text('inspector-status','Original STL surface · '+geometry.stats.rendered_triangles+' triangles · fingerprint verified');
      }else{
      text("inspector-details",dims+" mm · "+(stats.rendered_segments||0)+" rendered extrusion segments");
@@ -225,12 +235,12 @@
      (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
    if(file.archive_collection)info.textContent=file.archive_collection==='history'?(file.state||'Unknown'):file.archive_collection==='discovered'?'Metadata only':file.bytes_available?'Archived':'Source only';
-   if(file.model_id)info.textContent='Revision '+(file.label||'unresolved')+' · '+(file.approved?'Scoped authority approved':'Authority unresolved');
+   if(file.model_id)info.textContent=(file.identity_state==='candidate'?'Candidate · ':'')+'Revision '+(file.label||'unresolved')+' · '+(file.approved?'Scoped authority approved':'Authority unresolved');
    else if(file.artifact_kind)info.textContent=file.artifact_kind.replaceAll('_',' ')+' · '+(file.bytes_available?'Archived':'Not archived');
    button.append(image,name,info);
    setPreviewImage(image,file,source);
    if(hasGeometry(file,source)){
-     const pill=document.createElement("span");pill.className="render-pill";pill.textContent=file.engineering?"SOURCE STL":"3D G-CODE";button.append(pill);
+     const pill=document.createElement("span");pill.className="render-pill";pill.textContent=file.source_project_sha?"3MF PLATE":file.metadata?.source_3mf?"3MF BODY":file.engineering?"SOURCE STL":"3D G-CODE";button.append(pill);
    }
    const select=()=>{
      document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));
@@ -349,7 +359,7 @@
     registryPrevious.disabled=!pagination.previous.length;registryNext.disabled=!result.next;
     registryPrevious.onclick=()=>{pagination.before=pagination.previous.pop();loadFiles();};registryNext.onclick=()=>{pagination.previous.push(pagination.before);pagination.before=result.next;loadFiles();};
     for(const row of result.items){
-     const file=collection==='models'?{...row.preview,model_id:row.id,display_name:row.name,filename:row.preview?.filename||row.name,sha256:row.preview?.sha256}:row;
+     const file=collection==='models'?{...row.preview,model_id:row.id,identity_state:row.identity_state,display_name:row.name,filename:row.preview?.filename||row.name,sha256:row.preview?.sha256}:row;
      const stl=/\.stl$/i.test(file.filename||'');const gcode=/\.(gcode|gco|gc|g)$/i.test(file.filename||'')&&file.archived===1;
      host.append(card({...file,archive:true,engineering:stl,source_present:stl||gcode,bytes_available:!!file.archived,geometry_available:stl||gcode},'archive'));
     }
@@ -357,6 +367,12 @@
     return;
    }
 
+   if(collection==='slicer_projects'){
+    delete host.dataset.layout;host.replaceChildren();const result=await api('/api/fabrication/slicer-projects');
+    for(const row of result.items)host.append(card({filename:row.filename,display_name:row.filename,sha256:row.preview_sha256,source_project_sha:row.sha256,engineering:true,archive:true,source_present:!!row.preview_sha256,bytes_available:true,metadata:{source_3mf:row.sha256},print_metadata:{},identity_state:'candidate'},'archive'));
+    if(!result.items.length)host.textContent='No processed 3MF projects yet. Published originals remain archived independently of geometry.';
+    return;
+   }
    if(collection==='archive'){await renderChronology(host);return;}
    delete host.dataset.layout;
 
