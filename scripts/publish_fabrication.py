@@ -125,7 +125,7 @@ class SshAPI:
                 {
                     "Content-Type": "application/octet-stream",
                     "X-Content-SHA256": sha,
-                    "X-Artifact-Provider": "orca_slicer",
+                    "X-Artifact-Provider": "engineering_publication",
                     "X-Artifact-Source": quote(
                         uri or "macbook:" + source.absolute().as_uri(), safe=":/#@%"
                     ),

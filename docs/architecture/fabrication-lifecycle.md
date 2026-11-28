@@ -540,3 +540,10 @@ the publishing Mac; G-code is preserved unchanged and uses the existing preview
 pipeline. `--inventory /private/inventory.json --scope 3mf|gcode|all` resumes batch
 publication with the same private receipt journal. Neither mode slices or executes
 source files, approves authority, stages artifacts or sends them to the printer.
+
+G-code camera framing uses explicit slicer part-feature tags when present, keeping
+purge/custom/skirt paths from shrinking the model. All original deposited paths and
+full bounds remain available through **All paths**; unlabelled G-code uses full
+bounds. Cached raster previews follow the same part framing. This is a display
+choice, not deletion or alteration of source commands. Publication provenance names
+the engineering publication adapter; actual slicer identity comes from file metadata.

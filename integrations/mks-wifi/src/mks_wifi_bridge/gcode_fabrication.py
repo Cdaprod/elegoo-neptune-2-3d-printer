@@ -23,7 +23,7 @@ MAX_SOURCE_BYTES = 50 * 1024 * 1024
 MAX_SOURCE_LINES = 1_500_000
 MAX_SEGMENTS = 7500
 MAX_CACHE_BYTES = 80 * 1024 * 1024
-CACHE_VERSION = "filament-v2"
+CACHE_VERSION = "filament-v3"
 COMMAND = re.compile(r"^\s*(?:N\d+\s*)?([GMT])\s*(\d+)", re.I)
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 PARAMETER = re.compile(r"([XYZEIFJR])\s*(" + NUMBER + r")", re.I)
@@ -55,6 +55,9 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
     e_relative = False
     units = 1.0
     kind = 0
+    part_feature = False
+    part_minimum = [math.inf] * 3
+    part_maximum = [-math.inf] * 3
     width = 0.44
     segments: list[list[float | int]] = []
     minimum = [math.inf] * 3
@@ -68,6 +71,24 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
             raise ModelPreviewError("G-code exceeds the bounded renderer line limit")
         code, _, comment = raw.partition(";")
         if comment:
+            tag = comment.strip().upper()
+            if tag.startswith(("TYPE:", "FEATURE:")):
+                # Explicit slicer feature evidence, never a spatial outlier heuristic.
+                part_feature = any(
+                    word in tag
+                    for word in (
+                        "PERIMETER",
+                        "WALL",
+                        "INFILL",
+                        "SOLID",
+                        "TOP",
+                        "BOTTOM",
+                        "SKIN",
+                        "GAP FILL",
+                        "BRIDGE",
+                        "SUPPORT",
+                    )
+                ) and not any(word in tag for word in ("SKIRT", "BRIM", "PRIME", "WIPE", "CUSTOM"))
             kind = _feature(comment, kind)
             match = WIDTH.match(";" + comment)
             if match:
@@ -148,6 +169,9 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
             for i in range(3):
                 minimum[i] = min(minimum[i], a[i], b[i])
                 maximum[i] = max(maximum[i], a[i], b[i])
+                if part_feature:
+                    part_minimum[i] = min(part_minimum[i], a[i], b[i])
+                    part_maximum[i] = max(part_maximum[i], a[i], b[i])
             if emitted % stride == 0:
                 segments.append([*(round(v, 3) for v in a + b), round(width, 3), kind])
                 if len(segments) > MAX_SEGMENTS:
@@ -159,6 +183,9 @@ def reconstruct(stream: TextIO) -> dict[str, Any]:
         "source": "reconstructed_gcode_extrusion",
         "segments": segments,
         "bounds": [minimum, maximum],
+        "display_bounds": [part_minimum, part_maximum]
+        if all(math.isfinite(v) for v in part_minimum + part_maximum)
+        else [minimum, maximum],
         "stats": {
             "extrusion_segments": emitted,
             "rendered_segments": len(segments),
@@ -369,7 +396,7 @@ class FabricationPreviewService:
         )
         if target and target.is_file():
             return target.read_bytes()
-        lo, hi = model["bounds"]
+        lo, hi = model.get("display_bounds", model["bounds"])
         center = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
 
         def project(p):
@@ -382,7 +409,12 @@ class FabricationPreviewService:
                 else ((x - y) * 0.7071, (x + y) * 0.3536 - z * 0.8660)
             )
 
-        points = [project(s[i : i + 3]) for s in model["segments"] for i in (0, 3)]
+        points = [
+            project((x, y, z))
+            for x in (lo[0], hi[0])
+            for y in (lo[1], hi[1])
+            for z in (lo[2], hi[2])
+        ]
         bounds = [(min(p[a] for p in points), max(p[a] for p in points)) for a in (0, 1)]
         scale = min(
             1260 / max(bounds[0][1] - bounds[0][0], 0.1),

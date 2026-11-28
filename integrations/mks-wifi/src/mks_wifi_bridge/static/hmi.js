@@ -182,9 +182,9 @@
      const ready=await viewer.ready;
      if(epoch!==inspectorEpoch||!ready)return;
      preview.hidden=true;empty.hidden=true;
-     $('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
+     document.querySelector('[data-view-angle=all]').hidden=!!file.engineering;$('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
      const stats=geometry.stats||{};
-     const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
+     const bounds=geometry.display_bounds||geometry.bounds||[[0,0,0],[0,0,0]];
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
      if(geometry.surface_vertices){
       text('inspector-details',dims+(geometry.units==='mm'?' mm · 3MF-declared units; not physical measurement':' source coordinate units · units unverified'));
