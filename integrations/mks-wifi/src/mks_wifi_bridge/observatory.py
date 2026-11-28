@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from mkswifi import MksWifiClient, MksWifiConnectionError
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,6 +63,22 @@ MAX_BACKOFF_SECONDS = 30.0
 FIRMWARE_REFRESH_SECONDS = 300.0
 SESSION_COOKIE = "neptune_observatory_session"
 logger = logging.getLogger(__name__)
+
+
+class ContentVerifiedStaticFiles(StaticFiles):
+    """Wheel timestamps are reproducible; they cannot validate deployed asset contents."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        digest = hashlib.sha256(Path(full_path).read_bytes()).hexdigest()
+        etag = '"' + digest + '"'
+        headers = {"Cache-Control": "no-cache", "ETag": etag}
+        request_headers = dict(scope["headers"])
+        supplied = request_headers.get(b"if-none-match", b"").decode("latin-1")
+        if etag in [value.strip().removeprefix("W/") for value in supplied.split(",")]:
+            return Response(status_code=304, headers=headers)
+        return FileResponse(
+            full_path, status_code=status_code, stat_result=stat_result, headers=headers
+        )
 
 
 def utc_now() -> datetime:
@@ -1160,7 +1176,7 @@ def create_app(
 
     app.mount(
         "/static",
-        StaticFiles(directory=str(files("mks_wifi_bridge").joinpath("static"))),
+        ContentVerifiedStaticFiles(directory=str(files("mks_wifi_bridge").joinpath("static"))),
         name="static",
     )
 
@@ -1205,6 +1221,9 @@ def create_app(
     from .slicer_library import install as install_slicer_library
 
     install_slicer_library(app, require_auth, require_control_token, fabrication_archive)
+    from .slicer_intake import install as install_slicer_intake
+
+    install_slicer_intake(app, fabrication_archive)
     inventory_file = os.getenv("NEPTUNE_ENGINEERING_INVENTORY_FILE")
     if inventory_file:
         try:

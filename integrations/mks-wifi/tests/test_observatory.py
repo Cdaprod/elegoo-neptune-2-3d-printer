@@ -1288,7 +1288,22 @@ def test_waveshare_hmi_route_uses_same_app_without_control_side_effects() -> Non
         assert 'src="/static/hmi.js"' in page.text
         assert 'src="/print-bay?presentation=hmi"' in page.text
         assert client.get("/hmi/").status_code == 200
-        assert client.get("/static/hmi.js").status_code == 200
+        asset = client.get("/static/hmi.js")
+        assert asset.status_code == 200 and asset.headers["cache-control"] == "no-cache"
+        assert (
+            client.get(
+                "/static/hmi.js", headers={"If-None-Match": asset.headers["etag"]}
+            ).status_code
+            == 304
+        )
+        # Reproducible wheel timestamps must never retain old deployment JavaScript.
+        assert (
+            client.get(
+                "/static/hmi.js",
+                headers={"If-Modified-Since": "Wed, 31 Dec 2099 23:59:59 GMT"},
+            ).status_code
+            == 200
+        )
         assert client.get("/").status_code == 200
         assert client.get("/api/printer/status").status_code == 401
         login = client.post(

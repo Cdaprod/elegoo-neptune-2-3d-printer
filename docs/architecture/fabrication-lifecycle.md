@@ -500,3 +500,29 @@ Optional kiosk inspection uses `NEPTUNE_KIOSK_INSPECTION_PORT` (1024–65535), b
 to 127.0.0.1. Reach it only through verified SSH forwarding; never publish the debug
 port on a LAN interface. Existing fullscreen dimensions and kiosk authentication
 are unchanged. With the option unset, no remote-debugging port is opened.
+
+## Archive-only OrcaSlicer print-host protocol
+
+`GET /api/version` and multipart `POST /api/files/local` implement the subset of
+OctoPrint's host protocol used by OrcaSlicer for upload. Configure a separate
+`NEPTUNE_INGESTION_TOKEN`; send it as `X-Api-Key`. An unset token disables intake.
+The scoped credential cannot authorize telemetry/history or printer control.
+Submissions use canonical ingestion with Orca provenance, SHA-256 deduplication and
+an optional `X-Content-SHA256` assertion. Upload does not select, stage, deliver or
+start a print; explicit `select=true` or `print=true` is rejected. Preserve the MKS
+host profile as a fallback. Use a verified SSH forward to the Pi loopback service,
+not an unauthenticated LAN listener. Production host configuration and transport
+acceptance are recorded separately in private commissioning evidence.
+
+Existing 3MFs and G-code do not need to be sliced again to create previews. Original
+3MF meshes generate body/plate derivatives; original G-code generates deposited
+filament/toolpath derivatives. Embedded Orca thumbnails are optional. Successive
+3MF saves are candidate revision evidence, not proof that an older G-code used the
+latest settings. Shared mesh bytes may have multiple source projects; each model
+observation resolves settings through its own revision representation. Global mesh
+metadata reports all source candidates without choosing an arbitrary authority.
+
+Static HMI assets use SHA-256 entity tags rather than reproducible wheel timestamps.
+This prevents a persistent kiosk from combining a new HTML view with old JavaScript
+after an appliance upgrade. Actual Pi inspection exposed this stale-asset failure;
+regressions retain correct conditional requests without timestamp-only cache hits.
