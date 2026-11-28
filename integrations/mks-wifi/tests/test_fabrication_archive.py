@@ -12,7 +12,7 @@ def archive(tmp_path):
     timeline = SimpleNamespace(path=str(tmp_path / "timeline.sqlite"))
     with sqlite3.connect(timeline.path) as db:
         db.executescript("""CREATE TABLE gcode_files(id TEXT,sha256 TEXT);
-        CREATE TABLE print_sessions(id TEXT,filename TEXT,started_at TEXT,ended_at TEXT,
+        CREATE TABLE print_sessions(id TEXT PRIMARY KEY,filename TEXT,started_at TEXT,ended_at TEXT,
         state TEXT,progress REAL,file_id TEXT,source TEXT);""")
     return FabricationArchive(timeline)
 
