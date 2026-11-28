@@ -25,6 +25,9 @@ class ModelRegistry:
                 INSERT OR IGNORE INTO fabrication_schema VALUES(6);
                 CREATE TABLE IF NOT EXISTS models(id TEXT PRIMARY KEY,name TEXT NOT NULL,created_at
                 TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS model_identity_status(
+                    model_id TEXT PRIMARY KEY REFERENCES models(id),state TEXT NOT NULL,
+                    evidence TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS model_revisions(id TEXT PRIMARY KEY,model_id TEXT
                 NOT NULL
                 REFERENCES models(id),label TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -215,8 +218,10 @@ class ModelRegistry:
             }
             for key, sql in {
                 "parents": "SELECT parent_id FROM revision_parents WHERE revision_id=?",
-                "representations": "SELECT sha256,role,active FROM model_representations WHERE "
-                "revision_id=?",
+                "representations": "SELECT p.sha256,p.role,p.active,a.filename,c.archived "
+                "FROM model_representations p LEFT JOIN fabrication_artifacts a "
+                "ON a.sha256=p.sha256 "
+                "LEFT JOIN artifact_custody c ON c.sha256=p.sha256 WHERE p.revision_id=?",
                 "authorities": "SELECT * FROM model_authority WHERE revision_id=?",
                 "components": "SELECT component_revision_id,label FROM model_components WHERE "
                 "assembly_revision_id=?",
@@ -397,16 +402,18 @@ class ModelRegistry:
             models = [
                 dict(row)
                 for row in db.execute(
-                    "SELECT * FROM models WHERE instr(lower(name),lower(?))>0 "
-                    + ("AND (created_at,id)<(?,?) " if cursor else "")
-                    + "ORDER BY created_at DESC,id DESC LIMIT ?",
+                    "SELECT m.*,COALESCE(s.state,'operator_declared') AS identity_state "
+                    "FROM models m LEFT JOIN model_identity_status s ON s.model_id=m.id "
+                    "WHERE instr(lower(name),lower(?))>0 "
+                    + ("AND (m.created_at,m.id)<(?,?) " if cursor else "")
+                    + "ORDER BY m.created_at DESC,m.id DESC LIMIT ?",
                     (q, *(cursor or []), min(201, max(1, limit))),
                 )
             ]
             for model in models:
                 preview = db.execute(
                     "SELECT r.id AS revision_id,r.label,p.sha256,p.role,a.filename, "
-                    "c.archived,c.artifact_kind, "
+                    "c.archived,c.artifact_kind,a.metadata, "
                     "EXISTS(SELECT 1 FROM model_authority x WHERE x.revision_id=r.id "
                     "AND x.sha256=p.sha256 AND x.role=p.role "
                     "AND x.state='approved') AS approved "
@@ -420,6 +427,10 @@ class ModelRegistry:
                     (model["id"],),
                 ).fetchone()
                 model["preview"] = dict(preview) if preview else None
+                if model["preview"]:
+                    model["preview"]["metadata"] = json.loads(
+                        model["preview"].get("metadata") or "{}"
+                    )
         return models
 
     def import_inventory(self, report):

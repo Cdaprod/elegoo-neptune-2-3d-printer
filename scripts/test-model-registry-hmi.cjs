@@ -1,6 +1,8 @@
 /* Simulated registry declarations, real fixture G-code geometry, no printer transport. */
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const crypto=require('node:crypto');
 (async()=>{
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=swiftshader']});
  try{
@@ -46,6 +48,28 @@ const assert=require('node:assert/strict');
   await page.locator('#inspector-close').tap();await page.locator('#storage-provider').selectOption('models');await page.locator('.model').filter({hasText:'Simulated logical model'}).waitFor();
   assert.equal(await page.locator('#model-viewer-host canvas').count(),0);
   assert.ok(writes.every(path=>path==='/api/model-registry/actions'));assert.deepEqual(errors,[]);
-  console.log('Model-centric paging, creation, representation reconciliation, explicit authority approval and bounded inspector passed');
+  // Real canonical HTTP integration, restricted to the isolated invalid-printer fixture.
+  const status=await (await page.request.get(base+'/api/printer/status')).json();
+  assert.ok(String(status.connection?.host||'').endsWith('.invalid'),'Fixture writes must never target a production printer');
+  const fixture=JSON.parse(fs.readFileSync('/tmp/neptune-slicer-browser/manifest.json'));
+  const ingest=async(name,kind)=>{const raw=fs.readFileSync('/tmp/neptune-slicer-browser/'+name);const response=await page.request.post(base+'/api/fabrication/ingest?filename='+encodeURIComponent(name)+'&artifact_kind='+kind,{headers:{'Content-Type':'application/octet-stream','X-Artifact-Source':'simulation:3mf-browser'},data:raw});assert.equal(response.status(),200);return (await response.json()).sha256;};
+  assert.equal(await ingest('Simulated-Orca.3mf','slicer_project'),fixture.source_sha256);
+  const mesh=await ingest('body.stl','manufacturing_geometry');for(const body of fixture.bodies)body.sha256=mesh;
+  fixture.plates[0].sha256=await ingest('plate.stl','manufacturing_geometry');
+  const registered=await page.request.post(base+'/api/fabrication/slicer-projects/'+fixture.source_sha256+'/register',{data:fixture});assert.equal(registered.status(),200);
+  const registration=await registered.json();assert.equal(registration.bodies.length,2);assert.equal(registration.identity,'candidate');
+  const repeated=await page.request.post(base+'/api/fabrication/slicer-projects/'+fixture.source_sha256+'/register',{data:fixture});assert.deepEqual(await repeated.json(),registration);
+  const original=await page.request.get(base+'/api/fabrication/artifacts/'+fixture.source_sha256+'/original');assert.equal(crypto.createHash('sha256').update(await original.body()).digest('hex'),fixture.source_sha256);
+  const actual=await browser.newPage({viewport:{width:1280,height:400},hasTouch:true});
+  actual.on('pageerror',e=>errors.push(e.message));await actual.goto(base+'/hmi');await actual.locator('nav [data-go=models]').tap();await actual.locator('#storage-provider').selectOption('slicer_projects');
+  await actual.locator('.model').filter({hasText:'Simulated-Orca.3mf'}).tap();await actual.locator('#model-viewer-host canvas').waitFor();
+  await actual.locator('#slicer-detail summary').tap();await actual.locator('#slicer-metadata').filter({hasText:'2 extracted bodies'}).waitFor();
+  if(process.env.HMI_SCREENSHOT_DIR)await actual.screenshot({path:process.env.HMI_SCREENSHOT_DIR+'/hmi-3mf-plate-1280x400.png'});
+  await actual.locator('#inspector-close').tap();await actual.locator('#storage-provider').selectOption('models');await actual.locator('#model-filter').fill('Simulated 3MF body');
+  await actual.locator('.model:not([hidden])').first().tap();await actual.locator('#model-viewer-host canvas').waitFor();
+  await actual.locator('#inspector-details').filter({hasText:'3MF-declared units'}).waitFor();
+  assert.equal((await (await page.request.get(base+'/api/fabrication/staging/queue')).json()).items.length,0);
+  assert.deepEqual(errors,[]);
+  console.log('Model reconciliation and actual canonical 3MF upload, body/plate geometry, idempotency, candidate identities and original-byte recovery passed');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
