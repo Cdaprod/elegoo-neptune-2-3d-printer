@@ -1193,7 +1193,9 @@ def create_app(
 
     install_print_bay(app, require_auth, require_control_token, printer)
     from .factory_usb import install as install_factory_usb
+    from .model_registry import install as install_model_registry
 
+    install_model_registry(app, require_auth, require_control_token, fabrication_archive)
     install_factory_usb(app, require_auth, require_control_token, printer)
     from .native_sd_api import install as install_native_sd
 
