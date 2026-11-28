@@ -68,6 +68,10 @@ class FabricationArchive:
                     id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
                     event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
                 INSERT OR IGNORE INTO fabrication_schema VALUES(8);
+                CREATE TABLE IF NOT EXISTS artifact_content_hashes(
+                    sha256 TEXT PRIMARY KEY REFERENCES fabrication_artifacts(sha256),
+                    sha1 TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS artifact_sha1 ON artifact_content_hashes(sha1);
                 CREATE TABLE IF NOT EXISTS execution_baselines(
                     execution_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS stage_baselines(
@@ -146,6 +150,7 @@ class FabricationArchive:
         except (AttributeError, OSError):
             initial = None
         digest = hashlib.sha256()
+        upstream_digest = hashlib.sha1(usedforsecurity=False)
         fd, temporary = tempfile.mkstemp(dir=self.root, prefix=".ingest-")
         size = 0
         try:
@@ -155,6 +160,7 @@ class FabricationArchive:
                     if size > MAX_SOURCE_BYTES:
                         raise ValueError("Artifact exceeds limit")
                     digest.update(chunk)
+                    upstream_digest.update(chunk)
                     output.write(chunk)
                 output.flush()
                 os.fsync(output.fileno())
@@ -194,6 +200,10 @@ class FabricationArchive:
                         now(),
                         json.dumps({"provenance": submission.provider}),
                     ),
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO artifact_content_hashes VALUES(?,?)",
+                    (sha, upstream_digest.hexdigest()),
                 )
                 db.execute(
                     "INSERT INTO artifact_custody VALUES(?,?,?) "
@@ -264,6 +274,83 @@ class FabricationArchive:
                 "INSERT OR IGNORE INTO execution_identity VALUES(?,?,?,?)",
                 (execution_id, sha, evidence, transport),
             )
+
+    def reconcile_execution_content(self, execution_id, snapshot):
+        """Match an upstream content digest, never a file name or size.
+
+        OctoPrint uses SHA-1 for its file metadata. Canonical identity remains SHA-256;
+        ambiguous matches are rejected and stored canonical bytes are reverified.
+        """
+        telemetry = snapshot.get("telemetry") or {}
+        identity = telemetry.get("content_identity") or {}
+        if (
+            not execution_id
+            or snapshot.get("physical_source") == "mks_wifi_http"
+            or identity.get("status") != "available"
+        ):
+            return False
+        value = identity.get("value") or {}
+        digest = value.get("digest", "")
+        if (
+            value.get("algorithm") != "sha1"
+            or len(digest) != 40
+            or any(c not in "0123456789abcdef" for c in digest)
+            or value.get("origin") != "local"
+        ):
+            return False
+        with self.db() as db:
+            evidence = {"algorithm": "sha1", "digest": digest, "origin": "local"}
+            event_id = hashlib.sha256((execution_id + digest).encode()).hexdigest()
+            db.execute(
+                "INSERT OR IGNORE INTO execution_events VALUES(?,?,?,?,?,?)",
+                (
+                    event_id,
+                    execution_id,
+                    snapshot.get("observed_at") or now(),
+                    "artifact_content_observed",
+                    json.dumps(evidence),
+                    "octoprint_file_metadata",
+                ),
+            )
+            existing = db.execute(
+                "SELECT h.sha1 FROM execution_identity e "
+                "JOIN artifact_content_hashes h ON h.sha256=e.sha256 WHERE e.execution_id=?",
+                (execution_id,),
+            ).fetchone()
+            if existing and existing[0] == digest:
+                return True  # No whole-file rehash on every telemetry sample.
+            rows = db.execute(
+                "SELECT sha256 FROM artifact_content_hashes WHERE sha1=?", (digest,)
+            ).fetchall()
+        if len(rows) != 1:
+            return False
+        self.link_execution(execution_id, rows[0][0], "octoprint_verified_bytes", "octoprint_usb")
+        return True
+
+    def reconcile_pending_content(self, limit=4):
+        """Late archive ingestion can recover a previously observed content identity."""
+        with self.db() as db:
+            rows = db.execute(
+                "SELECT e.execution_id,MIN(e.payload) AS payload,MIN(e.observed_at) AS observed_at "
+                "FROM execution_events e WHERE e.event_type='artifact_content_observed' "
+                "AND NOT EXISTS(SELECT 1 FROM execution_identity i "
+                "WHERE i.execution_id=e.execution_id) "
+                "AND EXISTS(SELECT 1 FROM artifact_content_hashes h "
+                "WHERE h.sha1=json_extract(e.payload,'$.digest')) "
+                "GROUP BY e.execution_id HAVING COUNT(DISTINCT e.payload)=1 "
+                "ORDER BY MIN(e.observed_at) LIMIT ?",
+                (limit,),
+            ).fetchall()
+        count = 0
+        for row in rows:
+            snapshot = {
+                "observed_at": row["observed_at"],
+                "telemetry": {
+                    "content_identity": {"status": "available", "value": json.loads(row["payload"])}
+                },
+            }
+            count += bool(self.reconcile_execution_content(row["execution_id"], snapshot))
+        return count
 
     def observe_discovery(self, entries, provider="printer_sd", available=True):
         """Directory metadata is never content identity. Only verified snapshots may link bytes."""

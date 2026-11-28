@@ -953,7 +953,7 @@ class MotionTimeline:
 
     def record_snapshot(
         self, snapshot: dict[str, Any], operations: list[dict[str, Any]] | None = None
-    ) -> None:
+    ) -> str | None:
         connection = snapshot.get("connection")
         if snapshot.get("stale") is True or (
             isinstance(connection, dict) and connection.get("connected") is False
@@ -1259,6 +1259,8 @@ class MotionTimeline:
                         ),
                     )
             self._prune(db)
+
+        return session_id
 
     def list_print_history(self, limit: int = 200) -> dict[str, Any]:
         """Read persisted observed sessions without implying successful print completion."""

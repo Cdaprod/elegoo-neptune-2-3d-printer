@@ -274,3 +274,51 @@ def test_registry_api_paging_declarations_and_write_origin(tmp_path):
             row["sha256"] for row in tail["items"]
         }
         assert client.get("/api/fabrication/staging/queue").json()["items"] == []
+
+
+def test_upstream_content_digest_links_execution_without_filename_identity(tmp_path):
+    import hashlib
+
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+
+    timeline = MotionTimeline(tmp_path / "content.sqlite")
+    archive = FabricationArchive(timeline)
+    source = tmp_path / "renamed.gcode"
+    payload = b"G1 X10 E1"
+    source.write_bytes(payload)
+    snapshot = {
+        "observed_at": "2026-11-27T10:00:00+00:00",
+        "connection": {"connected": True, "transport": "OctoPrint API"},
+        "telemetry": {
+            "print_active": {"value": True},
+            "printer_state": {"value": "printing"},
+            "current_file": {"value": "different-name.gcode"},
+            "content_identity": {
+                "status": "available",
+                "value": {
+                    "algorithm": "sha1",
+                    "digest": hashlib.sha1(payload, usedforsecurity=False).hexdigest(),
+                    "origin": "local",
+                },
+            },
+        },
+    }
+    execution = timeline.record_snapshot(snapshot)
+    assert not archive.reconcile_execution_content(execution, snapshot)
+    sha = archive.ingest(source)
+    assert archive.reconcile_pending_content() == 1
+    assert archive.reconcile_execution_content(execution, snapshot)
+    with archive.db() as db:
+        assert (
+            db.execute(
+                "SELECT sha256 FROM execution_identity WHERE execution_id=?", (execution,)
+            ).fetchone()[0]
+            == sha
+        )
+    assert not archive.reconcile_execution_content(
+        execution, {**snapshot, "physical_source": "mks_wifi_http"}
+    )
+    assert not archive.reconcile_execution_content(
+        execution, {"telemetry": {"current_file": {"value": "renamed.gcode"}}}
+    )
+    assert archive.stage_again(execution)["sha256"] == sha

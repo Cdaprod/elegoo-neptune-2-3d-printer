@@ -307,3 +307,40 @@ def test_octoprint_history_endpoint_is_authenticated_and_read_only(tmp_path: Any
         assert (
             client.get("/api/print/history/octoprint?limit=501", headers=headers).status_code == 422
         )
+
+
+@pytest.mark.parametrize(
+    "case", ["verified", "changed_selection", "missing_metadata", "unsafe_path"]
+)
+def test_active_content_identity_is_optional_and_never_filename_matching(case):
+    class ContentBackend(StubBackend):
+        async def get(self, endpoint):
+            self.calls.append(endpoint)
+            if endpoint == "/api/connection":
+                return {"current": {"state": "Operational", "port": "/dev/ttyUSB0"}}
+            if endpoint == "/api/plugin/neptune_sd_read":
+                raise OctoPrintError("Plugin unavailable")
+            if endpoint == "/api/printer":
+                return {"state": {"flags": {"printing": True}}}
+            if endpoint == "/api/job":
+                reference = {
+                    "name": "part.gcode",
+                    "path": "../unsafe.gcode" if case == "unsafe_path" else "part.gcode",
+                    "origin": "local",
+                    "date": 1,
+                }
+                if case == "changed_selection" and self.calls.count(endpoint) > 1:
+                    reference["date"] = 2
+                return {"job": {"file": reference}}
+            if endpoint == "/api/files/local/part.gcode":
+                if case == "missing_metadata":
+                    raise OctoPrintError("Metadata unavailable")
+                return {"hash": "a" * 40}
+            raise AssertionError(endpoint)
+
+    backend = ContentBackend()
+    result = asyncio.run(backend.read_state())
+    assert result["print_active"]["value"] is True
+    identity = result["content_identity"]
+    assert (identity["status"] == "available") == (case == "verified")
+    assert all(endpoint.startswith("/api/") for endpoint in backend.calls)

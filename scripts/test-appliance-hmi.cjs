@@ -67,6 +67,7 @@ const path=require('node:path');
   if(screenshots){fs.mkdirSync(screenshots,{recursive:true});await page.screenshot({path:screenshots+'/hmi-print-bay-1280x400.png'});}
   await page.locator('nav [data-go="models"]').tap();
   await page.locator('.model').first().waitFor();
+  await frame.locator('body[data-rendering="suspended"][data-preview-contexts="0"]').waitFor();
   const first=page.locator('.model').first();
   // Exercise every real fixture thumbnail, including offscreen lazy images.
   // Wait for the route transition before decoding; do not swallow broken images.

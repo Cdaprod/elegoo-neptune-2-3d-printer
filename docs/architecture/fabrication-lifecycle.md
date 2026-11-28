@@ -320,8 +320,10 @@ printer catalog and performs no upload, print or firmware action. Missing permis
 or unavailable APIs are reported rather than treated as successful validation.
 
 Executed against the actual Pi: hostname/architecture and both running/unpaused
-containers verified. Application SD catalog reports not_requested, zero cached
-entries; factory USB bridge reports available=false. The lifecycle ingestion status
+containers verified. The latest cached SD catalog contains 20 entries with source
+factory_usb_m20; the earlier inspection reported not_requested/zero entries. This
+read-only probe did not issue a directory refresh. Factory USB bridge reports
+available=false independently of the cached directory evidence. The lifecycle ingestion status
 endpoint is HTTP 404 on the deployed older main revision. These are actual deployment
 gaps, not passed commissioning. Native SD enumeration remains operator-verified from
 prior transcripts; this command does not reissue M20/M23. Retrieval, wireless delivery
@@ -428,3 +430,19 @@ toolpath draw ranges. A range represents inferred geometry, never recorded execu
 position. STL inspection uses the original source surface with unverified source units.
 The inspector keeps Close outside its scrolling details. All viewer buffers, materials,
 instancing resources and contexts are released on close.
+
+## Content evidence during USB execution
+
+For an active local USB job, the OctoPrint adapter reads its file metadata digest
+and rechecks that the selected job reference did not change. Optional metadata
+failure leaves telemetry operational and identity unavailable. OctoPrint's SHA-1
+is retained explicitly as upstream evidence; canonical originals remain SHA-256
+addressed and are reverified before the first execution association. Ambiguous
+digest matches are rejected. Content observations survive restarts so later archive
+ingestion can reconcile a finished job without matching filenames. This software
+path is fixture-tested, not physically commissioned. Unsupported native SD digest
+information stays unknown and supports an explicit operator association instead.
+
+Print Bay disposes hidden preview contexts when its HMI route becomes inactive,
+and reconstructs them on return. This bounds retained GPU resources and prevents
+hidden CAD previews from competing with artifact inspection or gallery capture.

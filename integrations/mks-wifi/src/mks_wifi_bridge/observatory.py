@@ -998,8 +998,10 @@ def create_app(
 
     async def publish_dashboard_snapshot(snapshot: dict[str, Any]) -> None:
         try:
-            motion_timeline.record_snapshot(
-                recording_snapshot(snapshot), command_executor.history()
+            recorded = recording_snapshot(snapshot)
+            execution_id = motion_timeline.record_snapshot(recorded, command_executor.history())
+            await asyncio.to_thread(
+                fabrication_archive.reconcile_execution_content, execution_id, recorded
             )
         except Exception:
             logger.exception("Could not persist this telemetry timeline sample")
@@ -1009,6 +1011,7 @@ def create_app(
         while True:
             try:
                 await asyncio.to_thread(fabrication_archive.reconcile, local_gcode_indexer)
+                await asyncio.to_thread(fabrication_archive.reconcile_pending_content)
                 if printer.backend is not None and hasattr(printer.backend, "print_job_history"):
                     try:
                         recent = await printer.backend.print_job_history(100)
