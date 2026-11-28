@@ -446,3 +446,12 @@ information stays unknown and supports an explicit operator association instead.
 Print Bay disposes hidden preview contexts when its HMI route becomes inactive,
 and reconstructs them on return. This bounds retained GPU resources and prevents
 hidden CAD previews from competing with artifact inspection or gallery capture.
+
+## Saved native-resolution evidence
+
+- [Real inventoried STL library](../screenshots/fabrication-model-library-1280x400.png): source-only, not archived or assigned to an invented logical model.
+- [Actual STL inspector](../screenshots/fabrication-model-inspector-1280x400.png): 20,168 verified source triangles; no source modification or hydration.
+- [Chronological lifecycle lanes](../screenshots/fabrication-chronology-1280x400.png): explicitly simulated execution records with real reconstructed browser-fixture G-code.
+
+These 1280×400 software renders do not establish Raspberry Pi frame rate, native
+SD retrieval, physical print outcome or a deployed receiver.
