@@ -526,3 +526,17 @@ Static HMI assets use SHA-256 entity tags rather than reproducible wheel timesta
 This prevents a persistent kiosk from combining a new HTML view with old JavaScript
 after an appliance upgrade. Actual Pi inspection exposed this stale-asset failure;
 regressions retain correct conditional requests without timestamp-only cache hits.
+
+For future explicit publication from any working directory:
+
+```sh
+PYTHONPATH=integrations/mks-wifi/src python scripts/publish_fabrication.py \
+  --source /absolute/path/model.3mf --source /absolute/path/plate.gcode \
+  --host neptune --apply --register
+```
+
+Without `--apply`, this inventories the selected files only. 3MF extraction runs on
+the publishing Mac; G-code is preserved unchanged and uses the existing preview
+pipeline. `--inventory /private/inventory.json --scope 3mf|gcode|all` resumes batch
+publication with the same private receipt journal. Neither mode slices or executes
+source files, approves authority, stages artifacts or sends them to the printer.

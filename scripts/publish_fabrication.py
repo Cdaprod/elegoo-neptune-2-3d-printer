@@ -152,11 +152,28 @@ def run(args):
     db.executescript("""CREATE TABLE IF NOT EXISTS submissions(
         path TEXT PRIMARY KEY,signature TEXT NOT NULL,sha256 TEXT,state TEXT NOT NULL,
         receipt TEXT,error TEXT,updated_at REAL NOT NULL);""")
-    report = json.loads(args.inventory.read_text())
+    report = (
+        json.loads(args.inventory.read_text())
+        if args.inventory
+        else {
+            "files": [
+                {
+                    "path": str(path.expanduser().absolute()),
+                    "kind": "slicer_project"
+                    if path.suffix.lower() == ".3mf"
+                    else "execution_gcode",
+                }
+                for path in args.source
+            ]
+        }
+    )
+    allowed = {"slicer_project", "execution_gcode"}
+    if args.scope != "all":
+        allowed = {"slicer_project" if args.scope == "3mf" else "execution_gcode"}
     files = [
         row
         for row in report["files"]
-        if row.get("kind") == "slicer_project"
+        if row.get("kind") in allowed
         and not any(
             part.lower() in {"tests", "test", "fixtures"} for part in Path(row["path"]).parts
         )
@@ -230,7 +247,30 @@ def run(args):
             with source.open("rb") as stream:
                 sha = hashlib.file_digest(stream, "sha256").hexdigest()
             destination = root / "derivatives" / sha
-            receipt = api.upload(source, "slicer_project")
+            receipt = api.upload(source, item["kind"])
+            if item["kind"] == "execution_gcode":
+                db.execute(
+                    "UPDATE submissions SET sha256=?,state='complete',receipt=?,error=NULL,"
+                    "updated_at=? WHERE path=?",
+                    (sha, json.dumps(receipt), time.time(), str(source)),
+                )
+                db.commit()
+                completed += 1
+                print(
+                    json.dumps(
+                        {
+                            "index": index + 1,
+                            "total": len(files),
+                            "state": "complete",
+                            "file": source.name,
+                            "sha256": sha,
+                            "kind": "execution_gcode",
+                            "staged": False,
+                        }
+                    ),
+                    flush=True,
+                )
+                continue
             manifest = extract_project(source, destination)
             for body in manifest["bodies"]:
                 file = destination / body["geometry_file"]
@@ -319,7 +359,7 @@ def run(args):
                 flush=True,
             )
     summary = {
-        "scope": "orca_3mf",
+        "scope": args.scope,
         "discovered": len(files),
         "processed": completed,
         "failed": failed,
@@ -333,7 +373,15 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--inventory", type=Path, required=True)
+    sources = parser.add_mutually_exclusive_group(required=True)
+    sources.add_argument("--inventory", type=Path)
+    sources.add_argument(
+        "--source",
+        type=Path,
+        action="append",
+        help="Publish an explicitly selected 3MF or G-code; repeatable",
+    )
+    parser.add_argument("--scope", choices=["all", "3mf", "gcode"], default="all")
     parser.add_argument(
         "--state",
         type=Path,
