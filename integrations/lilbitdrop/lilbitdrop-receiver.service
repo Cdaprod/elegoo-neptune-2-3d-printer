@@ -1,0 +1,22 @@
+[Unit]
+Description=LilBitDrop authenticated completed-file handoff
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cdaprod
+Group=cdaprod
+UMask=0027
+WorkingDirectory=/home/cdaprod/elegoo-neptune-2-3d-printer
+ExecStart=/usr/bin/python3 /home/cdaprod/elegoo-neptune-2-3d-printer/integrations/lilbitdrop/receiver.py --host 127.0.0.1 --root /srv/neptune/incoming --token-file /home/cdaprod/.config/lilbitdrop/receiver-token
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/neptune/incoming
+
+[Install]
+WantedBy=multi-user.target

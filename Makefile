@@ -81,3 +81,7 @@ sd-import:
 .PHONY: usb-check
 usb-check: setup
 	@$(PYTHON) scripts/check_usb_owner.py
+
+.PHONY: commission-pi
+commission-pi:
+	@$(PYTHON) scripts/commission_pi.py --host $(or $(SSH_HOST),neptune) $(if $(REPORT),--output "$(REPORT)",)

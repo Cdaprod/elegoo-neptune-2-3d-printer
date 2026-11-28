@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import hmac
 import ipaddress
+import json
 import logging
 import math
 import os
@@ -16,6 +17,7 @@ from collections import deque
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -801,6 +803,17 @@ def create_app(
         local_gcode_indexer.source_dir,
         os.getenv("NEPTUNE_HMI_PREVIEW_CACHE_DIR", "/data/hmi-previews"),
     )
+    from .fabrication_archive import FabricationArchive
+
+    fabrication_archive = FabricationArchive(motion_timeline)
+    from .completed_ingestion import CompletedDirectoryAdapter
+
+    completed_adapter = None
+    if os.getenv("NEPTUNE_LILBITDROP_INGEST_ENABLED", "false").lower() == "true":
+        completed_adapter = CompletedDirectoryAdapter(
+            fabrication_archive,
+            os.getenv("NEPTUNE_LILBITDROP_COMPLETED_DIR", "/srv/neptune/incoming/completed"),
+        )
     model_preview_slots = asyncio.Semaphore(2)
     hub = BroadcastHub()
     commands = DryRunCommandService()
@@ -985,20 +998,94 @@ def create_app(
 
     async def publish_dashboard_snapshot(snapshot: dict[str, Any]) -> None:
         try:
-            motion_timeline.record_snapshot(
-                recording_snapshot(snapshot), command_executor.history()
+            recorded = recording_snapshot(snapshot)
+            execution_id = motion_timeline.record_snapshot(recorded, command_executor.history())
+            await asyncio.to_thread(
+                fabrication_archive.reconcile_execution_content, execution_id, recorded
             )
         except Exception:
             logger.exception("Could not persist this telemetry timeline sample")
         await hub.publish(dashboard_snapshot(snapshot))
 
+    async def archive_worker():
+        while True:
+            try:
+                await asyncio.to_thread(fabrication_archive.reconcile, local_gcode_indexer)
+                await asyncio.to_thread(fabrication_archive.reconcile_pending_content)
+                if printer.backend is not None and hasattr(printer.backend, "print_job_history"):
+                    try:
+                        recent = await printer.backend.print_job_history(100)
+                        await asyncio.to_thread(
+                            fabrication_archive.import_execution_history, recent.get("sessions", [])
+                        )
+                        with fabrication_archive.db() as db:
+                            db.execute(
+                                "CREATE TABLE IF NOT EXISTS history_reconcile_state "
+                                "(provider TEXT PRIMARY KEY,offset INTEGER NOT NULL)"
+                            )
+                            position = db.execute(
+                                "SELECT offset FROM history_reconcile_state "
+                                "WHERE provider='octoprint'"
+                            ).fetchone()
+                        offset = position[0] if position else 100
+                        if offset < recent.get("total", 0):
+                            older = await printer.backend.print_job_history(100, offset=offset)
+                            await asyncio.to_thread(
+                                fabrication_archive.import_execution_history,
+                                older.get("sessions", []),
+                            )
+                            with fabrication_archive.db() as db:
+                                db.execute(
+                                    "INSERT OR REPLACE INTO history_reconcile_state VALUES(?,?)",
+                                    ("octoprint", offset + len(older.get("sessions", []))),
+                                )
+                    except Exception:
+                        logger.info(
+                            "OctoPrint historical reconciliation unavailable; archive retained"
+                        )
+
+                if os.getenv("NEPTUNE_NATIVE_SD_AUTO_ARCHIVE", "false").lower() == "true":
+                    storage = native_sd_service()
+                    if not any(not task.done() for task in storage.tasks.values()):
+                        entries = await storage.listing()
+                        for entry in entries:
+                            # Failed/cancelled transfers require an operator retry.
+                            attempted = any(
+                                job.get("filename") == entry["name"]
+                                for job in storage.jobs.values()
+                            )
+                            if entry.get("cached_sha256"):
+                                sha = entry["cached_sha256"]
+                                await asyncio.to_thread(
+                                    fabrication_archive.ingest,
+                                    storage.cached(sha),
+                                    "printer_sd",
+                                    entry["name"],
+                                )
+                            elif not attempted:
+                                storage.start(entry["name"])
+                                break
+
+            except Exception:
+                logger.exception("Archive ingestion deferred; existing history preserved")
+            await asyncio.sleep(60)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         printer.stop_event.clear()
+        archive_task = asyncio.create_task(archive_worker())
+        handoff_task = asyncio.create_task(completed_adapter.run()) if completed_adapter else None
         printer.worker_task = asyncio.create_task(printer.run_poller(publish_dashboard_snapshot))
         try:
             yield
         finally:
+            if handoff_task:
+                handoff_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await handoff_task
+            archive_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await archive_task
             native_storage = getattr(app.state, "native_sd_storage", None)
             if native_storage:
                 tasks = list(native_storage.tasks.values())
@@ -1110,12 +1197,25 @@ def create_app(
 
     install_print_bay(app, require_auth, require_control_token, printer)
     from .factory_usb import install as install_factory_usb
+    from .model_registry import install as install_model_registry
 
+    model_registry = install_model_registry(
+        app, require_auth, require_control_token, fabrication_archive
+    )
+    inventory_file = os.getenv("NEPTUNE_ENGINEERING_INVENTORY_FILE")
+    if inventory_file:
+        try:
+            inventory_path = Path(inventory_file)
+            if inventory_path.stat().st_size > 32 * 1024 * 1024:
+                raise ValueError("Engineering inventory exceeds metadata limit")
+            model_registry.import_inventory(json.loads(inventory_path.read_text()))
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.exception("Engineering inventory unavailable; existing model registry preserved")
     install_factory_usb(app, require_auth, require_control_token, printer)
     from .native_sd_api import install as install_native_sd
 
     native_sd_service = install_native_sd(
-        app, require_auth, require_control_token, printer, model_preview_slots
+        app, require_auth, require_control_token, printer, model_preview_slots, fabrication_archive
     )
 
     def request_requires_auth(request: Request) -> bool:
@@ -1207,6 +1307,370 @@ def create_app(
                 "limit": limit,
                 "note": str(exc),
             }
+
+    @app.get("/api/fabrication/ingestion/status", dependencies=[Depends(require_auth)])
+    async def ingestion_status():
+        return {
+            "schema_version": 1,
+            "adapters": [
+                dict(completed_adapter.status)
+                if completed_adapter
+                else {"provider": "lilbitdrop", "state": "disabled"}
+            ],
+        }
+
+    @app.post("/api/fabrication/ingest", dependencies=[Depends(require_control_token)])
+    async def ingest_artifact(
+        request: Request, filename: str, artifact_kind: str = "execution_gcode"
+    ):
+        """HTTP/browser adapter: archive only; no OctoPrint connection required."""
+        import tempfile
+
+        from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+        if request.headers.get("content-type", "").split(";")[0] != "application/octet-stream":
+            raise HTTPException(415, "Submit raw artifact bytes")
+        provider = request.headers.get("x-artifact-provider", "http")
+        if provider not in {"http", "removable_media", "orca_slicer"}:
+            raise HTTPException(422, "Unsupported ingestion adapter")
+        # Authenticated adapter-declared provenance; no URL fetching or filesystem access.
+        source_uri = request.headers.get("x-artifact-source", "upload:" + filename)
+        submission = ArtifactSubmission(
+            filename,
+            provider,
+            source_uri,
+            artifact_kind=artifact_kind,
+            expected_sha256=request.headers.get("x-content-sha256"),
+        )
+        try:
+            submission.validate()
+            with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stream:
+                size = 0
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_IMPORT_BYTES:
+                        raise HTTPException(413, "Artifact exceeds 50 MiB")
+                    stream.write(chunk)
+                stream.seek(0)
+                sha = await asyncio.to_thread(
+                    FabricationIngestion(fabrication_archive).submit, submission, stream
+                )
+            return {
+                "schema_version": 1,
+                "sha256": sha,
+                "archived": True,
+                "printer_command_sent": False,
+            }
+        except (ValueError, LibraryImportError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/fabrication/{collection}", dependencies=[Depends(require_auth)])
+    async def archive_collection(collection: str, before: str | None = None, limit: int = 40):
+        try:
+            return await asyncio.to_thread(
+                fabrication_archive.collection, collection, before, limit
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/fabrication/reconcile", dependencies=[Depends(require_control_token)])
+    async def archive_reconcile():
+        def reconcile():
+            index = local_gcode_indexer.scan()
+            identities = []
+            root = local_gcode_indexer.source_dir
+            for item in index.get("files", []):
+                if root and item.get("source_present"):
+                    path = (root / item["relative_path"]).resolve()
+                    if path.is_relative_to(root.resolve()):
+                        identities.append(fabrication_archive.ingest(path))
+            return {"archived": len(set(identities))}
+
+        return await asyncio.to_thread(reconcile)
+
+    @app.get("/api/fabrication/artifacts/{sha}/{derivative}", dependencies=[Depends(require_auth)])
+    async def archive_derivative(sha: str, derivative: str, format: str = "svg"):
+        try:
+            path = await asyncio.to_thread(fabrication_archive.verified, sha)
+            if derivative == "observation":
+                from fastapi.responses import FileResponse
+
+                return FileResponse(
+                    path,
+                    media_type="application/octet-stream",
+                    filename=sha + ".bin",
+                    headers={"X-Content-Type-Options": "nosniff"},
+                )
+            if derivative == "geometry":
+                async with model_preview_slots:
+                    geometry = await asyncio.to_thread(
+                        fabrication_archive.previews.geometry, path.name
+                    )
+                fabrication_archive.mark_derivative(sha, "geometry", "generated")
+                return geometry
+            if derivative == "thumbnail":
+                if format not in {"png", "svg"}:
+                    raise ValueError("Unsupported thumbnail format")
+                method = (
+                    fabrication_archive.previews.raster_preview
+                    if format == "png"
+                    else fabrication_archive.previews.preview
+                )
+                async with model_preview_slots:
+                    svg = await asyncio.to_thread(method, path.name)
+                fabrication_archive.mark_derivative(sha, "thumbnail", "generated")
+                return Response(svg, media_type="image/png" if format == "png" else "image/svg+xml")
+            raise ValueError("Unknown derivative")
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get(
+        "/api/fabrication/executions/{execution_id}/detail", dependencies=[Depends(require_auth)]
+    )
+    async def archive_execution_detail(execution_id: str):
+        try:
+            return await asyncio.to_thread(fabrication_archive.execution_detail, execution_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/quality",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def archive_execution_quality(execution_id: str, request: Request):
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > 10000:
+                raise HTTPException(413, "Assessment exceeds limit")
+        try:
+            data = json.loads(body)
+            if not isinstance(data, dict) or set(data) - {"result", "notes"}:
+                raise ValueError("Invalid quality assessment")
+            return await asyncio.to_thread(
+                fabrication_archive.assess_quality,
+                execution_id,
+                data.get("result"),
+                data.get("notes", ""),
+            )
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/identity",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def operator_execution_identity(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Association exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"sha256", "transport"}:
+                raise ValueError("Explicit artifact and transport association required")
+            await asyncio.to_thread(
+                fabrication_archive.link_execution,
+                execution_id,
+                data["sha256"],
+                "operator_supplied",
+                data["transport"],
+            )
+            return {
+                "sha256": data["sha256"],
+                "identity_evidence": "operator_supplied",
+                "transport": data["transport"],
+            }
+        except (ValueError, OSError, TypeError) as error:
+            raise HTTPException(422, str(error)) from error
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/baseline",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def operator_execution_baseline(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Baseline reference exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"baseline_id"}:
+                raise ValueError("Expected approved baseline reference")
+            return await asyncio.to_thread(
+                fabrication_archive.link_baseline, execution_id, data["baseline_id"]
+            )
+        except (ValueError, OSError, TypeError, sqlite3.Error) as error:
+            raise HTTPException(
+                422, "Baseline association unavailable or does not match exact executable"
+            ) from error
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/attachments",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def archive_attach_observation(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Observation reference exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"sha256", "kind"}:
+                raise ValueError("Expected an observation artifact reference")
+            return await asyncio.to_thread(
+                fabrication_archive.attach_observation, execution_id, data["sha256"], data["kind"]
+            )
+        except (ValueError, OSError, TypeError) as error:
+            raise HTTPException(422, str(error)) from error
+
+    @app.get("/api/fabrication/library/executables", dependencies=[Depends(require_auth)])
+    def archived_executables():
+        with fabrication_archive.db() as db:
+            rows = db.execute(
+                "SELECT a.sha256,a.filename FROM fabrication_artifacts a "
+                "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 "
+                "WHERE c.sha256 IS NULL OR (c.archived=1 AND c.artifact_kind='execution_gcode') "
+                "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 1000"
+            ).fetchall()
+        return {"items": [dict(row) for row in rows]}
+
+    @app.get("/api/fabrication/staging/queue", dependencies=[Depends(require_auth)])
+    async def archive_stages():
+        return {
+            "items": await asyncio.to_thread(fabrication_archive.stages),
+            "usb_delivery_enabled": app.state.hmi_import_enabled,
+            "native_sd_delivery": "unsupported_unverified_write_transport",
+        }
+
+    @app.post(
+        "/api/fabrication/artifacts/{sha}/stage", dependencies=[Depends(require_control_token)]
+    )
+    async def archive_stage_artifact(
+        sha: str, transport: str = "octoprint_usb", baseline_id: str | None = None
+    ):
+        if transport != "octoprint_usb":
+            raise HTTPException(423, "Native SD writing/delivery is not verified; no file sent")
+        try:
+            return await asyncio.to_thread(
+                fabrication_archive.stage_artifact, sha, None, baseline_id
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/staging/{stage_id}/deliver", dependencies=[Depends(require_control_token)]
+    )
+    async def archive_deliver(stage_id: str, request: Request):
+        if not app.state.hmi_import_enabled or printer.backend is None:
+            raise HTTPException(
+                423, "Local delivery is disabled; existing OctoPrint owner required"
+            )
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > 1024:
+                raise HTTPException(413, "Confirmation exceeds limit")
+        try:
+            confirmation = json.loads(data)
+        except ValueError as exc:
+            raise HTTPException(422, "Explicit delivery confirmation required") from exc
+        if not isinstance(confirmation, dict) or confirmation != {
+            "confirmation": "DELIVER " + stage_id,
+            "compatibility_acknowledged": True,
+        }:
+            raise HTTPException(
+                422, "Confirm compatibility and exact local delivery; no print starts"
+            )
+        async with printer.io_lock:
+            try:
+                connection = (await printer.backend.get("/api/connection")).get("current", {})
+                if str(connection.get("state", "")).lower() != "operational" or not str(
+                    connection.get("port", "")
+                ).startswith(("/dev/ttyUSB", "/dev/serial/")):
+                    raise ValueError("An idle connected OctoPrint USB owner is required")
+                profiles = (await printer.backend.get("/api/printerprofiles")).get("profiles", {})
+                profile = next((value for value in profiles.values() if value.get("current")), None)
+                if profile is None:
+                    raise ValueError("Current printer profile unavailable")
+                volume = profile.get("volume", {})
+                if volume.get("origin") != "lowerleft" or volume.get("formFactor") != "rectangular":
+                    raise ValueError("Unsupported or unknown printer build volume")
+                with fabrication_archive.db() as db:
+                    row = db.execute(
+                        "SELECT * FROM artifact_stages WHERE id=?", (stage_id,)
+                    ).fetchone()
+                if row is None or row["status"] != "staged_requires_compatibility_confirmation":
+                    raise ValueError(
+                        "Stage unavailable or delivery outcome uncertain; inspect before retry"
+                    )
+                path = await asyncio.to_thread(fabrication_archive.verified, row["sha256"])
+                geometry = await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
+                limits = [float(volume[key]) for key in ("width", "depth", "height")]
+                bounds = geometry["bounds"]
+                if any(not math.isfinite(limit) or limit <= 0 for limit in limits) or any(
+                    bounds[0][axis] < -0.01 or bounds[1][axis] > limits[axis] + 0.01
+                    for axis in range(3)
+                ):
+                    raise ValueError("Deposited geometry exceeds the current printer profile")
+                payload = await asyncio.to_thread(path.read_bytes)
+                if hashlib.sha256(payload).hexdigest() != row["sha256"]:
+                    raise ValueError("Archived original changed before delivery")
+                with fabrication_archive.db() as db:
+                    changed = db.execute(
+                        "UPDATE artifact_stages SET status='delivery_in_progress' "
+                        "WHERE id=? AND status='staged_requires_compatibility_confirmation'",
+                        (stage_id,),
+                    ).rowcount
+                    if changed != 1:
+                        raise ValueError("Delivery already pending")
+                try:
+                    result = await asyncio.to_thread(
+                        upload_local_gcode,
+                        printer.backend.base_url,
+                        printer.backend.api_key,
+                        stage_id + ".gcode",
+                        payload,
+                    )
+                except Exception:
+                    with fabrication_archive.db() as db:
+                        db.execute(
+                            "UPDATE artifact_stages SET status='delivery_unknown' WHERE id=?",
+                            (stage_id,),
+                        )
+                    raise ValueError(
+                        "Delivery outcome unknown; inspect OctoPrint, never retry automatically"
+                    ) from None
+                with fabrication_archive.db() as db:
+                    db.execute(
+                        "UPDATE artifact_stages SET status='delivered_octoprint_local' WHERE id=?",
+                        (stage_id,),
+                    )
+                return {
+                    **result,
+                    "sha256": row["sha256"],
+                    "stage_id": stage_id,
+                    "compatibility": "deposited_envelope_and_operator_acknowledgment",
+                    "selected": False,
+                    "print_started": False,
+                }
+            except (OSError, ValueError, KeyError, TypeError, OctoPrintError) as exc:
+                raise HTTPException(409, str(exc)) from exc
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/stage",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def archive_stage(execution_id: str, transport: str = "octoprint_usb"):
+        if transport != "octoprint_usb":
+            raise HTTPException(423, "Native SD writing/delivery is not verified; no file sent")
+        try:
+            return await asyncio.to_thread(fabrication_archive.stage_again, execution_id)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/print/history", dependencies=[Depends(require_auth)])
     async def print_history(limit: int = 200) -> dict[str, Any]:
@@ -1401,6 +1865,12 @@ def create_app(
                 )
         payload["entries"] = local_gcode_indexer.match_entries(entries, local_index)
         payload["local_index"] = local_index
+        await asyncio.to_thread(
+            fabrication_archive.observe_discovery,
+            entries,
+            "printer_sd",
+            payload.get("status") == "available",
+        )
         payload["printer_listing_source"] = (
             "factory_usb_m20"
             if octoprint_mode
@@ -1519,6 +1989,15 @@ def create_app(
                 data.extend(chunk)
             if not data:
                 raise HTTPException(status_code=422, detail="G-code file is empty.")
+            import io
+
+            from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+            sha = await asyncio.to_thread(
+                FabricationIngestion(fabrication_archive).submit,
+                ArtifactSubmission(filename, "browser_hmi", "upload:" + filename),
+                io.BytesIO(data),
+            )
             backend = printer.backend
             try:
                 result = await asyncio.to_thread(
@@ -1526,7 +2005,13 @@ def create_app(
                 )
             except LibraryImportError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
-        return {**result, "storage": "octoprint_local", "printer_command_sent": False}
+        return {
+            **result,
+            "sha256": sha,
+            "archived": True,
+            "storage": "octoprint_local",
+            "printer_command_sent": False,
+        }
 
     @app.get("/visual-lab", response_class=HTMLResponse, include_in_schema=False)
     def visualization_lab() -> HTMLResponse:
@@ -1534,18 +2019,23 @@ def create_app(
         return HTMLResponse(files("mks_wifi_bridge").joinpath("static/visual_lab.html").read_text())
 
     @app.get("/api/hmi/model-preview", dependencies=[Depends(require_auth)])
-    async def hmi_model_preview(path: str, view: str = "iso") -> Response:
+    async def hmi_model_preview(path: str, view: str = "iso", format: str = "svg") -> Response:
         """3D-rendered preview from a local, read-only G-code source."""
         try:
             async with model_preview_slots:
-                svg = await asyncio.to_thread(model_previews.preview, path, view)
+                if format not in {"png", "svg"}:
+                    raise ModelPreviewError("Unsupported thumbnail format")
+                method = (
+                    model_previews.raster_preview if format == "png" else model_previews.preview
+                )
+                svg = await asyncio.to_thread(method, path, view)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ModelPreviewError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
             content=svg,
-            media_type="image/svg+xml",
+            media_type="image/png" if format == "png" else "image/svg+xml",
             headers={
                 "Cache-Control": "private, max-age=300",
                 "X-Content-Type-Options": "nosniff",

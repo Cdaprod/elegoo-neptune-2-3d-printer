@@ -7,7 +7,8 @@ let projects=[], artifacts=[], selectedPlate=null, views=[], generation=0, worke
 let presentationActive=window.parent===window||new URLSearchParams(location.search).get('presentation')!=='hmi';
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='neptune:presentation')return;
- presentationActive=event.data.active===true;document.body.dataset.rendering=presentationActive?'active':'suspended';
+ const changed=presentationActive!==(event.data.active===true);presentationActive=event.data.active===true;document.body.dataset.rendering=presentationActive?'active':'suspended';
+ if(changed){renderKey=null;if(!presentationActive)dispose();else renderPlates();}
 });
 async function api(path, body) {
   const r=await fetch('/api/manufacturing'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -28,6 +29,7 @@ function mesh(buffer){
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(values,3));g.computeVertexNormals();return g;
 }
 async function preview(canvas, plate, artifact){
+  if(!presentationActive)return;
   const currentGeneration=generation;
   if(!artifact&&!project()?.geometryAvailable){canvas.replaceWith(text('p','No exported geometry yet'));return;}
   let renderer;
@@ -45,10 +47,10 @@ async function preview(canvas, plate, artifact){
     group.rotation.x=-Math.PI/2;const box=new THREE.Box3().setFromObject(group), center=box.getCenter(new THREE.Vector3());group.position.sub(center);
     const size=box.getSize(new THREE.Vector3()).length();camera.position.set(size*.85,size*.65,size);camera.lookAt(0,0,0);
     const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.enablePan=false;
-    const view={renderer,controls,scene,camera};views.push(view);
+    const view={renderer,controls,scene,camera};views.push(view);document.body.dataset.previewContexts=String(views.length);
   }catch(e){renderer?.dispose();renderer?.forceContextLoss();canvas.replaceWith(text('p',e.message));}
 }
-function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();v.renderer.forceContextLoss();}views=[];}
+function dispose(){generation++;for(const v of views){v.controls.dispose();v.scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});v.renderer.dispose();v.renderer.forceContextLoss();v.renderer.domElement.width=1;v.renderer.domElement.height=1;}views=[];document.body.dataset.previewContexts='0';}
 function stateFor(plate){return preparationState(project(),plate,artifacts,jobs,worker);}
 function selected(){return project()?.plates.find(p=>p.name===selectedPlate);}
 function renderPlates(){
@@ -133,3 +135,20 @@ function animate(now){
   v.renderer.render(v.scene,v.camera);v.drawn=true;
  }
 }requestAnimationFrame(animate);refresh();setInterval(refresh,3000);
+
+let archiveStageKey='';
+async function refreshArchiveStages(){
+ try{const response=await fetch('/api/fabrication/staging/queue');if(!response.ok)return;
+  const data=await response.json();const items=data.items||[];const key=JSON.stringify(data);
+  if(key===archiveStageKey)return;archiveStageKey=key;
+  $('archive-stage-panel').hidden=!items.length;$('archive-stage-cards').replaceChildren();
+  for(const item of items){const card=text('article','');card.className='plate';
+   const image=document.createElement('img');image.src='/api/fabrication/artifacts/'+item.sha256+'/thumbnail';image.loading='lazy';image.alt='Archived deposited-filament approximation';image.style.cssText='width:100%;height:95px;object-fit:contain';image.onerror=()=>image.replaceWith(text('p','Preview unavailable · original retained'));
+   const button=text('button','Copy to OctoPrint local');button.disabled=!data.usb_delivery_enabled||item.status!=='staged_requires_compatibility_confirmation';
+   button.onclick=async()=>{if(!confirm('Confirm this artifact is suitable for the configured printer. Check its material, temperatures and slicer settings. Copy to OctoPrint local storage? No print will start.'))return;
+    button.disabled=true;try{const result=await fetch('/api/fabrication/staging/'+item.id+'/deliver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation:'DELIVER '+item.id,compatibility_acknowledged:true})});const body=await result.json();if(!result.ok)throw Error(body.detail||'Delivery rejected');message('Verified archived copy delivered to OctoPrint local storage. No print selected or started.');}catch(error){message(error.message);}finally{archiveStageKey='';refreshArchiveStages();}};
+   card.append(image,text('h3',item.filename),text('p',item.status.replaceAll('_',' ')),button);$('archive-stage-cards').append(card);
+  }
+ }catch(error){message('Archived staging unavailable: '+error.message);}
+}
+refreshArchiveStages();setInterval(refreshArchiveStages,3000);

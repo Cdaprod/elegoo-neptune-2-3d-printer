@@ -25,11 +25,14 @@ try{
   engine.setGeometry(null);request=new AbortController();inFlight=true;const expected=key;
   activeGeometry(state,request.signal).then(model=>{if(artifactKey===expected)engine.setGeometry(model);}).catch(()=>{}).finally(()=>{if(artifactKey===expected){inFlight=false;request=null;}});
  });
- const transition=e=>{cinematic=e.detail.active;engine.setCinematic(cinematic);if(!cinematic){previewOverride=null;engine.setMode(preferences.mode);}};window.addEventListener('hmi:cinematic',transition);
+ let view='overview',inspectorOpen=false;
+ const visibility=()=>{const active=cinematic||(view==='overview'&&!inspectorOpen);engine.setVisible(active);host.style.display=active?'':'none';};
+ const viewChanged=e=>{view=e.detail.view;visibility();};window.addEventListener('hmi:view',viewChanged);
+ const transition=e=>{cinematic=e.detail.active;visibility();engine.setCinematic(cinematic);if(!cinematic){previewOverride=null;engine.setMode(preferences.mode);}};window.addEventListener('hmi:cinematic',transition);
  const preview=e=>{previewOverride=e.detail?.mode||null;engine.setMode(previewOverride||preferences.mode);};
  window.addEventListener('hmi:studio-preview',preview);
- const inspector=e=>{engine.setVisible(!e.detail.open);host.dataset.suspended=String(e.detail.open);};
+ const inspector=e=>{inspectorOpen=e.detail.open;visibility();host.dataset.suspended=String(e.detail.open);};
  window.addEventListener('hmi:inspector',inspector);
  host.dataset.renderer='ready';
- addEventListener('pagehide',event=>{if(event.persisted)return;request?.abort();unsubscribe();store.dispose();window.removeEventListener('hmi:inspector',inspector);window.removeEventListener('hmi:cinematic',transition);window.removeEventListener('hmi:studio-preview',preview);stopPreferences();engine.dispose();});
+ addEventListener('pagehide',event=>{if(event.persisted)return;request?.abort();unsubscribe();store.dispose();window.removeEventListener('hmi:view',viewChanged);window.removeEventListener('hmi:inspector',inspector);window.removeEventListener('hmi:cinematic',transition);window.removeEventListener('hmi:studio-preview',preview);stopPreferences();engine.dispose();});
 }catch(error){host.dataset.renderer='unavailable';console.warn('Sculpture renderer unavailable',error.message);}

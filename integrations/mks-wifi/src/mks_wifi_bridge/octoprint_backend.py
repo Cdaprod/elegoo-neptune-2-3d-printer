@@ -10,7 +10,7 @@ import asyncio
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .printer_console import MAX_LOG_BYTES, parse_serial_log
@@ -195,20 +195,29 @@ class OctoPrintBackend:
 
     async def get(self, endpoint: str) -> dict[str, Any]:
         # Endpoints are fixed internal literals, never caller-controlled URLs.
-        if endpoint not in {"/api/connection", "/api/printer", "/api/job", "/api/files", "/api/plugin/neptune_sd_read"}:
+        if endpoint not in {
+            "/api/connection",
+            "/api/printerprofiles",
+            "/api/printer",
+            "/api/job",
+            "/api/files",
+            "/api/plugin/neptune_sd_read",
+        }:
             raise ValueError("Unrecognized read-only OctoPrint endpoint")
         return await asyncio.to_thread(self._get_sync, endpoint)
 
-    async def print_job_history(self, limit: int = 200) -> dict[str, Any]:
+    async def print_job_history(self, limit: int = 200, offset: int = 0) -> dict[str, Any]:
         """Read-only, bounded PrintJobHistory plugin API, never direct printer I/O."""
         if isinstance(limit, bool) or not 1 <= limit <= 500:
             raise ValueError("History limit must be between 1 and 500")
+        if isinstance(offset, bool) or not isinstance(offset, int) or not 0 <= offset <= 10000000:
+            raise ValueError("Invalid history offset")
         from urllib.parse import urlencode
 
         query = urlencode(
             {
-                "from": 0,
-                "to": limit,
+                "from": offset,
+                "to": offset + limit,
                 "sortColumn": "printStartDateTime",
                 "sortOrder": "desc",
                 "filterName": "all",
@@ -346,6 +355,50 @@ class OctoPrintBackend:
         nozzle = temperatures.get("tool0") or {}
         bed = temperatures.get("bed") or {}
         job_file = (job.get("job") or {}).get("file") or {}
+        content_identity = {"status": "unsupported_or_not_reported", "value": None}
+        if (
+            normalized in {"printing", "paused"}
+            and job_file.get("origin") == "local"
+            and self.connection_transport == "usb"
+        ):
+            path = job_file.get("path")
+            if (
+                isinstance(path, str)
+                and path
+                and len(path) <= 1024
+                and not path.startswith("/")
+                and "\\" not in path
+                and all(part not in {"", ".", ".."} for part in path.split("/"))
+            ):
+                try:
+                    info = await self.get("/api/files/local/" + quote(path, safe="/"))
+                    check = await self.get("/api/job")
+                    selected = (check.get("job") or {}).get("file") or {}
+                    digest = info.get("hash")
+                    if (
+                        selected == job_file
+                        and info.get("path") == path
+                        and all(
+                            info.get(key) == job_file[key]
+                            for key in ("name", "date", "size")
+                            if key in job_file
+                        )
+                        and isinstance(digest, str)
+                        and len(digest) == 40
+                        and all(c in "0123456789abcdef" for c in digest.lower())
+                    ):
+                        content_identity = {
+                            "status": "available",
+                            "value": {
+                                "algorithm": "sha1",
+                                "digest": digest.lower(),
+                                "origin": "local",
+                                "path": path,
+                                "source": "octoprint_file_metadata",
+                            },
+                        }
+                except OctoPrintError:
+                    pass  # Metadata plugins/endpoints must not invalidate telemetry.
         progress = job.get("progress") or {}
         active = normalized in {"printing", "paused"} if normalized is not None else None
         return {
@@ -368,6 +421,7 @@ class OctoPrintBackend:
             "factory_usb": self.factory_observations,
             "progress_percent": _field(progress.get("completion"), unit="%"),
             "current_file": _field(job_file.get("name")),
+            "content_identity": content_identity,
             "file_size_bytes": _field(job_file.get("size")),
             "elapsed_seconds": _field(progress.get("printTime")),
             "remaining_seconds": _field(progress.get("printTimeLeft")),

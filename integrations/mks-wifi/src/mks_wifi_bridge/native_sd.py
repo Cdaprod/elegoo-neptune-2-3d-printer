@@ -232,6 +232,12 @@ class NativeSdStorage:
                         temporary.unlink()
                 else:
                     os.replace(temporary, target)
+                if getattr(self, "archive", None) is not None:
+                    archived_sha = await asyncio.to_thread(
+                        self.archive.ingest, target, "printer_sd", job["filename"]
+                    )
+                    if archived_sha != sha:
+                        raise SdReadError("Durable archive identity mismatch")
                 identity = hashlib.sha256(
                     ("printer_sd\0" + job["filename"] + "\0" + sha).encode()
                 ).hexdigest()

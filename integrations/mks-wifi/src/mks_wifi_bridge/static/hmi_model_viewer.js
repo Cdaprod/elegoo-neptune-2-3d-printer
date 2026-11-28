@@ -6,7 +6,8 @@ const MATERIALS = [0xa6bdcc, 0x6899b7, 0xd8a76c, 0xd0e1e8];
 
 export function mountViewer(host, model) {
   const segments = Array.isArray(model.segments) ? model.segments : [];
-  if (!segments.length || !Array.isArray(model.bounds)) throw new Error("No printable geometry available");
+  const surface=Array.isArray(model.surface_vertices)?model.surface_vertices:null;
+  if ((!segments.length&&!surface?.length) || !Array.isArray(model.bounds)) throw new Error("No printable geometry available");
   const lo = model.bounds[0], hi = model.bounds[1];
   const center = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2];
   const span = Math.max(15, hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
@@ -32,7 +33,7 @@ export function mountViewer(host, model) {
   renderer.domElement.style.height = "100%";
   renderer.domElement.style.display = "block";
   renderer.domElement.style.touchAction = "none";
-  renderer.domElement.setAttribute("aria-label", "Interactive reconstructed G-code extrusion model");
+  renderer.domElement.setAttribute("aria-label", surface?"Interactive original STL surface":"Interactive reconstructed G-code extrusion model");
   host.replaceChildren(renderer.domElement);
   host.dataset.viewerPixelRatio = dpr.toFixed(2);
   const camera = new THREE.OrthographicCamera(-span,span,span,-span,0.1,span*25);
@@ -50,6 +51,12 @@ export function mountViewer(host, model) {
   const mid = new THREE.Vector3(), direction = new THREE.Vector3(), quaternion = new THREE.Quaternion();
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3();
   const meshes = [];
+  if(surface){
+    const values=new Float32Array(surface.length);
+    for(let i=0;i<surface.length;i+=3){values[i]=surface[i]-center[0];values[i+1]=surface[i+2]-center[2];values[i+2]=-(surface[i+1]-center[1]);}
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(values,3));geometry.computeVertexNormals();
+    const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x8ab4c7,roughness:.48,metalness:.15,side:THREE.DoubleSide}));scene.add(mesh);meshes.push(mesh);
+  }
   const groups = [[],[],[],[]];
   for (const segment of segments) {
     const category = segment[7];
@@ -78,6 +85,21 @@ export function mountViewer(host, model) {
     mesh.instanceMatrix.needsUpdate=true;
     scene.add(mesh);
     meshes.push(mesh);
+  }
+
+  // One immutable line buffer, shared by all toolpath inspection ranges.
+  const pathPositions=new Float32Array(segments.length*6);
+  segments.forEach((s,i)=>{pathPositions.set([s[0]-center[0],s[2]-center[2],-(s[1]-center[1]),s[3]-center[0],s[5]-center[2],-(s[4]-center[1])],i*6);});
+  const pathGeometry=new THREE.BufferGeometry();pathGeometry.setAttribute('position',new THREE.BufferAttribute(pathPositions,3));
+  const paths=new THREE.LineSegments(pathGeometry,new THREE.LineBasicMaterial({color:0x6cdbed}));paths.visible=false;scene.add(paths);
+  const section=new THREE.Plane(new THREE.Vector3(0,-1,0),0);
+  function setPresentation(mode='shaded',fraction=1){
+    if(surface)mode='shaded';fraction=Math.max(0,Math.min(1,Number(fraction)||0));
+    const toolpath=mode==='toolpath';for(const mesh of meshes)mesh.visible=!toolpath;
+    paths.visible=toolpath;pathGeometry.setDrawRange(0,Math.max(0,Math.round(segments.length*fraction))*2);
+    section.constant=lo[2]-center[2]+(hi[2]-lo[2])*fraction;
+    renderer.clippingPlanes=mode==='layers'?[section]:[];
+    host.dataset.viewerPresentation=mode;host.dataset.viewerRange=String(fraction);invalidate();
   }
 
   let resolveReady,rejectReady;
@@ -144,7 +166,7 @@ export function mountViewer(host, model) {
   setView("iso");
   resize();
   return {
-    ready,setView,
+    ready,setView,setPresentation,
     dispose() {
       if(disposed)return;
       disposed=true;resolveReady(false);
@@ -156,16 +178,17 @@ export function mountViewer(host, model) {
       controls.removeEventListener("start",onControlsStart);
       controls.removeEventListener("end",onControlsEnd);
       controls.dispose();
-      cylinder.dispose();
+      for(const geometry of new Set([cylinder,...meshes.map(mesh=>mesh.geometry)]))geometry.dispose();
       grid.geometry.dispose();
       grid.material.dispose();
-      for(const mesh of meshes)mesh.material.dispose();
+      for(const mesh of meshes){mesh.material.dispose();if(mesh.isInstancedMesh)mesh.dispose();}
+      pathGeometry.dispose();paths.material.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
       delete host.dataset.viewerPixelRatio;
       delete host.dataset.viewerFrames;
-      delete host.dataset.viewerStatus;
+      delete host.dataset.viewerStatus;delete host.dataset.viewerPresentation;delete host.dataset.viewerRange;
     }
   };
 }

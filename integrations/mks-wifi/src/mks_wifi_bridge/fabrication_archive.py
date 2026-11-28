@@ -1,0 +1,741 @@
+"""Durable artifact identities adjoining the existing execution ledger.
+
+No printer transport. Original bytes are never evicted with preview caches.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sqlite3
+import tempfile
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+
+from .gcode_fabrication import MAX_SOURCE_BYTES, FabricationPreviewService
+
+
+def now():
+    return datetime.now(UTC).isoformat()
+
+
+class FabricationArchive:
+    def __init__(self, timeline):
+        self.timeline = timeline
+        self.root = Path(timeline.path).parent / "fabrication-archive"
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.previews = FabricationPreviewService(self.root, self.root / "derivatives")
+        with self.db() as db:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS execution_artifacts(
+                    execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS fabrication_schema(version INTEGER PRIMARY KEY);
+                INSERT OR IGNORE INTO fabrication_schema VALUES(1);
+                CREATE TABLE IF NOT EXISTS fabrication_artifacts(
+                    sha256 TEXT PRIMARY KEY, filename TEXT NOT NULL, size INTEGER NOT NULL,
+                    ingested_at TEXT NOT NULL, metadata TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS artifact_locations(
+                    provider TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL,
+                    observed_at TEXT NOT NULL, PRIMARY KEY(provider,path,sha256),
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(7);
+                CREATE TABLE IF NOT EXISTS artifact_custody(
+                    sha256 TEXT PRIMARY KEY REFERENCES fabrication_artifacts(sha256),
+                    archived INTEGER NOT NULL, artifact_kind TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS artifact_provenance(
+                    sha256 TEXT NOT NULL, provider TEXT NOT NULL, source_uri TEXT NOT NULL,
+                    filename TEXT NOT NULL, artifact_kind TEXT NOT NULL,
+                    first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+                    PRIMARY KEY(sha256,provider,source_uri,filename),
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(2);
+                CREATE TABLE IF NOT EXISTS artifact_relationships(
+                    parent_sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    child_sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    relationship TEXT NOT NULL CHECK(relationship IN
+                    ('sliced_from','derived_from','observes','configured_by')),
+                    PRIMARY KEY(parent_sha256,child_sha256,relationship));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(3);
+                INSERT OR IGNORE INTO fabrication_schema VALUES(4);
+                CREATE TABLE IF NOT EXISTS execution_identity(
+                    execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL,
+                    evidence TEXT NOT NULL, transport TEXT NOT NULL,
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(5);
+                CREATE TABLE IF NOT EXISTS execution_events(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
+                INSERT OR IGNORE INTO fabrication_schema VALUES(8);
+                CREATE TABLE IF NOT EXISTS artifact_content_hashes(
+                    sha256 TEXT PRIMARY KEY REFERENCES fabrication_artifacts(sha256),
+                    sha1 TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS artifact_sha1 ON artifact_content_hashes(sha1);
+                CREATE TABLE IF NOT EXISTS execution_baselines(
+                    execution_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS stage_baselines(
+                    stage_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS execution_attachments(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL,
+                    sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    kind TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS quality_assessments(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, assessed_at TEXT NOT NULL,
+                    result TEXT NOT NULL, notes TEXT NOT NULL, source TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS artifact_discoveries(
+                    id TEXT PRIMARY KEY, provider TEXT NOT NULL, path TEXT NOT NULL,
+                    filename TEXT NOT NULL, size INTEGER, first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL, available INTEGER NOT NULL, sha256 TEXT);
+                CREATE TABLE IF NOT EXISTS artifact_derivatives(
+                    sha256 TEXT NOT NULL, kind TEXT NOT NULL, version TEXT NOT NULL,
+                    status TEXT NOT NULL, PRIMARY KEY(sha256,kind,version));
+                CREATE TABLE IF NOT EXISTS artifact_stages(
+                    id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, created_at TEXT NOT NULL,
+                    source_execution_id TEXT, status TEXT NOT NULL DEFAULT 'staged',
+                    FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+            """)
+
+    def reconcile(self, indexer, limit=4):
+        """Bounded automatic ingestion; missing sources never delete the archive."""
+        root = indexer.source_dir
+        if root is None:
+            return 0
+        index = indexer.scan()
+        count = 0
+        for item in index.get("files", []):
+            if count >= limit:
+                break
+            if not item.get("source_present"):
+                continue
+            path = (root / item["relative_path"]).resolve()
+            if not path.is_relative_to(root.resolve()) or not path.is_file():
+                continue
+            signature = str(path.stat().st_mtime_ns) + ":" + str(path.stat().st_size)
+            with self.db() as db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS archive_ingestion "
+                    "(path TEXT PRIMARY KEY, signature TEXT NOT NULL)"
+                )
+                previous = db.execute(
+                    "SELECT signature FROM archive_ingestion WHERE path=?", (str(path),)
+                ).fetchone()
+            if previous and previous[0] == signature:
+                continue
+            self.ingest(path)
+            with self.db() as db:
+                db.execute(
+                    "INSERT OR REPLACE INTO archive_ingestion VALUES(?,?)", (str(path), signature)
+                )
+            count += 1
+        return count
+
+    def db(self):
+        db = sqlite3.connect(self.timeline.path, timeout=10)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys=ON")
+        return db
+
+    def ingest(self, source, provider="local", original_filename=None):
+        from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+        source = Path(source)
+        return FabricationIngestion(self).submit_path(
+            source, ArtifactSubmission(original_filename or source.name, provider, str(source))
+        )
+
+    def persist_stream(self, stream, submission):
+        try:
+            initial = os.fstat(stream.fileno())
+        except (AttributeError, OSError):
+            initial = None
+        digest = hashlib.sha256()
+        upstream_digest = hashlib.sha1(usedforsecurity=False)
+        fd, temporary = tempfile.mkstemp(dir=self.root, prefix=".ingest-")
+        size = 0
+        try:
+            with os.fdopen(fd, "wb") as output:
+                while chunk := stream.read(65536):
+                    size += len(chunk)
+                    if size > MAX_SOURCE_BYTES:
+                        raise ValueError("Artifact exceeds limit")
+                    digest.update(chunk)
+                    upstream_digest.update(chunk)
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+            if initial is not None:
+                final = os.fstat(stream.fileno())
+                if (initial.st_size, initial.st_mtime_ns) != (final.st_size, final.st_mtime_ns):
+                    raise ValueError("Source changed during ingestion")
+            if size == 0:
+                raise ValueError("Empty artifacts are not accepted")
+            sha = digest.hexdigest()
+            if submission.expected_sha256 is not None and sha != submission.expected_sha256:
+                raise ValueError("Artifact failed expected SHA-256 verification")
+            target = self.root / (
+                sha + (".gcode" if submission.artifact_kind == "execution_gcode" else ".blob")
+            )
+            for suffix in (".gcode", ".blob"):
+                existing = self.root / (sha + suffix)
+                if existing.exists():
+                    target = existing
+                    break
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                self.verified(sha)
+            directory = os.open(self.root, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            with self.db() as db:
+                db.execute(
+                    "INSERT OR IGNORE INTO fabrication_artifacts VALUES(?,?,?,?,?)",
+                    (
+                        sha,
+                        submission.filename,
+                        size,
+                        now(),
+                        json.dumps({"provenance": submission.provider}),
+                    ),
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO artifact_content_hashes VALUES(?,?)",
+                    (sha, upstream_digest.hexdigest()),
+                )
+                db.execute(
+                    "INSERT INTO artifact_custody VALUES(?,?,?) "
+                    "ON CONFLICT(sha256) DO UPDATE SET archived=1, "
+                    "artifact_kind=excluded.artifact_kind",
+                    (sha, 1, submission.artifact_kind),
+                )
+                db.execute(
+                    "INSERT OR REPLACE INTO artifact_locations VALUES(?,?,?,?)",
+                    (submission.provider, submission.source_uri, sha, now()),
+                )
+                db.execute(
+                    "INSERT INTO artifact_provenance VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(sha256,provider,source_uri,filename) DO UPDATE SET "
+                    "last_seen=excluded.last_seen",
+                    (
+                        sha,
+                        submission.provider,
+                        submission.source_uri,
+                        submission.filename,
+                        submission.artifact_kind,
+                        now(),
+                        now(),
+                    ),
+                )
+            return sha
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+
+    def verified(self, sha):
+        if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            raise ValueError("Invalid artifact identity")
+        path = self.root / (sha + ".gcode")
+        if not path.exists():
+            path = self.root / (sha + ".blob")
+        with path.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
+                raise ValueError("Archived artifact failed integrity verification")
+        return path
+
+    def link_execution(self, execution_id, sha, evidence, transport):
+        """Trusted reconciler entry point; never called from name/size matching."""
+        if evidence not in {
+            "operator_supplied",
+            "octoprint_verified_bytes",
+            "native_sd_verified_snapshot",
+        }:
+            raise ValueError("Explicit content identity evidence required")
+        if transport not in {"native_sd", "octoprint_usb", "unknown"}:
+            raise ValueError("Unknown execution transport")
+        self.verified(sha)
+        with self.db() as db:
+            kind = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if kind and kind[0] != "execution_gcode":
+                raise ValueError("Execution identity requires executable G-code")
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            previous = db.execute(
+                "SELECT sha256 FROM execution_identity WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            if previous and previous[0] != sha:
+                raise ValueError("Execution identity cannot be silently replaced")
+            db.execute(
+                "INSERT OR IGNORE INTO execution_identity VALUES(?,?,?,?)",
+                (execution_id, sha, evidence, transport),
+            )
+
+    def reconcile_execution_content(self, execution_id, snapshot):
+        """Match an upstream content digest, never a file name or size.
+
+        OctoPrint uses SHA-1 for its file metadata. Canonical identity remains SHA-256;
+        ambiguous matches are rejected and stored canonical bytes are reverified.
+        """
+        telemetry = snapshot.get("telemetry") or {}
+        identity = telemetry.get("content_identity") or {}
+        if (
+            not execution_id
+            or snapshot.get("physical_source") == "mks_wifi_http"
+            or identity.get("status") != "available"
+        ):
+            return False
+        value = identity.get("value") or {}
+        digest = value.get("digest", "")
+        if (
+            value.get("algorithm") != "sha1"
+            or len(digest) != 40
+            or any(c not in "0123456789abcdef" for c in digest)
+            or value.get("origin") != "local"
+        ):
+            return False
+        with self.db() as db:
+            evidence = {"algorithm": "sha1", "digest": digest, "origin": "local"}
+            event_id = hashlib.sha256((execution_id + digest).encode()).hexdigest()
+            db.execute(
+                "INSERT OR IGNORE INTO execution_events VALUES(?,?,?,?,?,?)",
+                (
+                    event_id,
+                    execution_id,
+                    snapshot.get("observed_at") or now(),
+                    "artifact_content_observed",
+                    json.dumps(evidence),
+                    "octoprint_file_metadata",
+                ),
+            )
+            existing = db.execute(
+                "SELECT h.sha1 FROM execution_identity e "
+                "JOIN artifact_content_hashes h ON h.sha256=e.sha256 WHERE e.execution_id=?",
+                (execution_id,),
+            ).fetchone()
+            if existing and existing[0] == digest:
+                return True  # No whole-file rehash on every telemetry sample.
+            rows = db.execute(
+                "SELECT sha256 FROM artifact_content_hashes WHERE sha1=?", (digest,)
+            ).fetchall()
+        if len(rows) != 1:
+            return False
+        self.link_execution(execution_id, rows[0][0], "octoprint_verified_bytes", "octoprint_usb")
+        return True
+
+    def reconcile_pending_content(self, limit=4):
+        """Late archive ingestion can recover a previously observed content identity."""
+        with self.db() as db:
+            rows = db.execute(
+                "SELECT e.execution_id,MIN(e.payload) AS payload,MIN(e.observed_at) AS observed_at "
+                "FROM execution_events e WHERE e.event_type='artifact_content_observed' "
+                "AND NOT EXISTS(SELECT 1 FROM execution_identity i "
+                "WHERE i.execution_id=e.execution_id) "
+                "AND EXISTS(SELECT 1 FROM artifact_content_hashes h "
+                "WHERE h.sha1=json_extract(e.payload,'$.digest')) "
+                "GROUP BY e.execution_id HAVING COUNT(DISTINCT e.payload)=1 "
+                "ORDER BY MIN(e.observed_at) LIMIT ?",
+                (limit,),
+            ).fetchall()
+        count = 0
+        for row in rows:
+            snapshot = {
+                "observed_at": row["observed_at"],
+                "telemetry": {
+                    "content_identity": {"status": "available", "value": json.loads(row["payload"])}
+                },
+            }
+            count += bool(self.reconcile_execution_content(row["execution_id"], snapshot))
+        return count
+
+    def observe_discovery(self, entries, provider="printer_sd", available=True):
+        """Directory metadata is never content identity. Only verified snapshots may link bytes."""
+        from .factory_usb import catalog_visible
+
+        with self.db() as db:
+            db.execute("UPDATE artifact_discoveries SET available=0 WHERE provider=?", (provider,))
+            for entry in entries:
+                path = entry.get("name", "")
+                if entry.get("kind", "file") != "file" or not catalog_visible(path):
+                    continue
+                identity = hashlib.sha256((provider + "\0" + path).encode()).hexdigest()
+                sha = None
+                candidate = entry.get("verified_sha256")
+                if entry.get("identity_evidence") == "verified_content_snapshot" and candidate:
+                    try:
+                        self.verified(candidate)
+                        sha = candidate
+                    except (OSError, ValueError):
+                        pass
+                db.execute(
+                    "INSERT INTO artifact_discoveries VALUES(?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET size=excluded.size, "
+                    "last_seen=excluded.last_seen, "
+                    "available=excluded.available,sha256=excluded.sha256",
+                    (
+                        identity,
+                        provider,
+                        path,
+                        Path(path).name,
+                        entry.get("size_bytes"),
+                        now(),
+                        now(),
+                        int(available),
+                        sha,
+                    ),
+                )
+
+    def mark_derivative(self, sha, kind, status):
+        from .gcode_fabrication import CACHE_VERSION
+
+        with self.db() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO artifact_derivatives VALUES(?,?,?,?)",
+                (sha, kind, CACHE_VERSION, status),
+            )
+
+    def collection(self, kind, before=None, limit=40):
+        if kind not in {"history", "unprinted", "discovered"} or not 1 <= limit <= 100:
+            raise ValueError("Invalid collection or page size")
+        # Keyset cursors include a unique identity; insertions cannot shift old pages.
+        cursor = json.loads(before) if before else ["9999", "~"]
+        if (
+            not isinstance(cursor, list)
+            or len(cursor) != 2
+            or not all(isinstance(v, str) for v in cursor)
+        ):
+            raise ValueError("Invalid chronological cursor")
+        with self.db() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO execution_artifacts "
+                "SELECT p.id,g.sha256 FROM print_sessions p JOIN gcode_files g ON p.file_id=g.id"
+            )
+            if kind == "discovered":
+                rows = db.execute(
+                    "SELECT *,first_seen AS ingested_at FROM artifact_discoveries "
+                    "WHERE (first_seen,id)<(?,?) ORDER BY first_seen DESC,id DESC LIMIT ?",
+                    (*cursor, limit + 1),
+                ).fetchall()
+            elif kind == "history":
+                rows = db.execute(
+                    """SELECT p.*, e.sha256, e.evidence AS identity_evidence,
+                    e.transport AS execution_transport, a.filename AS archived_filename
+                    FROM print_sessions p LEFT JOIN execution_identity e ON p.id=e.execution_id
+                    LEFT JOIN fabrication_artifacts a ON a.sha256=e.sha256
+                    WHERE (p.started_at,p.id)<(?,?) ORDER BY p.started_at DESC,p.id DESC LIMIT ?""",
+                    (*cursor, limit + 1),
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    """SELECT a.*, a.sha256 AS id FROM fabrication_artifacts a
+                    WHERE NOT EXISTS(SELECT 1 FROM execution_identity e WHERE e.sha256=a.sha256)
+                    AND NOT EXISTS(SELECT 1 FROM artifact_custody c
+                                   WHERE c.sha256=a.sha256 AND c.archived=0)
+                    AND (a.ingested_at,a.sha256)<(?,?)
+                    ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT ?""",
+                    (*cursor, limit + 1),
+                ).fetchall()
+        items = [dict(row) for row in rows[:limit]]
+        for item in items:
+            item["bytes_available"] = bool(
+                item.get("sha256") and (self.root / (item["sha256"] + ".gcode")).is_file()
+            )
+            item["geometry_provenance"] = (
+                "approximate_deposited_filament" if item["bytes_available"] else "unavailable"
+            )
+            sha = item.get("sha256")
+            with self.db() as db:
+                derivative = db.execute(
+                    "SELECT status FROM artifact_derivatives WHERE sha256=? AND kind='geometry'",
+                    (sha,),
+                ).fetchone()
+                quality = db.execute(
+                    "SELECT result FROM quality_assessments WHERE execution_id=? "
+                    "ORDER BY assessed_at DESC,id DESC LIMIT 1",
+                    (item["id"],),
+                ).fetchone()
+                stages = db.execute(
+                    "SELECT status FROM artifact_stages WHERE sha256=?", (sha,)
+                ).fetchall()
+            item["lifecycle"] = {
+                "discovery": "unavailable" if item.get("available") == 0 else "discovered",
+                "archive": "archived" if item["bytes_available"] else "metadata_only",
+                "archive_integrity": "verified_at_ingestion_recheck_on_access"
+                if item["bytes_available"]
+                else "unavailable",
+                "preview": derivative[0]
+                if derivative
+                else "pending"
+                if item["bytes_available"]
+                else "unavailable",
+                "delivery": stages[-1][0] if stages else "not_staged",
+                "execution": item.get("state", "not_started"),
+                "quality": quality[0] if quality else "unassessed",
+                "identity": item.get("identity_evidence")
+                or ("verified_sha256" if sha else "discovered_not_archived"),
+                "delivery_capabilities": {
+                    "octoprint_usb": "requires_readiness_check",
+                    "native_sd": "unsupported_unverified_write_transport",
+                },
+            }
+        last = items[-1] if items else None
+        return {
+            "schema_version": 1,
+            "items": items,
+            "next": json.dumps(
+                [
+                    last.get("started_at", "") if kind == "history" else last["ingested_at"],
+                    last["id"],
+                ]
+            )
+            if last and len(rows) > limit
+            else None,
+        }
+
+    def import_execution_history(self, records):
+        """Import source records, preserving unknown dates/outcomes and no guessed byte identity."""
+        count = 0
+        with self.db() as db:
+            for record in records[:100]:
+                identity = str(record.get("id", ""))
+                if not identity.startswith("octoprint-") or identity.endswith("unknown"):
+                    continue
+                started = record.get("started_at") or ""
+                ended = record.get("ended_at")
+                try:
+                    started = datetime.fromisoformat(started.replace("Z", "+00:00")).isoformat()
+                except (TypeError, ValueError, AttributeError):
+                    started = ""  # Explicit unknown start, not fabricated ingestion time.
+                try:
+                    ended = (
+                        datetime.fromisoformat(ended.replace("Z", "+00:00")).isoformat()
+                        if ended
+                        else None
+                    )
+                except (TypeError, ValueError, AttributeError):
+                    ended = None
+                state = {"success": "completed", "cancel": "cancelled", "fail": "failed"}.get(
+                    record.get("state"), record.get("state") or "unknown"
+                )
+                db.execute(
+                    "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET state=excluded.state,ended_at=excluded.ended_at "
+                    "WHERE print_sessions.source='OctoPrint PrintJobHistory plugin'",
+                    (
+                        identity,
+                        record.get("filename"),
+                        started,
+                        ended,
+                        state,
+                        record.get("progress"),
+                        None,
+                        "OctoPrint PrintJobHistory plugin",
+                    ),
+                )
+                payload = json.dumps(
+                    {"record": record, "identity": "unavailable", "date_available": bool(started)},
+                    sort_keys=True,
+                )
+                event_id = hashlib.sha256((identity + payload).encode()).hexdigest()
+                db.execute(
+                    "INSERT OR IGNORE INTO execution_events VALUES(?,?,?,?,?,?)",
+                    (
+                        event_id,
+                        identity,
+                        now(),
+                        "history_import",
+                        payload,
+                        "OctoPrint PrintJobHistory plugin",
+                    ),
+                )
+                count += 1
+        return count
+
+    def assess_quality(self, execution_id, result, notes=""):
+        if (
+            result not in {"unassessed", "accepted", "rejected"}
+            or not isinstance(notes, str)
+            or len(notes) > 2000
+        ):
+            raise ValueError("Invalid operator assessment")
+        with self.db() as db:
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            identity = uuid.uuid4().hex
+            db.execute(
+                "INSERT INTO quality_assessments VALUES(?,?,?,?,?,?)",
+                (identity, execution_id, now(), result, notes, "operator_supplied"),
+            )
+        return {"id": identity, "result": result, "source": "operator_supplied"}
+
+    def link_baseline(self, execution_id, baseline_id):
+        with self.db() as db:
+            identity = db.execute(
+                "SELECT sha256 FROM execution_identity WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            baseline = db.execute(
+                "SELECT manifest FROM fabrication_baselines WHERE id=?", (baseline_id,)
+            ).fetchone()
+            if identity is None or baseline is None:
+                raise ValueError(
+                    "An explicit executable identity and approved baseline are required"
+                )
+            specification = json.loads(baseline[0])
+            if not any(
+                item["role"] == "executable_gcode" and item["sha256"] == identity[0]
+                for item in specification["authorities"]
+            ):
+                raise ValueError("Baseline does not reference this exact executable artifact")
+            previous = db.execute(
+                "SELECT baseline_id FROM execution_baselines WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            if previous and previous[0] != baseline_id:
+                raise ValueError("Historical baseline cannot be silently replaced")
+            db.execute(
+                "INSERT OR IGNORE INTO execution_baselines VALUES(?,?)", (execution_id, baseline_id)
+            )
+        return {"execution_id": execution_id, "baseline_id": baseline_id}
+
+    def attach_observation(self, execution_id, sha, kind):
+        if kind not in {"photo", "timelapse", "telemetry"}:
+            raise ValueError("Unsupported observation attachment")
+        self.verified(sha)
+        with self.db() as db:
+            artifact = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if artifact is None or artifact[0] != "observation":
+                raise ValueError("An observation artifact is required")
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            old = db.execute(
+                "SELECT id FROM execution_attachments WHERE execution_id=? AND sha256=? AND kind=?",
+                (execution_id, sha, kind),
+            ).fetchone()
+            identity = old[0] if old else uuid.uuid4().hex
+            if not old:
+                db.execute(
+                    "INSERT INTO execution_attachments VALUES(?,?,?,?,?)",
+                    (identity, execution_id, sha, kind, now()),
+                )
+        return {"id": identity, "sha256": sha, "kind": kind, "quality_unchanged": True}
+
+    def execution_detail(self, execution_id):
+        with self.db() as db:
+            row = db.execute(
+                "SELECT p.*,e.sha256,e.evidence,e.transport FROM print_sessions p "
+                "LEFT JOIN execution_identity e ON e.execution_id=p.id WHERE p.id=?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown execution")
+            events = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT * FROM execution_events WHERE execution_id=? "
+                    "ORDER BY observed_at,rowid LIMIT 1000",
+                    (execution_id,),
+                )
+            ]
+            quality = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT * FROM quality_assessments WHERE execution_id=? "
+                    "ORDER BY assessed_at DESC,rowid DESC LIMIT 100",
+                    (execution_id,),
+                )
+            ]
+            attachments = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT e.*,a.filename FROM execution_attachments e "
+                    "JOIN fabrication_artifacts a ON a.sha256=e.sha256 "
+                    "WHERE e.execution_id=? ORDER BY e.created_at LIMIT 100",
+                    (execution_id,),
+                )
+            ]
+        for event in events:
+            event["payload"] = json.loads(event["payload"])
+        return {
+            "execution": dict(row),
+            "events": events,
+            "quality_assessments": quality,
+            "attachments": attachments,
+            "replay": "Recorded telemetry is separate from inferred G-code movement",
+            "telemetry_url": "/api/timeline/sessions/" + execution_id,
+        }
+
+    def stages(self):
+        with self.db() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT s.*,a.filename,b.baseline_id FROM artifact_stages s "
+                    "JOIN fabrication_artifacts a "
+                    "ON s.sha256=a.sha256 LEFT JOIN stage_baselines b ON b.stage_id=s.id "
+                    "ORDER BY s.created_at DESC,s.id DESC LIMIT 100"
+                )
+            ]
+
+    def stage_artifact(self, sha, source_execution_id=None, baseline_id=None):
+        self.verified(sha)
+        with self.db() as db:
+            kind = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if kind and kind[0] != "execution_gcode":
+                raise ValueError("Only executable G-code may enter print staging")
+        if baseline_id:
+            with self.db() as db:
+                baseline = db.execute(
+                    "SELECT manifest FROM fabrication_baselines WHERE id=?", (baseline_id,)
+                ).fetchone()
+            if baseline is None or not any(
+                item["role"] == "executable_gcode" and item["sha256"] == sha
+                for item in json.loads(baseline[0])["authorities"]
+            ):
+                raise ValueError("Baseline does not approve this exact executable")
+        identity = uuid.uuid4().hex
+        with self.db() as db:
+            db.execute(
+                "INSERT INTO artifact_stages VALUES(?,?,?,?,?)",
+                (
+                    identity,
+                    sha,
+                    now(),
+                    source_execution_id,
+                    "staged_requires_compatibility_confirmation",
+                ),
+            )
+            if baseline_id:
+                db.execute("INSERT INTO stage_baselines VALUES(?,?)", (identity, baseline_id))
+        return {
+            "id": identity,
+            "sha256": sha,
+            "baseline_id": baseline_id,
+            "status": "staged_requires_compatibility_confirmation",
+            "physical_execution": False,
+        }
+
+    def stage_again(self, execution_id):
+        with self.db() as db:
+            row = db.execute(
+                "SELECT e.sha256 FROM print_sessions p "
+                "LEFT JOIN execution_identity e ON e.execution_id=p.id WHERE p.id=?",
+                (execution_id,),
+            ).fetchone()
+            if row is None or row[0] is None:
+                raise ValueError("This execution has no verified artifact association")
+            sha = row[0]
+            baseline = db.execute(
+                "SELECT baseline_id FROM execution_baselines WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+        return self.stage_artifact(sha, execution_id, baseline[0] if baseline else None)

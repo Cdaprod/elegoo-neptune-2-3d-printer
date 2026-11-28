@@ -19,7 +19,8 @@ WORD = re.compile(r"([A-Z])\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)")
 MAX_GCODE_BYTES = 50 * 1024 * 1024
 MAX_SEGMENTS = 80_000
 RETENTION_DAYS = 30
-PRINT_HISTORY_RETENTION_DAYS = 365
+# Execution history is permanent; raw telemetry has its own bounded retention.
+PRINT_HISTORY_RETENTION_DAYS = None
 MAX_TELEMETRY_ROWS = 100_000
 MAX_STORED_GCODE_FILES = 8
 MAX_STORED_SEGMENTS = 200_000
@@ -414,6 +415,9 @@ class MotionTimeline:
                     ended_at TEXT, state TEXT NOT NULL, progress REAL, file_id TEXT,
                     source TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS execution_events(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS telemetry(
                     id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
                     observed_at TEXT NOT NULL, state TEXT, filename TEXT, progress REAL,
@@ -867,12 +871,14 @@ class MotionTimeline:
     @staticmethod
     def _prune(db: sqlite3.Connection) -> None:
         cutoff = (datetime.now(UTC) - timedelta(days=RETENTION_DAYS)).isoformat()
-        history_cutoff = (
-            datetime.now(UTC) - timedelta(days=PRINT_HISTORY_RETENTION_DAYS)
-        ).isoformat()
+        # Execution identities and artifact links are durable; geometry/telemetry are caches.
         db.execute(
-            "DELETE FROM print_sessions WHERE ended_at IS NOT NULL AND ended_at < ?",
-            (history_cutoff,),
+            "CREATE TABLE IF NOT EXISTS execution_artifacts "
+            "(execution_id TEXT PRIMARY KEY, sha256 TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT OR IGNORE INTO execution_artifacts "
+            "SELECT p.id,g.sha256 FROM print_sessions p JOIN gcode_files g ON p.file_id=g.id"
         )
         db.execute(
             "DELETE FROM telemetry WHERE id NOT IN "
@@ -948,7 +954,7 @@ class MotionTimeline:
 
     def record_snapshot(
         self, snapshot: dict[str, Any], operations: list[dict[str, Any]] | None = None
-    ) -> None:
+    ) -> str | None:
         connection = snapshot.get("connection")
         if snapshot.get("stale") is True or (
             isinstance(connection, dict) and connection.get("connected") is False
@@ -983,6 +989,7 @@ class MotionTimeline:
             previous = dict(previous) if previous else None
             current = db.execute(
                 "SELECT * FROM print_sessions WHERE ended_at IS NULL "
+                "AND source!='OctoPrint PrintJobHistory plugin' "
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
             if active is True:
@@ -1116,6 +1123,32 @@ class MotionTimeline:
                         None if latency is None else float(latency),
                     ),
                 )
+            for identifier in {session_id, current["id"] if current else None} - {None}:
+                execution = db.execute(
+                    "SELECT state,progress FROM print_sessions WHERE id=?", (identifier,)
+                ).fetchone()
+                last = db.execute(
+                    "SELECT payload FROM execution_events WHERE execution_id=? "
+                    "ORDER BY rowid DESC LIMIT 1",
+                    (identifier,),
+                ).fetchone()
+                prior_state = json.loads(last["payload"]).get("state") if last else None
+                if execution and execution["state"] != prior_state:
+                    db.execute(
+                        "INSERT INTO execution_events VALUES(?,?,?,?,?,?)",
+                        (
+                            str(uuid.uuid4()),
+                            identifier,
+                            observed,
+                            "state_observation",
+                            json.dumps(
+                                {"state": execution["state"], "progress": execution["progress"]}
+                            ),
+                            "inferred_interruption"
+                            if execution["state"] == "interrupted"
+                            else source,
+                        ),
+                    )
             if previous:
                 observed_values = {
                     "nozzle_target": (telemetry.get("nozzle_temperature") or {}).get("target_c"),
@@ -1228,6 +1261,8 @@ class MotionTimeline:
                     )
             self._prune(db)
 
+        return session_id
+
     def list_print_history(self, limit: int = 200) -> dict[str, Any]:
         """Read persisted observed sessions without implying successful print completion."""
         if isinstance(limit, bool) or not 1 <= limit <= 500:
@@ -1275,6 +1310,7 @@ class MotionTimeline:
             "limit": limit,
             "source": "Observatory SQLite recording",
             "retention_days": PRINT_HISTORY_RETENTION_DAYS,
+            "retention_policy": "indefinite_unless_operator_deleted",
             "note": (
                 "These are Observatory-observed sessions. An idle transition or "
                 "100% progress alone does not prove print completion. A session "

@@ -7,6 +7,7 @@ Never talks to the printer, writes into source directories, or asserts CAD fidel
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import os
@@ -293,7 +294,11 @@ class FabricationPreviewService:
     def _prune(self) -> None:
         if not self.cache_dir:
             return
-        files = sorted(self.cache_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        files = sorted(
+            list(self.cache_dir.glob("*.json")) + list(self.cache_dir.glob("*.png")),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
         size = 0
         for path in files:
             size += path.stat().st_size
@@ -349,3 +354,73 @@ class FabricationPreviewService:
         if view not in ("iso", "top", "front"):
             raise ModelPreviewError("Unsupported model camera view")
         return render_svg(self.geometry(relative), view)
+
+    def raster_preview(self, relative: str, view: str = "iso") -> bytes:
+        """Bounded static raster: browsers never repaint thousands of SVG strokes per card."""
+        from PIL import Image, ImageDraw
+
+        if view not in {"iso", "top", "front"}:
+            raise ModelPreviewError("Unsupported model camera view")
+        model = self.geometry(relative)
+        target = (
+            self.cache_dir / (model["cache_key"] + "-raster-v1-" + view + ".png")
+            if self.cache_dir
+            else None
+        )
+        if target and target.is_file():
+            return target.read_bytes()
+        lo, hi = model["bounds"]
+        center = [(a + b) / 2 for a, b in zip(lo, hi, strict=True)]
+
+        def project(p):
+            x, y, z = [p[i] - center[i] for i in range(3)]
+            return (
+                (x, -y)
+                if view == "top"
+                else (x, -z)
+                if view == "front"
+                else ((x - y) * 0.7071, (x + y) * 0.3536 - z * 0.8660)
+            )
+
+        points = [project(s[i : i + 3]) for s in model["segments"] for i in (0, 3)]
+        bounds = [(min(p[a] for p in points), max(p[a] for p in points)) for a in (0, 1)]
+        scale = min(
+            1260 / max(bounds[0][1] - bounds[0][0], 0.1),
+            880 / max(bounds[1][1] - bounds[1][0], 0.1),
+        )
+
+        def screen(p):
+            x, y = project(p)
+            return ((x - sum(bounds[0]) / 2) * scale + 768, (y - sum(bounds[1]) / 2) * scale + 560)
+
+        image = Image.new("RGB", (1536, 1152), "#091827")
+        draw = ImageDraw.Draw(image)
+        ordered = sorted(
+            model["segments"], key=lambda s: ((s[2] + s[5]) / 2, (s[0] + s[3] + s[1] + s[4]) / 4)
+        )
+        for segment in ordered:
+            line = [screen(segment[:3]), screen(segment[3:6])]
+            width = max(2, min(12, round(float(segment[6] or 0.42) * scale * 0.85)))
+            draw.line(line, fill="#142a3b", width=width + 2)
+            draw.line(line, fill=COLORS[int(segment[7]) % len(COLORS)], width=width)
+        image = image.resize((768, 576), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        data = output.getvalue()
+        if target:
+            temporary = None
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.NamedTemporaryFile(
+                    dir=target.parent, suffix=".tmp", delete=False
+                ) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(data)
+                os.replace(temporary, target)
+                self._prune()
+            except OSError:
+                pass
+            finally:
+                if temporary:
+                    temporary.unlink(missing_ok=True)
+        return data

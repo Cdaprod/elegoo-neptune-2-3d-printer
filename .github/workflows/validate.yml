@@ -45,10 +45,12 @@ jobs:
           python ../../scripts/test_import_sd_gcode.py -q
           python ../../scripts/test_appliance_config.py -q
           python ../../scripts/test_usb_owner.py -q
+          python -m unittest discover -s ../../tests -p test_octoprint_startup.py -q
       - name: Lint and formatting
         run: |
-          uv run --no-sync ruff check src tests
-          uv run --no-sync ruff format --check --diff src tests
+          uv run --no-sync ruff check src tests ../../integrations/lilbitdrop/*.py
+          uv run --no-sync ruff format --check --diff src tests ../../integrations/lilbitdrop/*.py
+          python -m py_compile ../../integrations/lilbitdrop/*.py
       - name: Compile dashboard JavaScript
         run: node ../../scripts/check_dashboard_js.cjs
       - name: Run frontend logic tests
@@ -147,6 +149,8 @@ jobs:
           node scripts/test-hmi-operator.cjs
           node scripts/test-hmi-gcode-import.cjs
           node scripts/test-native-sd-hmi.cjs
+          node scripts/test-fabrication-lifecycle-hmi.cjs
+          node scripts/test-model-registry-hmi.cjs
       - name: Upload HMI geometry gallery screenshot
         if: always()
         uses: actions/upload-artifact@v4
