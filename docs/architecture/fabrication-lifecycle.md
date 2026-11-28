@@ -455,3 +455,16 @@ hidden CAD previews from competing with artifact inspection or gallery capture.
 
 These 1280×400 software renders do not establish Raspberry Pi frame rate, native
 SD retrieval, physical print outcome or a deployed receiver.
+
+## Metadata-only inspection and raster thumbnail costs
+
+A directory-only SD card entry displays an explicit original-bytes-unavailable
+state, with no broken image, claimed rendered model or enabled camera controls.
+The operator can upload an original to canonical storage without OctoPrint delivery;
+the resulting artifact is not automatically declared identical to the SD entry.
+
+HMI local/archive cards request cached 768×576 PNGs generated from the same bounded
+filament geometry. Supersampled server rasterization avoids repainting thousands
+of vector strokes per card on the Pi/SwiftShader compositor. SVG export remains
+backward compatible. Raster derivatives share the existing bounded cache and
+invalidate with source fingerprints; interactive inspection still uses Three.js.

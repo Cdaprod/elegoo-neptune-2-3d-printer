@@ -77,7 +77,7 @@
  let inspected=null;
  const geometrySource=source=>["local","native_cache","archive"].includes(source);
  const hasGeometry=(file,source)=>geometrySource(source)&&file.source_present!==false&&(source!=="native_cache"||file.geometry_available===true);
- const modelUrl=(file,view="iso")=>file.engineering?"/api/model-registry/artifacts/"+file.sha256+"/thumbnail":file.archive?"/api/fabrication/artifacts/"+file.sha256+"/thumbnail":file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
+ const modelUrl=(file,view="iso")=>file.engineering?"/api/model-registry/artifacts/"+file.sha256+"/thumbnail":file.archive?"/api/fabrication/artifacts/"+file.sha256+"/thumbnail?format=png":file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view)+"&format=png";
  const legacyPreview=(file,source)=>source==="local"
    ?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path)
    :"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
@@ -136,14 +136,17 @@
     const latest=record.quality_assessments?.[0];$('quality-result').value=latest?.result||'unassessed';$('quality-notes').value=latest?.notes||'';
     text('execution-record','Observed events: '+(record.events||[]).slice(-8).map(event=>event.observed_at+' '+(event.payload?.state||event.event_type)).join(' · '));
    }).catch(error=>{if(epoch===inspectorEpoch&&error.name!=='AbortError')text('execution-record','Execution detail unavailable: '+error.message);});
-   const preview=$("inspector-image");
-   preview.hidden=false;
-   preview.onerror=null;
-   if(hasGeometry(file,source)){
-     preview.src=modelUrl(file);
-     preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
-   }else if(file.preview_available)preview.src=legacyPreview(file,source);
-   else preview.removeAttribute("src");
+   const preview=$("inspector-image"),empty=$('inspector-empty');
+   preview.hidden=true;empty.hidden=false;preview.onerror=null;preview.removeAttribute('src');
+   text('inspector-empty-title',hasGeometry(file,source)?'Preparing geometry':'Original bytes unavailable');
+   text('inspector-empty-note',hasGeometry(file,source)?'Reading verified source geometry…':'This directory entry has no acquired G-code. Archive an original through upload, LilBitDrop or an external SD reader. USB selection does not download its contents.');
+   const showPreview=url=>{preview.onerror=()=>{preview.hidden=true;empty.hidden=false;text('inspector-empty-title','Preview unavailable');};preview.onload=()=>{if(epoch!==inspectorEpoch)return;preview.hidden=false;empty.hidden=true;};preview.src=url;};
+   if(hasGeometry(file,source))showPreview(modelUrl(file));
+   else if(file.preview_available)showPreview(legacyPreview(file,source));
+   $('archive-original').hidden=hasGeometry(file,source);
+   document.querySelector('.inspector-actions').style.display=hasGeometry(file,source)?'flex':'none';$('geometry-guide').hidden=!hasGeometry(file,source);
+   document.querySelectorAll('[data-view-angle]').forEach(button=>button.disabled=!hasGeometry(file,source));
+   if(!hasGeometry(file,source)){text('inspector-status','Metadata only · no reconstructed model');text('inspector-details','Directory or history observation · original bytes not acquired');}
    $("print-again").hidden=!(file.archive&&file.bytes_available&&/\.(gcode|gco|gc|g)$/i.test(file.filename||file.name||""));
    $("print-again").textContent=file.started_at?"Print again · stage copy":"Stage archived artifact";
    if(file.archive)text("inspector-details",[file.state||"Unprinted",file.started_at||file.ingested_at,file.ended_at||"Outcome not recorded",file.source||"Archived bytes"].join(" · "));
@@ -168,7 +171,7 @@
      const viewer=inspectorViewer=module.mountViewer(host,geometry);
      const ready=await viewer.ready;
      if(epoch!==inspectorEpoch||!ready)return;
-     preview.hidden=true;
+     preview.hidden=true;empty.hidden=true;
      $('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
@@ -184,7 +187,8 @@
    }catch(err){
      if(epoch!==inspectorEpoch)return;
      $("model-viewer-host").hidden=true;
-     preview.hidden=false;
+     preview.hidden=!(preview.complete&&preview.naturalWidth);empty.hidden=!preview.hidden;
+     text('inspector-empty-title','Geometry unavailable');text('inspector-empty-note',err.message);
      text("inspector-status","3D inspector unavailable: "+err.message+" · still-image fallback");
    }
  }
@@ -376,6 +380,12 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value||(registryPages[requestedProvider]&&requestedFilter!==$("model-filter").value))loadFiles();}
  }
+ $('archive-original').onclick=()=>$('archive-original-file').click();
+ $('archive-original-file').onchange=async()=>{const file=$('archive-original-file').files[0];if(!file)return;try{
+  if(file.size>50*1024*1024)throw Error('G-code exceeds 50 MiB archive limit');
+  const result=await api('/api/fabrication/ingest?filename='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Artifact-Source':'hmi:original-upload'},body:file});
+  await openInspector({filename:file.name,sha256:result.sha256,archive:true,bytes_available:true,source_present:true,lifecycle:{archive:'archived',discovery:'uploaded_original',identity:'SD relationship unverified',execution:'not_started'}},'archive');
+ }catch(error){text('inspector-status','Archival failed: '+error.message);}finally{$('archive-original-file').value='';}};
  $('associate-execution').onclick=async()=>{const sha=$('execution-artifact').value;const file=inspected?.file;if(!sha||!file||!confirm('Record your association with this exact archived G-code? This is operator supplied, not hardware-verified identity.'))return;try{await api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/identity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sha256:sha,transport:$('execution-transport').value})});openInspector({...file,sha256:sha,source_present:true,bytes_available:true,lifecycle:{...file.lifecycle,archive:'archived',identity:'operator_supplied'}},'archive');}catch(error){text('execution-record',error.message);}};
  $('add-observation').onclick=()=>$('observation-file').click();
  $('observation-file').onchange=async()=>{const file=$('observation-file').files[0];if(!file||!inspected?.file?.id)return;const execution=inspected.file;

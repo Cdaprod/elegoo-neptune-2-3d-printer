@@ -43,8 +43,12 @@ const base=process.env.HMI_BASE_URL||'http://127.0.0.1:8000';
   assert.equal(await page.locator('.model:visible').count(),1);
   await page.locator('.model:visible').tap();
   assert.equal(await page.locator('#model-viewer-host canvas').count(),0,'Directory names are not geometry');
+  assert.ok(await page.locator('#inspector-empty').isVisible(),'Metadata-only SD entries need an honest empty state');
+  assert.ok(await page.locator('#inspector-image').isHidden(),'No broken rendered-image claim without source bytes');
+  assert.ok(await page.locator('[data-view-angle]').first().isDisabled());
   assert.ok(await page.locator('#factory-select-file').isVisible(),'Factory SD selection is part of the existing inspector');
   assert.ok(await page.locator('#factory-select-file').isDisabled(),'Uncommissioned factory SD selection stays gated');
+  if(process.env.HMI_SCREENSHOT_DIR){fs.mkdirSync(process.env.HMI_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:process.env.HMI_SCREENSHOT_DIR+'/native-sd-metadata-1280x400.png'});}
   await page.locator('#retrieve-sd').tap();
   await page.locator('#native-sd-status').filter({hasText:'receiving'}).waitFor();
   await page.locator('#model-viewer-host canvas').waitFor();

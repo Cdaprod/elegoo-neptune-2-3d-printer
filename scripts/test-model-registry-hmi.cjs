@@ -28,7 +28,7 @@ const assert=require('node:assert/strict');
    return route.fulfill({status:404,json:{detail:'Unavailable fixture resource'}});
   });
   await page.route('**/api/fabrication/artifacts/*/geometry',route=>route.fulfill({json:geometry}));
-  await page.route('**/api/fabrication/artifacts/*/thumbnail',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path d="M10 60L40 10L70 60Z" fill="#64aac4"/></svg>'}));
+  await page.route('**/api/fabrication/artifacts/*/thumbnail*',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path d="M10 60L40 10L70 60Z" fill="#64aac4"/></svg>'}));
   await page.goto(base+'/hmi');await page.locator('nav [data-go=models]').tap();await page.locator('#storage-provider').selectOption('unassigned');
   await page.locator('[aria-label="Next registry page"]').tap();await page.waitForFunction(()=>document.querySelector('[aria-label="Next registry page"]').disabled);
   await page.locator('[aria-label="Previous registry page"]').tap();

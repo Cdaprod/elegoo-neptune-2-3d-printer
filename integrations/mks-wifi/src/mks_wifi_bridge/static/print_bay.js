@@ -8,7 +8,7 @@ let presentationActive=window.parent===window||new URLSearchParams(location.sear
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='neptune:presentation')return;
  const changed=presentationActive!==(event.data.active===true);presentationActive=event.data.active===true;document.body.dataset.rendering=presentationActive?'active':'suspended';
- if(changed){if(!presentationActive){dispose();renderKey=null;}else renderPlates();}
+ if(changed){renderKey=null;if(!presentationActive)dispose();else renderPlates();}
 });
 async function api(path, body) {
   const r=await fetch('/api/manufacturing'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

@@ -103,3 +103,19 @@ def test_unsupported_arc_encoding_is_exposed_not_claimed_exact() -> None:
     model = reconstruct(io.StringIO(code))
     assert model["stats"]["arcs_represented_as_chords"] == 1
     assert model["stats"]["approximate"] is True
+
+
+def test_raster_thumbnail_is_cached_geometry_and_invalidates_with_source(tmp_path):
+    from PIL import Image
+
+    source = tmp_path / "part.gcode"
+    source.write_text(fixture_gcode())
+    service = FabricationPreviewService(tmp_path, tmp_path / "cache")
+    png = service.raster_preview("part.gcode")
+    image = Image.open(io.BytesIO(png))
+    assert image.size == (768, 576) and len(image.getcolors(768 * 576)) > 20
+    assert service.raster_preview("part.gcode") == png
+    source.write_text(fixture_gcode().replace("X20", "X40"))
+    assert service.raster_preview("part.gcode") != png
+    with pytest.raises(ModelPreviewError):
+        service.raster_preview("part.gcode", "unsupported")

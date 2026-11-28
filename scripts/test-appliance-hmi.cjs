@@ -67,7 +67,7 @@ const path=require('node:path');
   if(screenshots){fs.mkdirSync(screenshots,{recursive:true});await page.screenshot({path:screenshots+'/hmi-print-bay-1280x400.png'});}
   await page.locator('nav [data-go="models"]').tap();
   await page.locator('.model').first().waitFor();
-  await frame.locator('body[data-rendering="suspended"][data-preview-contexts="0"]').waitFor();
+  await frame.locator('body[data-rendering="suspended"][data-preview-contexts="0"]').waitFor({state:'attached'});
   const first=page.locator('.model').first();
   // Exercise every real fixture thumbnail, including offscreen lazy images.
   // Wait for the route transition before decoding; do not swallow broken images.
@@ -88,6 +88,13 @@ const path=require('node:path');
   }
   await page.locator('#models').evaluate(e=>e.scrollLeft=0);
   if(screenshots)await page.screenshot({path:screenshots+'/hmi-gallery-1280x400.png'});
+  // A hidden background refresh must not prevent preview reconstruction on return.
+  const refreshed=page.waitForResponse(r=>r.url().endsWith('/api/manufacturing/artifacts'));
+  await frame.locator('#refresh').evaluate(button=>button.click());await refreshed;
+  await page.locator('nav [data-go="print-bay"]').tap();
+  await frame.locator('body[data-preview-contexts="3"]').waitFor();
+  await page.locator('nav [data-go="models"]').tap();
+  await frame.locator('body[data-preview-contexts="0"]').waitFor({state:'attached'});
   const before=await page.locator('#models').evaluate(e=>e.scrollLeft);
   await swipe(900,180,-220,0);
   assert.ok(await page.locator('#models').evaluate(e=>e.scrollLeft)>before);

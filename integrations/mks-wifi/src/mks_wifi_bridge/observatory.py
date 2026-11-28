@@ -1389,7 +1389,7 @@ def create_app(
         return await asyncio.to_thread(reconcile)
 
     @app.get("/api/fabrication/artifacts/{sha}/{derivative}", dependencies=[Depends(require_auth)])
-    async def archive_derivative(sha: str, derivative: str):
+    async def archive_derivative(sha: str, derivative: str, format: str = "svg"):
         try:
             path = await asyncio.to_thread(fabrication_archive.verified, sha)
             if derivative == "observation":
@@ -1406,9 +1406,16 @@ def create_app(
                 fabrication_archive.mark_derivative(sha, "geometry", "generated")
                 return geometry
             if derivative == "thumbnail":
-                svg = await asyncio.to_thread(fabrication_archive.previews.preview, path.name)
+                if format not in {"png", "svg"}:
+                    raise ValueError("Unsupported thumbnail format")
+                method = (
+                    fabrication_archive.previews.raster_preview
+                    if format == "png"
+                    else fabrication_archive.previews.preview
+                )
+                svg = await asyncio.to_thread(method, path.name)
                 fabrication_archive.mark_derivative(sha, "thumbnail", "generated")
-                return Response(svg, media_type="image/svg+xml")
+                return Response(svg, media_type="image/png" if format == "png" else "image/svg+xml")
             raise ValueError("Unknown derivative")
         except (ValueError, FileNotFoundError) as exc:
             raise HTTPException(404, str(exc)) from exc
@@ -2008,18 +2015,23 @@ def create_app(
         return HTMLResponse(files("mks_wifi_bridge").joinpath("static/visual_lab.html").read_text())
 
     @app.get("/api/hmi/model-preview", dependencies=[Depends(require_auth)])
-    async def hmi_model_preview(path: str, view: str = "iso") -> Response:
+    async def hmi_model_preview(path: str, view: str = "iso", format: str = "svg") -> Response:
         """3D-rendered preview from a local, read-only G-code source."""
         try:
             async with model_preview_slots:
-                svg = await asyncio.to_thread(model_previews.preview, path, view)
+                if format not in {"png", "svg"}:
+                    raise ModelPreviewError("Unsupported thumbnail format")
+                method = (
+                    model_previews.raster_preview if format == "png" else model_previews.preview
+                )
+                svg = await asyncio.to_thread(method, path, view)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ModelPreviewError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
             content=svg,
-            media_type="image/svg+xml",
+            media_type="image/png" if format == "png" else "image/svg+xml",
             headers={
                 "Cache-Control": "private, max-age=300",
                 "X-Content-Type-Options": "nosniff",

@@ -2,6 +2,9 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const crypto=require('node:crypto');
+const original=fs.readFileSync('/tmp/neptune-hmi-browser/Display-bracket.gcode');
+const originalSha=crypto.createHash('sha256').update(original).digest('hex');
 const base=process.env.HMI_BASE_URL||'http://127.0.0.1:8000';
 (async()=>{
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=swiftshader']});
@@ -15,6 +18,7 @@ const base=process.env.HMI_BASE_URL||'http://127.0.0.1:8000';
   const image=await (await page.request.get(base+'/api/hmi/model-preview?path=Display-bracket.gcode')).body();
   await page.route('**/api/fabrication/**',async route=>{
    const url=new URL(route.request().url());const kind=url.pathname.split('/').at(-1);
+   if(kind==='ingest'){assert.deepEqual(route.request().postDataBuffer(),original);return route.fulfill({json:{sha256:originalSha,archived:true,printer_command_sent:false}});}
    if(kind==='geometry')return route.fulfill({json:geometry});
    if(kind==='thumbnail')return route.fulfill({contentType:'image/svg+xml',body:image});
    const later=url.searchParams.has('before');
@@ -41,7 +45,13 @@ const base=process.env.HMI_BASE_URL||'http://127.0.0.1:8000';
   await page.locator('#inspector-close').tap();
   assert.ok(await page.locator('.archive-lane[data-collection="history"] .model').first().evaluate(el=>el.classList.contains('selected')));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollHeight>innerHeight),false);
-  assert.deepEqual(writes,[]);assert.deepEqual(errors,[]);
+  assert.deepEqual(writes,[]);
+  await page.locator('.archive-lane[data-collection="discovered"] .model').tap();
+  await page.locator('#inspector-empty').waitFor();assert.ok(await page.locator('#inspector-image').isHidden());
+  assert.equal(await page.locator('#model-viewer-host canvas').count(),0);
+  await page.locator('#archive-original-file').setInputFiles({name:'Display-bracket.gcode',mimeType:'application/octet-stream',buffer:original});
+  await page.locator('#model-viewer-host canvas').waitFor();await page.locator('#lifecycle-details').filter({hasText:'SD relationship unverified'}).waitFor();
+  assert.equal(writes.length,1);assert.equal(new URL(writes[0]).pathname,'/api/fabrication/ingest');assert.deepEqual(errors,[]);
   console.log('Three chronological lanes, independent paging, persistent selection, actual fixture geometry and no printer writes passed at 1280x400');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
