@@ -4,6 +4,46 @@ import { OrbitControls } from "/static/vendor/OrbitControls.js";
 
 const MATERIALS = [0xa6bdcc, 0x6899b7, 0xd8a76c, 0xd0e1e8];
 
+function connectedGeometry(model, center) {
+  const buckets=Array.from({length:4},()=>({positions:[],indices:[]}));
+  for(const run of model.path_ranges){
+    const spans=model.segments.slice(run.start,run.start+run.count);
+    if(!spans.length)continue;
+    const points=[spans[0].slice(0,3),...spans.map(s=>s.slice(3,6))];
+    const closed=run.closed&&points[0].every((v,i)=>v===points.at(-1)[i]);
+    if(closed)points.pop();
+    const n=points.length;if(n<2)continue;
+    const bucket=buckets[spans[0][7]];
+    if(!bucket)continue;
+    const base=bucket.positions.length/3;
+    const half=Math.max(.075,Math.min(1.2,spans[0][6]/2));
+    const height=Math.max(.03,Math.min(1.2,run.height||.2));
+    for(let i=0;i<n;i++){
+      const p=points[i],prev=points[i?i-1:closed?n-1:0],next=points[i+1<n?i+1:closed?0:n-1];
+      const normal=(a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);return len>1e-8?[-dy/len,dx/len]:null;};
+      let a=normal(prev,p),b=normal(p,next);a=a||b||[1,0];b=b||a;
+      let nx=a[0]+b[0],ny=a[1]+b[1],len=Math.hypot(nx,ny);
+      if(len<1e-6){nx=b[0];ny=b[1];len=1;}
+      nx/=len;ny/=len;
+      const miter=Math.min(1.75,1/Math.max(.01,nx*b[0]+ny*b[1]));
+      for(const [side,z] of [[1,-height],[1,0],[-1,0],[-1,-height]]){
+        bucket.positions.push(p[0]+side*nx*half*miter-center[0],p[2]+z-center[2],-(p[1]+side*ny*half*miter-center[1]));
+      }
+    }
+    for(let i=0;i<(closed?n:n-1);i++)for(let j=0;j<4;j++){
+      const a=base+i*4+j,b=base+i*4+(j+1)%4,c=base+((i+1)%n)*4+(j+1)%4,d=base+((i+1)%n)*4+j;
+      bucket.indices.push(a,b,c,a,c,d);
+    }
+    if(!closed){const end=base+(n-1)*4;bucket.indices.push(base,base+2,base+1,base,base+3,base+2,end,end+1,end+2,end,end+2,end+3);}
+  }
+  return buckets.map(bucket=>{
+    if(!bucket.positions.length)return null;
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(bucket.positions),3));
+    geometry.setIndex(bucket.indices);geometry.computeVertexNormals();return geometry;
+  });
+}
+
 export function mountViewer(host, model) {
   const segments = Array.isArray(model.segments) ? model.segments : [];
   const surface=Array.isArray(model.surface_vertices)?model.surface_vertices:null;
@@ -58,6 +98,15 @@ export function mountViewer(host, model) {
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(values,3));geometry.computeVertexNormals();
     const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x8ab4c7,roughness:.48,metalness:.15,side:THREE.DoubleSide}));scene.add(mesh);meshes.push(mesh);
   }
+  const pipeline=surface?'source_surface':model.path_ranges?.length?'connected_sweep':'instanced_legacy';
+  host.dataset.viewerPipeline=pipeline;
+  if(pipeline==='connected_sweep'){
+    connectedGeometry(model,center).forEach((geometry,category)=>{
+      if(!geometry)return;
+      const material=new THREE.MeshStandardMaterial({color:MATERIALS[category],roughness:.58,metalness:.11});
+      const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);meshes.push(mesh);
+    });
+  }else{
   const groups = [[],[],[],[]];
   for (const segment of segments) {
     const category = segment[7];
@@ -86,6 +135,8 @@ export function mountViewer(host, model) {
     mesh.instanceMatrix.needsUpdate=true;
     scene.add(mesh);
     meshes.push(mesh);
+  }
+
   }
 
   // One immutable line buffer, shared by all toolpath inspection ranges.
@@ -160,6 +211,11 @@ export function mountViewer(host, model) {
     try{renderer.render(scene,camera);resolveReady(true);}
     catch(error){rejectReady(error);return;}
     host.dataset.viewerFrames=String(++renderFrames);
+    host.dataset.viewerDrawCalls=String(renderer.info.render.calls);
+    host.dataset.viewerTriangles=String(renderer.info.render.triangles);
+    host.dataset.viewerGeometryBytes=String(meshes.reduce((sum,mesh)=>sum+
+      Object.values(mesh.geometry.attributes).reduce((n,a)=>n+a.array.byteLength,0)+
+      (mesh.geometry.index?.array.byteLength||0)+(mesh.instanceMatrix?.array.byteLength||0),0));
     if(interacting||now<settleUntil)schedule();
   }
   function visibility() {if(!document.hidden)invalidate();}
@@ -191,7 +247,7 @@ export function mountViewer(host, model) {
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
-      delete host.dataset.viewerPixelRatio;delete host.dataset.viewerFraming;
+      delete host.dataset.viewerPipeline;delete host.dataset.viewerDrawCalls;delete host.dataset.viewerTriangles;delete host.dataset.viewerGeometryBytes;delete host.dataset.viewerPixelRatio;delete host.dataset.viewerFraming;
       delete host.dataset.viewerFrames;
       delete host.dataset.viewerStatus;delete host.dataset.viewerPresentation;delete host.dataset.viewerRange;
     }

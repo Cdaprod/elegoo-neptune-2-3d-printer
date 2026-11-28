@@ -547,3 +547,44 @@ full bounds remain available through **All paths**; unlabelled G-code uses full
 bounds. Cached raster previews follow the same part framing. This is a display
 choice, not deletion or alteration of source commands. Publication provenance names
 the engineering publication adapter; actual slicer identity comes from file metadata.
+
+## Connected deposition visualization
+
+Uniform every-Nth-move sampling produced disconnected fragments. The replacement
+keeps deposition runs separate at travel, retraction, feature and width boundaries.
+Bounded-error Ramer–Douglas–Peucker simplification preserves ordered endpoints and
+closed rings; it never joins unrelated paths or skips whole layers. A 0.035 mm
+centerline tolerance plus coordinate rounding is reported in the geometry contract.
+The immutable canonical G-code remains the complete original toolpath authority;
+visualization derivatives never replace or rewrite it. This preserves connectivity,
+not an exact CAD solid or a proof of physical dimensions.
+
+The inspector sweeps joined rectangular extrusion sections into merged indexed
+BufferGeometry per material category. Closed runs share their closing ring, corners
+use bounded miters, and inferred layer increments determine section height. This
+avoids separate cylinder caps and gaps. Back-face culling, bounded native pixel
+ratio, demand rendering and disposal retain Pi GPU headroom. Instanced cylinders
+remain a compatibility fallback for older geometry contracts. Toolpath and section
+modes use the same connected, ordered display spans.
+
+The actual archived regression retains private source paths and expected SHA-256
+in a local manifest, not Git. Run it from the repository:
+
+```sh
+PYTHONPATH=integrations/mks-wifi/src python scripts/test-gcode-archive-rendering.py \
+  --manifest /private/gcode-render-fixtures.json --baseline-ref c996c93 \
+  --output /private/gcode-render-regression.json
+```
+
+The manifest contains `artifacts` with `path`, `sha256` and `expected` (`geometry`
+or `no_deposition`). Validation compares every original extrusion against its
+connected display span, checks endpoints, run closure, feature/width boundaries,
+full bounds, source integrity and measured simplification error. Actual evidence
+covers 18 deposited-geometry artifacts and two non-depositing command files.
+
+A real Pi V3D browser comparison at 1280×400 replaced 6,326 disconnected sampled
+pieces with 49,140 connected spans for 50,601 original extrusion moves. The joined
+representation used about 9.6 MB of geometry and two draw calls including the grid.
+A short 1.5-second interaction measured approximately 32 FPS at native pixel ratio;
+this is target-hardware evidence, not a sustained thermal benchmark. Private native
+before/after HMI images and raw measurements stay in commissioning storage.
