@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
+from .artifact_policy import ARTIFACT_EXTENSIONS
 from .octoprint_local_import import validate_gcode_filename
 
 
@@ -18,15 +19,7 @@ class ArtifactSubmission:
     expected_sha256: str | None = None
 
     def validate(self):
-        allowed = {
-            "execution_gcode": {".gcode", ".gco", ".gc", ".g"},
-            "design_freecad": {".fcstd", ".fcstd1", ".fcstd2", ".fcbak"},
-            "manufacturing_geometry": {".step", ".stp", ".stl", ".obj"},
-            "slicer_project": {".3mf"},
-            "cad_source": {".py"},
-            "design_blender": {".blend"},
-            "observation": {".png", ".jpg", ".jpeg", ".webm", ".mp4", ".json"},
-        }
+        allowed = ARTIFACT_EXTENSIONS
         if self.schema_version != 1 or self.artifact_kind not in allowed:
             raise ValueError("Unsupported submission schema or artifact type")
         if not self.provider or len(self.provider) > 80 or len(self.source_uri) > 2048:

@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -16,8 +17,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-MAX_BYTES = 50 * 1024 * 1024
-NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,160}\.(?:gcode|gco|gc|g)", re.IGNORECASE)
+# Host scripts use the same dependency-free policy shipped with Observatory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mks-wifi/src/mks_wifi_bridge"))
+import artifact_policy  # noqa: E402
+
+MAX_BYTES = artifact_policy.MAX_BYTES
 
 
 class Receiver(ThreadingHTTPServer):
@@ -102,8 +106,13 @@ class Handler(BaseHTTPRequestHandler):
         filename = parse_qs(url.query).get("filename", [""])[0]
         if url.path != "/receive":
             return self.respond(404, {"error": "Unknown endpoint"})
-        if not NAME.fullmatch(filename) or ".." in filename:
-            return self.respond(422, {"error": "Supply a plain G-code filename"})
+        try:
+            artifact_policy.transport_kind(filename)
+        except ValueError as error:
+            return self.respond(422, {"error": str(error)})
+        transport = self.headers.get("X-LilBitDrop-Transport", "receiver")
+        if transport not in {"receiver", "ssh", "ios-share"}:
+            return self.respond(422, {"error": "Unknown transport provenance"})
         if self.headers.get("Transfer-Encoding"):
             return self.respond(400, {"error": "Use one explicit Content-Length"})
         lengths = self.headers.get_all("Content-Length", [])
@@ -117,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
         if shutil.disk_usage(self.server.root).free < size + 512 * 1024 * 1024:
             return self.respond(507, {"error": "Insufficient receiver storage reserve"})
         if self.headers.get_content_type() != "application/octet-stream":
-            return self.respond(415, {"error": "Send raw G-code bytes"})
+            return self.respond(415, {"error": "Send raw engineering artifact bytes"})
         expected = self.headers.get("X-Content-SHA256", "").lower()
         if not re.fullmatch(r"[a-f0-9]{64}", expected):
             return self.respond(422, {"error": "X-Content-SHA256 required"})
@@ -148,8 +157,16 @@ class Handler(BaseHTTPRequestHandler):
                 os.fsync(output.fileno())
             if not hmac.compare_digest(digest.hexdigest(), expected):
                 return self.respond(422, {"error": "SHA-256 mismatch"})
-            # Stable name preserves sender filename and makes retries idempotent.
-            target = self.server.completed / (expected + "_" + filename)
+            try:
+                kind = artifact_policy.validate_transport_content(temporary, filename)
+            except (OSError, ValueError) as error:
+                return self.respond(422, {"error": str(error)})
+            # Transport-specific paths preserve independent provenance across sources.
+            destination = self.server.completed
+            if transport != "receiver":
+                destination = destination / transport
+                destination.mkdir(mode=0o750, exist_ok=True)
+            target = destination / (expected + "_" + filename)
             try:
                 os.link(
                     temporary, target
@@ -181,11 +198,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(
                         409, {"error": "Existing completed artifact failed integrity"}
                     )
-            descriptor = os.open(self.server.completed, os.O_RDONLY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+            for directory in {destination, self.server.completed}:
+                descriptor = os.open(directory, os.O_RDONLY)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
             self.respond(
                 201,
                 {
@@ -194,6 +212,12 @@ class Handler(BaseHTTPRequestHandler):
                     "filename": filename,
                     "size": size,
                     "status": "received_pending_ingestion",
+                    "artifact_kind": kind,
+                    "transport": transport,
+                    "published_mtime_ns": target.stat().st_mtime_ns,
+                    "canonical_archive": "pending",
+                    "processing": "not_confirmed",
+                    "gallery": "not_confirmed",
                     "printing": False,
                 },
             )
