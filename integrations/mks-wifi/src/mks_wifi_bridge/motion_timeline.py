@@ -19,7 +19,8 @@ WORD = re.compile(r"([A-Z])\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?)")
 MAX_GCODE_BYTES = 50 * 1024 * 1024
 MAX_SEGMENTS = 80_000
 RETENTION_DAYS = 30
-PRINT_HISTORY_RETENTION_DAYS = 365
+# Execution history is permanent; raw telemetry has its own bounded retention.
+PRINT_HISTORY_RETENTION_DAYS = None
 MAX_TELEMETRY_ROWS = 100_000
 MAX_STORED_GCODE_FILES = 8
 MAX_STORED_SEGMENTS = 200_000
@@ -1309,6 +1310,7 @@ class MotionTimeline:
             "limit": limit,
             "source": "Observatory SQLite recording",
             "retention_days": PRINT_HISTORY_RETENTION_DAYS,
+            "retention_policy": "indefinite_unless_operator_deleted",
             "note": (
                 "These are Observatory-observed sessions. An idle transition or "
                 "100% progress alone does not prove print completion. A session "
