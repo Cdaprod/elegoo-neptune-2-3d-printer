@@ -17,6 +17,7 @@ web = [
     "watchfiles>=1.0,<2",
     "PyYAML>=6,<7",
     "Pillow>=11,<13",
+    "python-multipart>=0.0.20,<1",
 ]
 
 [project.scripts]

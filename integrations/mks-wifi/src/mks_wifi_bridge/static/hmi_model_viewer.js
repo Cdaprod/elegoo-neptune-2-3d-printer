@@ -8,7 +8,8 @@ export function mountViewer(host, model) {
   const segments = Array.isArray(model.segments) ? model.segments : [];
   const surface=Array.isArray(model.surface_vertices)?model.surface_vertices:null;
   if ((!segments.length&&!surface?.length) || !Array.isArray(model.bounds)) throw new Error("No printable geometry available");
-  const lo = model.bounds[0], hi = model.bounds[1];
+  const frameBounds=model.display_bounds||model.bounds;
+  const lo = frameBounds[0], hi = frameBounds[1];
   const center = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2];
   const span = Math.max(15, hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
   const scene = new THREE.Scene();
@@ -41,7 +42,7 @@ export function mountViewer(host, model) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.12;
   controls.enablePan = false;
-  controls.minZoom = 0.45;
+  controls.minZoom = 0.05;
   controls.maxZoom = 12;
   controls.target.set(0,0,0);
 
@@ -122,26 +123,30 @@ export function mountViewer(host, model) {
   controls.addEventListener("start",onControlsStart);
   controls.addEventListener("end",onControlsEnd);
 
+  let fitSpan=span;
   function setView(name) {
-    if (name==="top") camera.position.set(0,span*2.7,.01);
-    else if (name==="front") camera.position.set(0,span*.15,span*2.6);
-    else camera.position.set(span*1.8,span*1.35,span*1.9);
-    camera.lookAt(controls.target);
-    controls.update();
-    invalidate();
+    const frame=name==='all'?model.bounds:frameBounds;
+    fitSpan=Math.max(15,...frame[1].map((v,i)=>v-frame[0][i]));
+    controls.target.set((frame[0][0]+frame[1][0])/2-center[0],
+      (frame[0][2]+frame[1][2])/2-center[2],-((frame[0][1]+frame[1][1])/2-center[1]));
+    const offset=name==='top'?new THREE.Vector3(0,fitSpan*2.7,.01):name==='front'?
+      new THREE.Vector3(0,fitSpan*.15,fitSpan*2.6):new THREE.Vector3(fitSpan*1.8,fitSpan*1.35,fitSpan*1.9);
+    camera.position.copy(controls.target).add(offset);camera.zoom=1;camera.far=fitSpan*25;
+    camera.lookAt(controls.target);resize(true);controls.update();invalidate();
+    host.dataset.viewerFraming=name==='all'?'all_paths':'model';
   }
   let width=0,height=0;
-  function resize() {
+  function resize(force=false) {
     if(disposed)return;
     const w=Math.max(1,host.clientWidth), h=Math.max(1,host.clientHeight);
-    if(w!==width||h!==height){
+    if(force||w!==width||h!==height){
       width=w;height=h;
       renderer.setSize(w,h,false);
       const aspect=w/h;
-      camera.left=-span*1.05*aspect;
-      camera.right=span*1.05*aspect;
-      camera.top=span*1.05;
-      camera.bottom=-span*1.05;
+      camera.left=-fitSpan*1.05*aspect;
+      camera.right=fitSpan*1.05*aspect;
+      camera.top=fitSpan*1.05;
+      camera.bottom=-fitSpan*1.05;
       camera.updateProjectionMatrix();
       invalidate();
     }
@@ -161,7 +166,7 @@ export function mountViewer(host, model) {
   function contextLost(event) {event.preventDefault();host.dataset.viewerStatus="context-lost";}
   renderer.domElement.addEventListener("webglcontextlost",contextLost);
   document.addEventListener("visibilitychange",visibility);
-  const observer = new ResizeObserver(resize);
+  const observer = new ResizeObserver(()=>resize());
   observer.observe(host);
   setView("iso");
   resize();
@@ -186,7 +191,7 @@ export function mountViewer(host, model) {
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
-      delete host.dataset.viewerPixelRatio;
+      delete host.dataset.viewerPixelRatio;delete host.dataset.viewerFraming;
       delete host.dataset.viewerFrames;
       delete host.dataset.viewerStatus;delete host.dataset.viewerPresentation;delete host.dataset.viewerRange;
     }

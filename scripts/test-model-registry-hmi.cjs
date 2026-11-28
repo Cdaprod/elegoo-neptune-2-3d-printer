@@ -39,6 +39,8 @@ const crypto=require('node:crypto');
   await page.locator('#model-viewer-host canvas').waitFor();await page.locator('#geometry-mode').selectOption('toolpath');
   await page.locator('#geometry-range').fill('50');await page.waitForFunction(()=>document.querySelector('#model-viewer-host').dataset.viewerPresentation==='toolpath'&&document.querySelector('#model-viewer-host').dataset.viewerRange==='0.5');
   await page.locator('#geometry-mode').selectOption('layers');await page.waitForFunction(()=>document.querySelector('#model-viewer-host').dataset.viewerPresentation==='layers');
+  await page.locator('[data-view-angle=all]').tap();await page.waitForFunction(()=>document.querySelector('#model-viewer-host').dataset.viewerFraming==='all_paths');
+  await page.locator('[data-view-angle=iso]').tap();await page.waitForFunction(()=>document.querySelector('#model-viewer-host').dataset.viewerFraming==='model');
   await page.locator('#model-tools summary').tap();
   await page.locator('#registry-candidate').tap();await page.locator('#registry-authorities').filter({hasText:'candidate'}).waitFor();
   await page.locator('#registry-approve').tap();await page.locator('#registry-authorities').filter({hasText:'approved'}).waitFor();

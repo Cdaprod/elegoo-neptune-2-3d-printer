@@ -122,7 +122,7 @@
    inspectorRequest=new AbortController();
    inspected={file,source};
    text("inspector-title",file.display_name||file.filename||file.name);$("manage-model").hidden=!!file.engineering;
-   text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
+   text('lifecycle-details',file.identity_state==='candidate'?'Candidate body observation · logical identity and authority unapproved':file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
    $('execution-quality').hidden=!(file.archive&&(file.started_at||file.archive_collection==='history'));
@@ -166,7 +166,7 @@
     const link=document.createElement('a');link.href='/api/fabrication/artifacts/'+sourceProject+'/original';link.textContent='Download original 3MF';root.append(link);
     const settings=document.createElement('pre');settings.style.cssText='font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere';settings.textContent=JSON.stringify(project.settings,null,2);root.append(settings);
    }).catch(error=>{if(error.name!=='AbortError')text('slicer-metadata',error.message);});
-   $('model-tools').hidden=!(file.sha256||file.model_id);$('model-tools').open=!!file.model_id;
+   $('model-tools').hidden=!(file.sha256||file.model_id);$('model-tools').open=false;
    if(file.sha256||file.model_id)populateRegistry(file);
    $("model-inspector").showModal();
    window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:true}}));
@@ -182,9 +182,9 @@
      const ready=await viewer.ready;
      if(epoch!==inspectorEpoch||!ready)return;
      preview.hidden=true;empty.hidden=true;
-     $('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
+     document.querySelector('[data-view-angle=all]').hidden=!!file.engineering;$('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
      const stats=geometry.stats||{};
-     const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
+     const bounds=geometry.display_bounds||geometry.bounds||[[0,0,0],[0,0,0]];
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
      if(geometry.surface_vertices){
       text('inspector-details',dims+(geometry.units==='mm'?' mm · 3MF-declared units; not physical measurement':' source coordinate units · units unverified'));
@@ -235,12 +235,13 @@
      (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
    if(file.archive_collection)info.textContent=file.archive_collection==='history'?(file.state||'Unknown'):file.archive_collection==='discovered'?'Metadata only':file.bytes_available?'Archived':'Source only';
-   if(file.model_id)info.textContent=(file.identity_state==='candidate'?'Candidate · ':'')+'Revision '+(file.label||'unresolved')+' · '+(file.approved?'Scoped authority approved':'Authority unresolved');
+   if(file.is_plate)info.textContent=file.body_count+' bodies · '+file.plate_count+' plates · Archived original';
+   else if(file.model_id)info.textContent=(file.identity_state==='candidate'?'Candidate body · ':'')+(file.approved?'Scoped authority approved':'Authority unresolved');
    else if(file.artifact_kind)info.textContent=file.artifact_kind.replaceAll('_',' ')+' · '+(file.bytes_available?'Archived':'Not archived');
    button.append(image,name,info);
    setPreviewImage(image,file,source);
    if(hasGeometry(file,source)){
-     const pill=document.createElement("span");pill.className="render-pill";pill.textContent=file.source_project_sha?"3MF PLATE":file.metadata?.source_3mf?"3MF BODY":file.engineering?"SOURCE STL":"3D G-CODE";button.append(pill);
+     const pill=document.createElement("span");pill.className="render-pill";pill.textContent=file.is_plate?"3MF PLATE":file.source_project_sha||file.metadata?.source_3mf?"3MF BODY":file.engineering?"SOURCE STL":"3D G-CODE";button.append(pill);
    }
    const select=()=>{
      document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));
@@ -369,7 +370,7 @@
 
    if(collection==='slicer_projects'){
     delete host.dataset.layout;host.replaceChildren();const result=await api('/api/fabrication/slicer-projects');
-    for(const row of result.items)host.append(card({filename:row.filename,display_name:row.filename,sha256:row.preview_sha256,source_project_sha:row.sha256,engineering:true,archive:true,source_present:!!row.preview_sha256,bytes_available:true,metadata:{source_3mf:row.sha256},print_metadata:{},identity_state:'candidate'},'archive'));
+    for(const row of result.items)host.append(card({filename:row.filename,display_name:row.filename,sha256:row.preview_sha256,source_project_sha:row.sha256,is_plate:true,body_count:row.body_count,plate_count:row.plate_count,engineering:true,archive:true,source_present:!!row.preview_sha256,bytes_available:true,metadata:{source_3mf:row.sha256},print_metadata:{},identity_state:'candidate'},'archive'));
     if(!result.items.length)host.textContent='No processed 3MF projects yet. Published originals remain archived independently of geometry.';
     return;
    }

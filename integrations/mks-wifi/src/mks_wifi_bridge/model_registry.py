@@ -413,6 +413,11 @@ class ModelRegistry:
             for model in models:
                 preview = db.execute(
                     "SELECT r.id AS revision_id,r.label,p.sha256,p.role,a.filename, "
+                    "(SELECT sp.sha256 FROM model_representations sp "
+                    "JOIN fabrication_artifacts sa ON sa.sha256=sp.sha256 "
+                    "WHERE sp.revision_id=r.id AND sp.role='slicer_configuration' AND sp.active=1 "
+                    "AND lower(sa.filename) LIKE '%.3mf' GROUP BY sp.revision_id "
+                    "HAVING COUNT(*)=1) AS source_project_sha, "
                     "c.archived,c.artifact_kind,a.metadata, "
                     "EXISTS(SELECT 1 FROM model_authority x WHERE x.revision_id=r.id "
                     "AND x.sha256=p.sha256 AND x.role=p.role "
@@ -555,6 +560,23 @@ class ModelRegistry:
                     (sha,),
                 )
             ]
+        with self.archive.db() as db:
+            parents = [
+                row[0]
+                for row in db.execute(
+                    "SELECT r.child_sha256 FROM artifact_relationships r "
+                    "JOIN artifact_custody c ON c.sha256=r.child_sha256 "
+                    "WHERE r.parent_sha256=? AND r.relationship='derived_from' "
+                    "AND c.artifact_kind='slicer_project' ORDER BY r.child_sha256",
+                    (sha,),
+                )
+            ]
+        if parents:
+            result["metadata"]["source_3mf_candidates"] = parents
+            if len(parents) == 1:
+                result["metadata"]["source_3mf"] = parents[0]
+            else:
+                result["metadata"].pop("source_3mf", None)
         return result
 
     def hydrate(self, sha):

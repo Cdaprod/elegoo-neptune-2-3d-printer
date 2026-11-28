@@ -119,3 +119,18 @@ def test_raster_thumbnail_is_cached_geometry_and_invalidates_with_source(tmp_pat
     assert service.raster_preview("part.gcode") != png
     with pytest.raises(ModelPreviewError):
         service.raster_preview("part.gcode", "unsupported")
+
+
+def test_explicit_slicer_features_frame_part_without_discarding_prime_paths():
+    model = reconstruct(
+        io.StringIO(
+            "G90\nM83\nG1 X60 E2\nG0 X120 Y100 Z0.2\n"
+            ";TYPE:External perimeter\nG1 X130 E1\nG1 Y110 E1\n"
+            ";TYPE:Custom\nG1 X180 E2\n"
+        )
+    )
+    assert model["bounds"] == [[0, 0, 0], [180, 110, 0.2]]
+    assert model["display_bounds"] == [[120, 100, 0.2], [130, 110, 0.2]]
+    assert len(model["segments"]) == 4  # All paths remain inspectable.
+    unlabelled = reconstruct(io.StringIO("M83\nG1 X60 E2\n"))
+    assert unlabelled["display_bounds"] == unlabelled["bounds"]

@@ -13,7 +13,7 @@ from mks_wifi_bridge.model_registry import ModelRegistry
 from mks_wifi_bridge.slicer_library import SlicerLibrary, extract_project
 
 
-def project(path, cycle=False):
+def project(path, cycle=False, layer="0.2"):
     component = "2" if cycle else "1"
     raw = f'''<model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
 unit="millimeter">
@@ -45,7 +45,7 @@ unit="millimeter">
         package.writestr("3D/3dmodel.model", raw)
         package.writestr(
             "Metadata/project_settings.config",
-            json.dumps({"layer_height": "0.2", "printhost_apikey": "private"}),
+            json.dumps({"layer_height": layer, "printhost_apikey": "private"}),
         )
 
 
@@ -108,3 +108,42 @@ def test_cycle_and_unsafe_package_are_rejected(tmp_path):
         package.writestr("../escape.model", "<model/>")
     with pytest.raises(ValueError, match="Unsafe"):
         extract_project(source, tmp_path / "unsafe")
+
+
+def test_shared_geometry_keeps_each_projects_configuration_context(tmp_path):
+    archive = FabricationArchive(SimpleNamespace(path=str(tmp_path / "shared.sqlite")))
+    registry = ModelRegistry(archive)
+    library = SlicerLibrary(archive)
+    service = FabricationIngestion(archive)
+    expected = set()
+    mesh_sha = None
+    for index, layer in enumerate(["0.2", "0.3"]):
+        source = tmp_path / f"project{index}.3mf"
+        project(source, layer=layer)
+        manifest = extract_project(source, tmp_path / f"out{index}")
+        sha = service.submit(
+            ArtifactSubmission(
+                source.name, "orca_slicer", str(source), artifact_kind="slicer_project"
+            ),
+            io.BytesIO(source.read_bytes()),
+        )
+        for body in manifest["bodies"]:
+            body["sha256"] = service.submit(
+                ArtifactSubmission(
+                    "body.stl",
+                    "orca_slicer",
+                    "derived:" + sha,
+                    artifact_kind="manufacturing_geometry",
+                ),
+                io.BytesIO((tmp_path / f"out{index}" / body["geometry_file"]).read_bytes()),
+            )
+            mesh_sha = body["sha256"]
+        library.register(sha, manifest)
+        expected.add(sha)
+    rows = registry.library()
+    assert len(rows) == 2
+    assert {row["preview"]["source_project_sha"] for row in rows} == expected
+    assert len({row["preview"]["sha256"] for row in rows}) == 1
+    metadata = registry.artifact_metadata(mesh_sha)["metadata"]
+    assert set(metadata["source_3mf_candidates"]) == expected
+    assert "source_3mf" not in metadata
