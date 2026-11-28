@@ -988,6 +988,7 @@ class MotionTimeline:
             previous = dict(previous) if previous else None
             current = db.execute(
                 "SELECT * FROM print_sessions WHERE ended_at IS NULL "
+                "AND source!='OctoPrint PrintJobHistory plugin' "
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
             if active is True:

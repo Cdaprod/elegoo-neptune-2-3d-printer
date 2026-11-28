@@ -40,6 +40,10 @@ class FabricationArchive:
                     provider TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL,
                     observed_at TEXT NOT NULL, PRIMARY KEY(provider,path,sha256),
                     FOREIGN KEY(sha256) REFERENCES fabrication_artifacts(sha256));
+                INSERT OR IGNORE INTO fabrication_schema VALUES(7);
+                CREATE TABLE IF NOT EXISTS artifact_custody(
+                    sha256 TEXT PRIMARY KEY REFERENCES fabrication_artifacts(sha256),
+                    archived INTEGER NOT NULL, artifact_kind TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS artifact_provenance(
                     sha256 TEXT NOT NULL, provider TEXT NOT NULL, source_uri TEXT NOT NULL,
                     filename TEXT NOT NULL, artifact_kind TEXT NOT NULL,
@@ -154,7 +158,14 @@ class FabricationArchive:
             sha = digest.hexdigest()
             if submission.expected_sha256 is not None and sha != submission.expected_sha256:
                 raise ValueError("Artifact failed expected SHA-256 verification")
-            target = self.root / (sha + ".gcode")
+            target = self.root / (
+                sha + (".gcode" if submission.artifact_kind == "execution_gcode" else ".blob")
+            )
+            for suffix in (".gcode", ".blob"):
+                existing = self.root / (sha + suffix)
+                if existing.exists():
+                    target = existing
+                    break
             try:
                 os.link(temporary, target)
             except FileExistsError:
@@ -174,6 +185,12 @@ class FabricationArchive:
                         now(),
                         json.dumps({"provenance": submission.provider}),
                     ),
+                )
+                db.execute(
+                    "INSERT INTO artifact_custody VALUES(?,?,?) "
+                    "ON CONFLICT(sha256) DO UPDATE SET archived=1, "
+                    "artifact_kind=excluded.artifact_kind",
+                    (sha, 1, submission.artifact_kind),
                 )
                 db.execute(
                     "INSERT OR REPLACE INTO artifact_locations VALUES(?,?,?,?)",
@@ -201,6 +218,8 @@ class FabricationArchive:
         if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
             raise ValueError("Invalid artifact identity")
         path = self.root / (sha + ".gcode")
+        if not path.exists():
+            path = self.root / (sha + ".blob")
         with path.open("rb") as stream:
             if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
                 raise ValueError("Archived artifact failed integrity verification")
@@ -313,6 +332,8 @@ class FabricationArchive:
                 rows = db.execute(
                     """SELECT a.*, a.sha256 AS id FROM fabrication_artifacts a
                     WHERE NOT EXISTS(SELECT 1 FROM execution_identity e WHERE e.sha256=a.sha256)
+                    AND NOT EXISTS(SELECT 1 FROM artifact_custody c
+                                   WHERE c.sha256=a.sha256 AND c.archived=0)
                     AND (a.ingested_at,a.sha256)<(?,?)
                     ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT ?""",
                     (*cursor, limit + 1),
@@ -499,6 +520,12 @@ class FabricationArchive:
 
     def stage_artifact(self, sha, source_execution_id=None):
         self.verified(sha)
+        with self.db() as db:
+            kind = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if kind and kind[0] != "execution_gcode":
+                raise ValueError("Only executable G-code may enter print staging")
         identity = uuid.uuid4().hex
         with self.db() as db:
             db.execute(

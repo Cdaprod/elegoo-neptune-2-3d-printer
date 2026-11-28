@@ -81,6 +81,8 @@ class ModelRegistry:
 
     def create(self, name, contexts=()):
         name = self.text(name)
+        if not isinstance(contexts, (list, tuple)):
+            raise ValueError("Contexts must be an optional list")
         contexts = [self.text(c, 2048) for c in contexts]
         if len(contexts) > 30:
             raise ValueError("Too many organizational contexts")
@@ -94,6 +96,8 @@ class ModelRegistry:
 
     def revision(self, model_id, label, parents=()):
         label = self.text(label)
+        if not isinstance(parents, (list, tuple)):
+            raise ValueError("Parents must be a revision list")
         if len(parents) > 8:
             raise ValueError("Too many parent revisions")
         identity = uuid.uuid4().hex
@@ -143,7 +147,11 @@ class ModelRegistry:
         if role not in ROLES or type(approve) is not bool:
             raise ValueError("Invalid authority declaration")
         if approve:
-            self.archive.verified(sha)
+            with self.archive.db() as db:
+                if not db.execute(
+                    "SELECT 1 FROM fabrication_artifacts WHERE sha256=?", (sha,)
+                ).fetchone():
+                    raise ValueError("Approve only a fingerprinted artifact declaration")
         identity = uuid.uuid4().hex
         with self.archive.db() as db:
             if not db.execute(
@@ -222,7 +230,11 @@ class ModelRegistry:
         if not any(row["role"] == "executable_gcode" for row in approved):
             raise ValueError("Approve exact executable G-code authority first")
         for row in approved:
-            self.archive.verified(row["sha256"])
+            with self.archive.db() as db:
+                if not db.execute(
+                    "SELECT 1 FROM fabrication_artifacts WHERE sha256=?", (row["sha256"],)
+                ).fetchone():
+                    raise ValueError("Baseline authority has no fingerprinted artifact declaration")
         payload = {
             "schema_version": 1,
             "model_revision_id": revision_id,
@@ -241,12 +253,107 @@ class ModelRegistry:
 
     def library(self):
         with self.archive.db() as db:
-            return [
+            models = [
                 dict(row)
                 for row in db.execute(
                     "SELECT * FROM models ORDER BY created_at DESC,id DESC LIMIT 200"
                 )
             ]
+            for model in models:
+                preview = db.execute(
+                    "SELECT r.id AS revision_id,r.label,p.sha256,p.role,a.filename, "
+                    "c.archived,c.artifact_kind, "
+                    "EXISTS(SELECT 1 FROM model_authority x WHERE x.revision_id=r.id "
+                    "AND x.sha256=p.sha256 AND x.role=p.role "
+                    "AND x.state='approved') AS approved "
+                    "FROM model_revisions r JOIN model_representations p ON p.revision_id=r.id "
+                    "LEFT JOIN fabrication_artifacts a ON a.sha256=p.sha256 "
+                    "LEFT JOIN artifact_custody c ON c.sha256=p.sha256 "
+                    "WHERE r.model_id=? AND p.active=1 "
+                    "ORDER BY (lower(a.filename) LIKE '%.stl' OR "
+                    "c.artifact_kind='execution_gcode') DESC,approved DESC, "
+                    "r.created_at DESC LIMIT 1",
+                    (model["id"],),
+                ).fetchone()
+                model["preview"] = dict(preview) if preview else None
+        return models
+
+    def import_inventory(self, report):
+        """Index observation metadata only. Does not open/copy/hydrate any source."""
+        if report.get("schema_version") != 1 or report.get("read_only") is not True:
+            raise ValueError("Expected a read-only engineering inventory")
+        count = 0
+        with self.archive.db() as db:
+            for item in report.get("files", []):
+                sha = item.get("sha256")
+                if not sha or item.get("context") == "test_or_generated":
+                    continue
+                self.digest(sha)
+                path = self.text(item["path"], 2048)
+                kind = self.text(item["kind"], 80)
+                size = item["size_bytes"]
+                if not isinstance(size, int) or size < 0:
+                    raise ValueError("Invalid observed artifact size")
+                inserted = db.execute(
+                    "INSERT OR IGNORE INTO fabrication_artifacts VALUES(?,?,?,?,?)",
+                    (
+                        sha,
+                        path.rsplit("/", 1)[-1],
+                        size,
+                        now(),
+                        json.dumps(
+                            {
+                                "artifact_kind": kind,
+                                "identity_evidence": "inventory_sha256",
+                                "authority": "unresolved",
+                            }
+                        ),
+                    ),
+                ).rowcount
+                if inserted:
+                    db.execute("INSERT INTO artifact_custody VALUES(?,?,?)", (sha, 0, kind))
+                db.execute(
+                    "INSERT OR REPLACE INTO artifact_locations VALUES(?,?,?,?)",
+                    ("engineering_inventory", path, sha, now()),
+                )
+                db.execute(
+                    "INSERT INTO artifact_provenance VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(sha256,provider,source_uri,filename) "
+                    "DO UPDATE SET last_seen=excluded.last_seen",
+                    (
+                        sha,
+                        "engineering_inventory",
+                        path,
+                        path.rsplit("/", 1)[-1],
+                        kind,
+                        now(),
+                        now(),
+                    ),
+                )
+                count += 1
+            self.audit(db, "inventory_metadata", {"observations": count, "hydrated": False})
+        return {"observations": count, "hydrated": False, "models_created": 0}
+
+    def artifact_candidates(self):
+        with self.archive.db() as db:
+            rows = [
+                dict(row)
+                for row in db.execute(
+                    "SELECT a.*,c.archived,c.artifact_kind FROM fabrication_artifacts a "
+                    "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 "
+                    "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 200"
+                )
+            ]
+            for row in rows:
+                row["locations"] = [
+                    dict(value)
+                    for value in db.execute(
+                        "SELECT provider,path,observed_at FROM artifact_locations WHERE sha256=?",
+                        (row["sha256"],),
+                    )
+                ]
+                row["metadata"] = json.loads(row["metadata"])
+        return rows
 
     def retire_authority(self, identity):
         with self.archive.db() as db:
@@ -284,11 +391,46 @@ class ModelRegistry:
 
 
 def install(app, read_auth, write_auth, archive):
+    import asyncio
     import sqlite3
 
     from fastapi import Depends, HTTPException, Request
 
     registry = ModelRegistry(archive)
+    preview_slots = asyncio.Semaphore(2)
+
+    @app.get("/api/model-registry/artifacts/{sha}/geometry", dependencies=[Depends(read_auth)])
+    async def geometry(sha: str):
+        from .engineering_preview import EngineeringPreview
+
+        try:
+            registry.digest(sha)
+            async with preview_slots:
+                return await asyncio.to_thread(EngineeringPreview(archive).geometry, sha)
+        except (OSError, ValueError) as error:
+            raise HTTPException(404, str(error)) from error
+
+    @app.get("/api/model-registry/artifacts/{sha}/thumbnail", dependencies=[Depends(read_auth)])
+    async def thumbnail(sha: str):
+        from fastapi.responses import Response
+
+        from .engineering_preview import EngineeringPreview
+
+        try:
+            registry.digest(sha)
+            async with preview_slots:
+                data = await asyncio.to_thread(EngineeringPreview(archive).thumbnail, sha)
+            return Response(
+                data,
+                media_type="image/png",
+                headers={"Cache-Control": "private, max-age=86400"},
+            )
+        except (OSError, ValueError) as error:
+            raise HTTPException(404, str(error)) from error
+
+    @app.get("/api/model-registry/artifacts", dependencies=[Depends(read_auth)])
+    def artifacts():
+        return {"schema_version": 1, "items": registry.artifact_candidates()}
 
     @app.get("/api/model-registry/models", dependencies=[Depends(read_auth)])
     def models():

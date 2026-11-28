@@ -17,6 +17,7 @@ from collections import deque
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -1195,7 +1196,18 @@ def create_app(
     from .factory_usb import install as install_factory_usb
     from .model_registry import install as install_model_registry
 
-    install_model_registry(app, require_auth, require_control_token, fabrication_archive)
+    model_registry = install_model_registry(
+        app, require_auth, require_control_token, fabrication_archive
+    )
+    inventory_file = os.getenv("NEPTUNE_ENGINEERING_INVENTORY_FILE")
+    if inventory_file:
+        try:
+            inventory_path = Path(inventory_file)
+            if inventory_path.stat().st_size > 32 * 1024 * 1024:
+                raise ValueError("Engineering inventory exceeds metadata limit")
+            model_registry.import_inventory(json.loads(inventory_path.read_text()))
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.exception("Engineering inventory unavailable; existing model registry preserved")
     install_factory_usb(app, require_auth, require_control_token, printer)
     from .native_sd_api import install as install_native_sd
 
@@ -1305,7 +1317,9 @@ def create_app(
         }
 
     @app.post("/api/fabrication/ingest", dependencies=[Depends(require_control_token)])
-    async def ingest_artifact(request: Request, filename: str):
+    async def ingest_artifact(
+        request: Request, filename: str, artifact_kind: str = "execution_gcode"
+    ):
         """HTTP/browser adapter: archive only; no OctoPrint connection required."""
         import tempfile
 
@@ -1319,7 +1333,11 @@ def create_app(
         # Authenticated adapter-declared provenance; no URL fetching or filesystem access.
         source_uri = request.headers.get("x-artifact-source", "upload:" + filename)
         submission = ArtifactSubmission(
-            filename, provider, source_uri, expected_sha256=request.headers.get("x-content-sha256")
+            filename,
+            provider,
+            source_uri,
+            artifact_kind=artifact_kind,
+            expected_sha256=request.headers.get("x-content-sha256"),
         )
         try:
             submission.validate()

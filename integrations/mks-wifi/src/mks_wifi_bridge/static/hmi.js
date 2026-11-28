@@ -15,7 +15,7 @@
  function finishDeparture(){if(departingPanel){for(const key of ['display','position','inset','zIndex','pointerEvents'])departingPanel.style[key]='';departingPanel.inert=false;departingPanel=null;}}
  function updateEmbeddedRendering(){const frame=$("print-bay-frame");frame?.contentWindow?.postMessage({type:"neptune:presentation",active:state.view==="print-bay"},location.origin);}
  $("print-bay-frame").addEventListener("load",updateEmbeddedRendering);
- function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}updateEmbeddedRendering();if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
+ function route(view){if(!["overview","print-bay","models","observations","controls","settings"].includes(view))return;leaveAnimation?.cancel();finishDeparture();const prior=state.view,oldPanel=$('view-'+prior),oldDisplay=getComputedStyle(oldPanel).display;state.view=view;document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id==="view-"+view));document.querySelectorAll("[data-go]").forEach(el=>{if(el.tagName==="BUTTON"){if(el.dataset.go===view)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");}});if(prior!==view&&!matchMedia('(prefers-reduced-motion: reduce)').matches){routeAnimation?.cancel();const panel=$('view-'+view);const order=['overview','print-bay','models','observations','controls'];const direction=order.indexOf(view)>order.indexOf(prior)?1:-1;departingPanel=oldPanel;Object.assign(oldPanel.style,{display:oldDisplay,position:'absolute',inset:'0',zIndex:'2',pointerEvents:'none'});oldPanel.inert=true;leaveAnimation=oldPanel.animate([{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:`translate3d(${-direction*22}px,-4px,0) scale(.985)`}],{duration:230,easing:'cubic-bezier(.4,0,1,1)'});leaveAnimation.finished.then(finishDeparture,()=>{});routeAnimation=panel.animate([{opacity:0,transform:`translate3d(${direction*34}px,8px,0) scale(.975)`,filter:'blur(3px)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)',filter:'blur(0)'}],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});}window.dispatchEvent(new CustomEvent('hmi:view',{detail:{view}}));updateEmbeddedRendering();if(view==="models")loadFiles();if(view==="controls"&&!$("operations-frame").getAttribute("src"))$("operations-frame").src="/?presentation=hmi-operations&view=machine";}
  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>route(b.dataset.go)));
  let gesture=null;
  document.querySelector("main").addEventListener("pointercancel",()=>{gesture=null;});
@@ -77,7 +77,7 @@
  let inspected=null;
  const geometrySource=source=>["local","native_cache","archive"].includes(source);
  const hasGeometry=(file,source)=>geometrySource(source)&&file.source_present!==false&&(source!=="native_cache"||file.geometry_available===true);
- const modelUrl=(file,view="iso")=>file.archive?"/api/fabrication/artifacts/"+file.sha256+"/thumbnail":file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
+ const modelUrl=(file,view="iso")=>file.engineering?"/api/model-registry/artifacts/"+file.sha256+"/thumbnail":file.archive?"/api/fabrication/artifacts/"+file.sha256+"/thumbnail":file.provider==="printer_sd"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/thumbnail":"/api/hmi/model-preview?path="+encodeURIComponent(file.relative_path)+"&view="+encodeURIComponent(view);
  const legacyPreview=(file,source)=>source==="local"
    ?"/api/printer/sdcard/local-preview?path="+encodeURIComponent(file.relative_path)
    :"/api/printer/sdcard/preview/"+encodeURIComponent(file.name);
@@ -121,7 +121,7 @@
    const epoch=++inspectorEpoch;
    inspectorRequest=new AbortController();
    inspected={file,source};
-   text("inspector-title",file.filename||file.name);
+   text("inspector-title",file.display_name||file.filename||file.name);
    text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
@@ -140,7 +140,7 @@
      preview.onerror=()=>{preview.onerror=null;if(file.preview_available)preview.src=legacyPreview(file,source);};
    }else if(file.preview_available)preview.src=legacyPreview(file,source);
    else preview.removeAttribute("src");
-   $("print-again").hidden=!(file.archive&&file.bytes_available);
+   $("print-again").hidden=!(file.archive&&file.bytes_available&&/\.(gcode|gco|gc|g)$/i.test(file.filename||file.name||""));
    $("print-again").textContent=file.started_at?"Print again · stage copy":"Stage archived artifact";
    if(file.archive)text("inspector-details",[file.state||"Unprinted",file.started_at||file.ingested_at,file.ended_at||"Outcome not recorded",file.source||"Archived bytes"].join(" · "));
    $("factory-select-file").hidden=!["printer","printer_native"].includes(source);
@@ -149,11 +149,13 @@
    $("cancel-sd").hidden=true;
    $("copy-sd-local").hidden=source!=="native_cache";
    text("native-sd-status",source==="printer_native"?"Retrieve actual SD bytes before reconstruction.":"");
+   $('model-tools').hidden=!(file.sha256||file.model_id);$('model-tools').open=!!file.model_id;
+   if(file.sha256||file.model_id)populateRegistry(file);
    $("model-inspector").showModal();
    window.dispatchEvent(new CustomEvent("hmi:inspector",{detail:{open:true}}));
    if(!hasGeometry(file,source))return;
    try{
-     const geometry=await api(source==="archive"?"/api/fabrication/artifacts/"+file.sha256+"/geometry":source==="native_cache"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/geometry":"/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path),{signal:inspectorRequest.signal});
+     const geometry=await api(file.engineering?"/api/model-registry/artifacts/"+file.sha256+"/geometry":source==="archive"?"/api/fabrication/artifacts/"+file.sha256+"/geometry":source==="native_cache"&&file.sha256?"/api/native-sd/assets/"+file.sha256+"/geometry":"/api/hmi/model-geometry?path="+encodeURIComponent(file.relative_path),{signal:inspectorRequest.signal});
      if(epoch!==inspectorEpoch)return;
      const module=await import("/static/hmi_model_viewer.js");
      if(epoch!==inspectorEpoch)return;
@@ -166,9 +168,14 @@
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
+     if(geometry.source==='original_stl_surface'){
+      text('inspector-details',dims+' source coordinate units · units unverified');
+      text('inspector-status','Original STL surface · '+geometry.stats.rendered_triangles+' triangles · fingerprint verified');
+     }else{
      text("inspector-details",dims+" mm · "+(stats.rendered_segments||0)+" rendered extrusion segments");
      text("inspector-status","Interactive 3D · sampled from "+(stats.extrusion_segments||0)+" extrusion moves"+
        (stats.arcs_represented_as_chords?" · "+stats.arcs_represented_as_chords+" arcs approximated":""));
+     }
    }catch(err){
      if(epoch!==inspectorEpoch)return;
      $("model-viewer-host").hidden=true;
@@ -198,16 +205,17 @@
  }
  function card(file,source){
    const button=document.createElement("div");
-   button.className="model";button.dataset.provider=file.archive?$("storage-provider").value:source==="printer_native"||source==="printer"?"printer_sd":source;button.tabIndex=0;button.setAttribute("role","button");
+   button.className="model";button.dataset.execution=file.state||"unknown";button.dataset.provider=file.archive?$("storage-provider").value:source==="printer_native"||source==="printer"?"printer_sd":source;button.tabIndex=0;button.setAttribute("role","button");
    button.setAttribute("aria-label","Inspect 3D print "+(file.filename||file.name));
    const image=document.createElement("img");
-   const name=document.createElement("strong");name.textContent=file.filename||file.name;
+   const name=document.createElement("strong");name.textContent=file.display_name||file.filename||file.name;
    const info=document.createElement("small");
    const meta=file.metadata||file.print_metadata||file.local_metadata?.metadata||{};
    info.textContent=file.archive?[file.archive_collection==="discovered"?"History unknown":file.started_at?"Reported "+(file.state||"unknown"):"No recorded executions",file.started_at||file.ingested_at,file.bytes_available?"Archived original":"Bytes unavailable"].join(" · "):(source==="native_cache"?"Verified SD cache · SHA-256 "+file.sha256.slice(0,10):source==="local"?"OctoPrint / local G-code":"Printer SD · "+(file.retrievable?"retrievable bytes":"bytes unavailable"))+
      (meta.estimated_print_time?" · "+meta.estimated_print_time:"")+
      (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
+   if(file.archive_collection)info.textContent=file.archive_collection==='history'?(file.state||'Unknown'):file.archive_collection==='discovered'?'Metadata only':file.bytes_available?'Archived':'Source only';
    button.append(image,name,info);
    setPreviewImage(image,file,source);
    if(hasGeometry(file,source)){
@@ -235,6 +243,46 @@
  }
  window.addEventListener('hmi:filter-models',filterModels);
  $('storage-provider').addEventListener('change',()=>{filterModels();loadFiles();});
+ async function registryAction(operation,data={}){return api('/api/model-registry/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation,...data})});}
+ let registryEpoch=0;
+ async function populateRegistry(file){
+  const epoch=++registryEpoch;
+  try{const data=await api('/api/model-registry/models');if(epoch!==registryEpoch)return;
+   $('registry-model').replaceChildren(...data.items.map(model=>{const option=document.createElement('option');option.value=model.id;option.textContent=model.name;return option;}));
+   if(file.model_id)$('registry-model').value=file.model_id;
+   const role=/\.(gcode|gco|gc|g)$/i.test(file.filename||'')?'executable_gcode':/\.3mf$/i.test(file.filename||'')?'slicer_configuration':/\.(stl|step|stp|obj)$/i.test(file.filename||'')?'manufacturing_geometry':'native_design';$('registry-role').value=role;
+   for(const id of ['registry-attach','registry-candidate','registry-approve'])$(id).disabled=!file.sha256;
+   $('registry-model').onchange=()=>loadRegistryRevisions(file);
+   await loadRegistryRevisions(file);
+  }catch(error){text('registry-detail',error.message);}
+ }
+ async function loadRegistryRevisions(file){
+  const identity=$('registry-model').value;if(!identity){text('registry-detail','Create a logical model to reconcile this artifact. No model identity is inferred from its filename.');return;}
+  const epoch=++registryEpoch;
+  try{const data=await api('/api/model-registry/models/'+identity);if(epoch!==registryEpoch)return;
+   $('registry-revision').replaceChildren(...data.revisions.map(item=>{const option=document.createElement('option');option.value=item.revision.id;option.textContent=item.revision.label;return option;}));
+   if(file.revision_id)$('registry-revision').value=file.revision_id;
+   const show=()=>{const selected=data.revisions.find(item=>item.revision.id===$('registry-revision').value);$('registry-authorities').replaceChildren();if(!selected)return;
+    text('registry-detail','Revision '+selected.revision.id+' · '+selected.representations.length+' representations · '+selected.components.length+' components · '+selected.parents.length+' parent revisions. '+(file.locations||[]).map(item=>item.path).join(' · '));
+    for(const authority of selected.authorities){const row=document.createElement('p');row.textContent=authority.role+' · '+authority.state+' · '+authority.sha256.slice(0,12);if(authority.state!=='superseded'){const button=document.createElement('button');button.textContent='Retire declaration';button.onclick=async()=>{try{await registryAction('retire_authority',{identity:authority.id});await loadRegistryRevisions(file);}catch(error){text('registry-detail',error.message);}};row.append(button);}$('registry-authorities').append(row);}
+   };$('registry-revision').onchange=show;show();
+  }catch(error){text('registry-detail',error.message);}
+ }
+ $('new-model').addEventListener('click',async()=>{const name=prompt('Logical model name (independent of filename or directory):');if(!name)return;const label=prompt('Initial design revision label:','Working revision');if(!label)return;
+  try{const model=await registryAction('create_model',{name});await registryAction('create_revision',{model_id:model.id,label});$('storage-provider').value='models';loadFiles();}catch(error){text('model-count',error.message);}
+ });
+ async function representCurrent(approve){
+  if(!inspected?.file?.sha256)return;const revision_id=$('registry-revision').value;const role=$('registry-role').value;if(!revision_id)throw new Error('Select a model revision first');
+  const args={revision_id,sha:inspected.file.sha256,role};
+  if(approve===true&&!confirm('Approve this exact fingerprint for '+role+' in the selected model revision? Other responsibilities and revisions are unchanged.'))return;
+  await registryAction('representation',{...args,active:true});
+  if(approve!==null)await registryAction('authority',{...args,approve});
+  await loadRegistryRevisions(inspected.file);
+ }
+ for(const [id,value] of [['registry-attach',null],['registry-candidate',false],['registry-approve',true]])$(id).addEventListener('click',()=>representCurrent(value).catch(error=>text('registry-detail',error.message)));
+ $('registry-revision-new').onclick=async()=>{const label=prompt('New branch revision label:');if(!label)return;try{await registryAction('create_revision',{model_id:$('registry-model').value,label,parents:[$('registry-revision').value]});await loadRegistryRevisions(inspected.file);}catch(error){text('registry-detail',error.message);}};
+ $('registry-baseline').onclick=async()=>{if(!confirm('Approve an immutable baseline of the selected revision and exact authority/component references?'))return;try{const result=await registryAction('approve_baseline',{revision_id:$('registry-revision').value});text('registry-detail','Approved baseline '+result.id);}catch(error){text('registry-detail',error.message);}};
+ $('registry-manifest').onclick=async()=>{try{const data=await api('/api/model-registry/revisions/'+$('registry-revision').value+'/manifest');const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=data.revision.id+'.model.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){text('registry-detail',error.message);}};
  const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[]} ]));
  async function renderArchiveLane(kind,lane){
   const page=archivePages[kind];
@@ -266,6 +314,19 @@
   if(state.loading)return;state.loading=true;const host=$("models");const requestedProvider=$("storage-provider").value;
   try{
    const collection=$('storage-provider').value;
+   $('new-model').hidden=!['models','unassigned'].includes(collection);
+   if(['models','unassigned'].includes(collection)){
+    delete host.dataset.layout;host.replaceChildren();
+    const result=await api('/api/model-registry/'+(collection==='models'?'models':'artifacts'));
+    for(const row of result.items){
+     const file=collection==='models'?{...row.preview,model_id:row.id,display_name:row.name,filename:row.preview?.filename||row.name,sha256:row.preview?.sha256}:row;
+     const stl=/\.stl$/i.test(file.filename||'');const gcode=/\.(gcode|gco|gc|g)$/i.test(file.filename||'')&&file.archived===1;
+     host.append(card({...file,archive:true,engineering:stl,source_present:stl||gcode,bytes_available:!!file.archived,geometry_available:stl||gcode},'archive'));
+    }
+    if(!result.items.length)host.textContent=collection==='models'?'No declared models yet. Review unassigned files and create a logical model.':'No fingerprinted engineering inventory loaded. Source files remain untouched.';
+    return;
+   }
+
    if(collection==='archive'){await renderChronology(host);return;}
    delete host.dataset.layout;
 
@@ -339,7 +400,7 @@
   try{
    const result=await api('/api/hmi/import-status');
    hmiImportEnabled=Boolean(result.available);
-   text('sd-import-status',hmiImportEnabled?'Ready · OctoPrint local':result.note||'Import disabled');
+   text('sd-import-status',hmiImportEnabled?'Import available':'Import disabled');
    $('import-gcode').title=result.note||'Import local G-code without printing';
   }catch(error){
    hmiImportEnabled=false;

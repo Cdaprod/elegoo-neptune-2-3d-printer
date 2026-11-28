@@ -11,6 +11,18 @@ import tempfile
 from pathlib import Path
 
 
+def archived_hashes(db):
+    if db.execute("SELECT 1 FROM sqlite_master WHERE name='artifact_custody'").fetchone():
+        return {
+            row[0]
+            for row in db.execute(
+                "SELECT a.sha256 FROM fabrication_artifacts a LEFT JOIN artifact_custody c "
+                "ON c.sha256=a.sha256 WHERE c.sha256 IS NULL OR c.archived=1"
+            )
+        }
+    return {row[0] for row in db.execute("SELECT sha256 FROM fabrication_artifacts")}
+
+
 def backup(database, output):
     database, output = Path(database), Path(output)
     if not database.is_file() or output.exists():
@@ -21,10 +33,19 @@ def backup(database, output):
         with sqlite3.connect(database) as source, sqlite3.connect(snapshot) as target:
             source.backup(target)
         with sqlite3.connect(snapshot) as db:
-            hashes = [row[0] for row in db.execute("SELECT sha256 FROM fabrication_artifacts")]
+            hashes = sorted(archived_hashes(db))
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "originals": hashes,
+            "storage_names": {
+                sha: sha
+                + (
+                    ".gcode"
+                    if (database.parent / "fabrication-archive" / (sha + ".gcode")).exists()
+                    else ".blob"
+                )
+                for sha in hashes
+            },
             "database_sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
         }
         (root / "manifest.json").write_text(json.dumps(manifest))
@@ -35,13 +56,15 @@ def backup(database, output):
             for sha in hashes:
                 if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
                     raise ValueError("Invalid canonical identity in database")
-                path = database.parent / "fabrication-archive" / (sha + ".gcode")
+                path = database.parent / "fabrication-archive" / manifest["storage_names"][sha]
                 if path.is_symlink():
                     raise ValueError("Canonical originals cannot be symbolic links")
                 with path.open("rb") as stream:
                     if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
                         raise ValueError("Original artifact failed integrity verification")
-                tar.add(path, arcname="originals/" + sha + ".gcode", recursive=False)
+                tar.add(
+                    path, arcname="originals/" + manifest["storage_names"][sha], recursive=False
+                )
         packed.chmod(0o600)
         with packed.open("rb") as stream:
             os.fsync(stream.fileno())
@@ -66,7 +89,7 @@ def restore(backup_file, destination):
             if manifest_file is None:
                 raise ValueError("Missing backup manifest")
             manifest = json.loads(manifest_file.read(16 * 1024 * 1024))
-            if manifest.get("schema_version") != 1:
+            if manifest.get("schema_version") not in {1, 2}:
                 raise ValueError("Unsupported backup schema")
             hashes = manifest["originals"]
             if len(hashes) != len(set(hashes)):
@@ -79,7 +102,10 @@ def restore(backup_file, destination):
                     or any(c not in "0123456789abcdef" for c in sha)
                 ):
                     raise ValueError("Invalid original identity")
-                expected.add("originals/" + sha + ".gcode")
+                name = manifest.get("storage_names", {}).get(sha, sha + ".gcode")
+                if name not in {sha + ".gcode", sha + ".blob"}:
+                    raise ValueError("Invalid canonical storage name")
+                expected.add("originals/" + name)
             members = tar.getmembers()
             if {m.name for m in members} != expected or len(members) != len(expected):
                 raise ValueError("Unexpected or duplicate backup members")
@@ -107,7 +133,9 @@ def restore(backup_file, destination):
                     os.fsync(stream.fileno())
                 target.chmod(0o600)
             for sha in hashes:
-                with (originals / (sha + ".gcode")).open("rb") as stream:
+                with (originals / manifest.get("storage_names", {}).get(sha, sha + ".gcode")).open(
+                    "rb"
+                ) as stream:
                     if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
                         raise ValueError("Restored artifact checksum mismatch")
             ledger = staged / "ledger.sqlite"
@@ -117,7 +145,7 @@ def restore(backup_file, destination):
             with sqlite3.connect(ledger) as db:
                 if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                     raise ValueError("Restored database integrity failed")
-                actual = {row[0] for row in db.execute("SELECT sha256 FROM fabrication_artifacts")}
+                actual = archived_hashes(db)
                 if actual != set(hashes):
                     raise ValueError("Restored catalog does not match originals")
         destination.mkdir(mode=0o700)  # Reserve a new destination; fail if another restore won.

@@ -18,7 +18,16 @@ class ArtifactSubmission:
     expected_sha256: str | None = None
 
     def validate(self):
-        if self.schema_version != 1 or self.artifact_kind != "execution_gcode":
+        allowed = {
+            "execution_gcode": {".gcode", ".gco", ".gc", ".g"},
+            "design_freecad": {".fcstd", ".fcstd1", ".fcstd2", ".fcbak"},
+            "manufacturing_geometry": {".step", ".stp", ".stl", ".obj"},
+            "slicer_project": {".3mf"},
+            "cad_source": {".py"},
+            "design_blender": {".blend"},
+            "observation": {".png", ".jpg", ".jpeg", ".webm", ".mp4"},
+        }
+        if self.schema_version != 1 or self.artifact_kind not in allowed:
             raise ValueError("Unsupported submission schema or artifact type")
         if not self.provider or len(self.provider) > 80 or len(self.source_uri) > 2048:
             raise ValueError("Invalid source provenance")
@@ -28,7 +37,20 @@ class ArtifactSubmission:
             r"[a-f0-9]{64}", self.expected_sha256
         ):
             raise ValueError("Invalid expected artifact digest")
-        validate_gcode_filename(self.filename, b"x")
+        if self.artifact_kind == "execution_gcode":
+            validate_gcode_filename(self.filename, b"x")
+        elif (
+            not isinstance(self.filename, str)
+            or not self.filename
+            or len(self.filename) > 240
+            or "/" in self.filename
+            or "\\" in self.filename
+            or ".." in self.filename
+            or self.filename.startswith(".")
+            or any(ord(c) < 32 for c in self.filename)
+            or Path(self.filename).suffix.lower() not in allowed[self.artifact_kind]
+        ):
+            raise ValueError("Filename does not match the declared artifact type")
 
 
 class FabricationIngestion:

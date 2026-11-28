@@ -6,7 +6,8 @@ const MATERIALS = [0xa6bdcc, 0x6899b7, 0xd8a76c, 0xd0e1e8];
 
 export function mountViewer(host, model) {
   const segments = Array.isArray(model.segments) ? model.segments : [];
-  if (!segments.length || !Array.isArray(model.bounds)) throw new Error("No printable geometry available");
+  const surface=Array.isArray(model.surface_vertices)?model.surface_vertices:null;
+  if ((!segments.length&&!surface?.length) || !Array.isArray(model.bounds)) throw new Error("No printable geometry available");
   const lo = model.bounds[0], hi = model.bounds[1];
   const center = [(lo[0]+hi[0])/2, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2];
   const span = Math.max(15, hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
@@ -50,6 +51,12 @@ export function mountViewer(host, model) {
   const mid = new THREE.Vector3(), direction = new THREE.Vector3(), quaternion = new THREE.Quaternion();
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3();
   const meshes = [];
+  if(surface){
+    const values=new Float32Array(surface.length);
+    for(let i=0;i<surface.length;i+=3){values[i]=surface[i]-center[0];values[i+1]=surface[i+2]-center[2];values[i+2]=-(surface[i+1]-center[1]);}
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(values,3));geometry.computeVertexNormals();
+    const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x8ab4c7,roughness:.48,metalness:.15,side:THREE.DoubleSide}));scene.add(mesh);meshes.push(mesh);
+  }
   const groups = [[],[],[],[]];
   for (const segment of segments) {
     const category = segment[7];
@@ -156,7 +163,7 @@ export function mountViewer(host, model) {
       controls.removeEventListener("start",onControlsStart);
       controls.removeEventListener("end",onControlsEnd);
       controls.dispose();
-      cylinder.dispose();
+      for(const geometry of new Set([cylinder,...meshes.map(mesh=>mesh.geometry)]))geometry.dispose();
       grid.geometry.dispose();
       grid.material.dispose();
       for(const mesh of meshes)mesh.material.dispose();
