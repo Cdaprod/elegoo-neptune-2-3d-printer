@@ -26,6 +26,13 @@ def main():
         raise SystemExit("Unsupported kiosk presentation")
     url = origin + route
     expected = url.rstrip("/")
+    inspection = os.environ.get('NEPTUNE_KIOSK_INSPECTION_PORT')
+    inspection_args = []
+    if inspection:
+        port = int(inspection)
+        if not 1024 <= port <= 65535:
+            raise SystemExit('Invalid loopback inspection port')
+        inspection_args = ['--remote-debugging-address=127.0.0.1', f'--remote-debugging-port={port}']
     with sync_playwright() as playwright:
         context = playwright.chromium.launch_persistent_context(
             str(Path.home() / ".config/neptune-kiosk"),
@@ -35,7 +42,7 @@ def main():
             chromium_sandbox=True,
             ignore_default_args=["--enable-automation"],
             args=["--ozone-platform=wayland", "--kiosk", "--no-first-run",
-                  "--no-default-browser-check", "--password-store=basic"],
+                  "--no-default-browser-check", "--password-store=basic", *inspection_args],
         )
         try:
             page = context.pages[0] if context.pages else context.new_page()

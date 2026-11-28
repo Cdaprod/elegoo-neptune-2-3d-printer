@@ -188,7 +188,7 @@
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
      if(geometry.surface_vertices){
       text('inspector-details',dims+(geometry.units==='mm'?' mm · 3MF-declared units; not physical measurement':' source coordinate units · units unverified'));
-      text('inspector-status','Original STL surface · '+geometry.stats.rendered_triangles+' triangles · fingerprint verified');
+      text('inspector-status',(geometry.source==='derived_3mf_surface'?'3MF body surface':'Original STL surface')+' · '+geometry.stats.rendered_triangles+' triangles · fingerprint verified'+(geometry.display?.method==='vertex_clustering'?' · optimized display mesh':''));
      }else{
      text("inspector-details",dims+" mm · "+(stats.rendered_segments||0)+" rendered extrusion segments");
      text("inspector-status","Interactive 3D · sampled from "+(stats.extrusion_segments||0)+" extrusion moves"+

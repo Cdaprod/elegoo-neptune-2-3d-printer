@@ -468,3 +468,35 @@ filament geometry. Supersampled server rasterization avoids repainting thousands
 of vector strokes per card on the Pi/SwiftShader compositor. SVG export remains
 backward compatible. Raster derivatives share the existing bounded cache and
 invalidate with source fingerprints; interactive inspection still uses Three.js.
+
+## Orca/3MF production publication
+
+`scripts/publish_fabrication.py --inventory /private/inventory.json --apply --register`
+streams original 3MFs and mesh derivatives through strict-host-verified SSH into the
+existing authenticated canonical ingestion API. The application token remains on
+the Pi. A private SQLite receipt journal makes interruption/resumption idempotent.
+Original publication precedes preview extraction; failed extraction cannot erase
+the preserved source. No slice, stage, delivery, selection or execution is implied.
+
+The bounded 3MF processor reads meshes, components, build transforms, plates and
+sanitized configuration without running embedded code. It rejects cyclic graphs,
+invalid indices, entity declarations and excessive package expansion. Full source
+3MFs remain immutable. Large display meshes use documented vertex clustering,
+rather than triangle sampling. Body observations create candidate model identities
+and observation revisions, never approved CAD revisions or authoritative sources.
+Identical mesh fingerprints are reconciliation evidence, not logical identity.
+
+The existing gallery exposes body models and a separate 3MF-project/plate view.
+Original downloads, settings, exact source references, candidate status and declared
+3MF units remain inspectable. Dimensions are document-derived, not physical travel
+verification. Source locations and native authority remain independently versioned.
+
+Operational backups and actual engineering screenshots belong in private application
+storage, outside Git. The commissioning journal records deployed/image commits,
+SQLite restore checks and Pi-to-Mac backup checksums. A same-disk recovery copy is
+not an independent backup. Original engineering files are never moved or modified.
+
+Optional kiosk inspection uses `NEPTUNE_KIOSK_INSPECTION_PORT` (1024–65535), bound
+to 127.0.0.1. Reach it only through verified SSH forwarding; never publish the debug
+port on a LAN interface. Existing fullscreen dimensions and kiosk authentication
+are unchanged. With the option unset, no remote-debugging port is opened.
