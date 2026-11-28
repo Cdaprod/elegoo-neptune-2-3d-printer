@@ -67,6 +67,7 @@ class FabricationArchive:
                 CREATE TABLE IF NOT EXISTS execution_events(
                     id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
                     event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
+                INSERT OR IGNORE INTO fabrication_schema VALUES(8);
                 CREATE TABLE IF NOT EXISTS execution_baselines(
                     execution_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS stage_baselines(

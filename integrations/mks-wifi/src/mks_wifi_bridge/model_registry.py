@@ -391,12 +391,16 @@ class ModelRegistry:
             self.audit(db, "approve_baseline", {"id": identity})
         return {"id": identity, "manifest": payload}
 
-    def library(self):
+    def library(self, before=None, limit=200, q=""):
+        cursor = self.cursor(before)
         with self.archive.db() as db:
             models = [
                 dict(row)
                 for row in db.execute(
-                    "SELECT * FROM models ORDER BY created_at DESC,id DESC LIMIT 200"
+                    "SELECT * FROM models WHERE instr(lower(name),lower(?))>0 "
+                    + ("AND (created_at,id)<(?,?) " if cursor else "")
+                    + "ORDER BY created_at DESC,id DESC LIMIT ?",
+                    (q, *(cursor or []), min(201, max(1, limit))),
                 )
             ]
             for model in models:
@@ -474,20 +478,40 @@ class ModelRegistry:
             self.audit(db, "inventory_metadata", {"observations": count, "hydrated": False})
         return {"observations": count, "hydrated": False, "models_created": 0}
 
-    def artifact_candidates(self, unassigned=False):
+    @staticmethod
+    def cursor(before):
+        if before is None:
+            return None
+        try:
+            value = json.loads(before)
+            if (
+                not isinstance(value, list)
+                or len(value) != 2
+                or not all(isinstance(item, str) and len(item) <= 128 for item in value)
+            ):
+                raise ValueError()
+            return value
+        except (ValueError, TypeError) as error:
+            raise ValueError("Invalid registry page cursor") from error
+
+    def artifact_candidates(self, unassigned=False, before=None, limit=200, q=""):
+        cursor = self.cursor(before)
         with self.archive.db() as db:
             rows = [
                 dict(row)
                 for row in db.execute(
                     "SELECT a.*,c.archived,c.artifact_kind FROM fabrication_artifacts a "
                     "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 "
+                    "WHERE instr(lower(a.filename),lower(?))>0 "
                     + (
-                        "WHERE NOT EXISTS(SELECT 1 FROM model_representations r "
+                        "AND NOT EXISTS(SELECT 1 FROM model_representations r "
                         "WHERE r.sha256=a.sha256 AND r.active=1) "
                         if unassigned
                         else ""
                     )
-                    + "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 200"
+                    + ("AND (a.ingested_at,a.sha256)<(?,?) " if cursor else "")
+                    + "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT ?",
+                    (q, *(cursor or []), min(201, max(1, limit))),
                 )
             ]
             for row in rows:
@@ -648,13 +672,36 @@ def install(app, read_auth, write_auth, archive):
         except (OSError, ValueError) as error:
             raise HTTPException(404, str(error)) from error
 
+    def page(loader, timestamp, identity, before, limit, q, **kwargs):
+        if not 1 <= limit <= 200 or len(q) > 200:
+            raise HTTPException(422, "Registry page limit or filter exceeds bounds")
+        try:
+            rows = loader(before=before, limit=limit + 1, q=q, **kwargs)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        items = rows[:limit]
+        cursor = (
+            json.dumps([items[-1][timestamp], items[-1][identity]]) if len(rows) > limit else None
+        )
+        return {"schema_version": 1, "items": items, "next": cursor}
+
     @app.get("/api/model-registry/artifacts", dependencies=[Depends(read_auth)])
-    def artifacts(unassigned: bool = False):
-        return {"schema_version": 1, "items": registry.artifact_candidates(unassigned)}
+    def artifacts(
+        unassigned: bool = False, before: str | None = None, limit: int = 24, q: str = ""
+    ):
+        return page(
+            registry.artifact_candidates,
+            "ingested_at",
+            "sha256",
+            before,
+            limit,
+            q,
+            unassigned=unassigned,
+        )
 
     @app.get("/api/model-registry/models", dependencies=[Depends(read_auth)])
-    def models():
-        return {"schema_version": 1, "items": registry.library()}
+    def models(before: str | None = None, limit: int = 200, q: str = ""):
+        return page(registry.library, "created_at", "id", before, limit, q)
 
     @app.get("/api/model-registry/models/{identity}", dependencies=[Depends(read_auth)])
     def model(identity: str):

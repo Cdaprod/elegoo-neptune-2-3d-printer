@@ -218,3 +218,59 @@ def test_baseline_reprint_preserves_original_execution_and_exact_inputs(tmp_path
     other = archive.ingest(source)
     with pytest.raises(ValueError, match="exact executable"):
         archive.stage_artifact(other, baseline_id=baseline["id"])
+
+
+def test_registry_api_paging_declarations_and_write_origin(tmp_path):
+    from fastapi.testclient import TestClient
+    from test_observatory import make_service
+
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+    from mks_wifi_bridge.observatory import create_app
+
+    app = create_app(make_service(), timeline=MotionTimeline(tmp_path / "api.sqlite"))
+    with TestClient(app) as client:
+        for name in ["A", "B", "C"]:
+            response = client.post(
+                "/api/model-registry/actions", json={"operation": "create_model", "name": name}
+            )
+            assert response.status_code == 200
+        first = client.get("/api/model-registry/models?limit=2").json()
+        assert len(first["items"]) == 2 and first["next"]
+        client.post(
+            "/api/model-registry/actions", json={"operation": "create_model", "name": "New"}
+        )
+        second = client.get(
+            "/api/model-registry/models", params={"limit": 2, "before": first["next"]}
+        ).json()
+        assert {row["name"] for row in second["items"]} == {"A"}
+        assert client.get("/api/model-registry/models?before=bad").status_code == 422
+        assert client.get("/api/model-registry/models?limit=0").status_code == 422
+        assert [
+            row["name"] for row in client.get("/api/model-registry/models?q=New").json()["items"]
+        ] == ["New"]
+        assert (
+            client.post(
+                "/api/model-registry/actions",
+                json={"operation": "create_model", "name": "Bad"},
+                headers={"Origin": "http://evil.example"},
+            ).status_code
+            == 403
+        )
+        for index in range(3):
+            result = client.post(
+                "/api/fabrication/ingest?filename=part" + str(index) + ".gcode",
+                content=("G1 X" + str(index) + " E1").encode(),
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            assert result.status_code == 200
+        page = client.get("/api/model-registry/artifacts?unassigned=true&limit=2").json()
+        assert len(page["items"]) == 2 and page["next"]
+        tail = client.get(
+            "/api/model-registry/artifacts",
+            params={"unassigned": True, "limit": 2, "before": page["next"]},
+        ).json()
+        assert len(tail["items"]) == 1
+        assert not {row["sha256"] for row in page["items"]} & {
+            row["sha256"] for row in tail["items"]
+        }
+        assert client.get("/api/fabrication/staging/queue").json()["items"] == []

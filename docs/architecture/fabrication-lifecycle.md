@@ -415,5 +415,16 @@ motion explicitly separate from recorded observations.
 Operator quality assessments are append-only records. Accepted/rejected/unassessed
 and notes never overwrite machine completion/failure, execution identity or prior
 assessments. The HMI inspector can read events and save an assessment without
-issuing machine controls. Photos and new source formats remain typed future ingestion
-adapters; no fixtures are added to production history.
+issuing machine controls. Typed photo, timelapse and JSON telemetry intake attaches
+observations without changing machine outcomes. No fixtures enter production history.
+
+## Registry pagination and shared inspection
+
+Model and unassigned-file APIs provide stable timestamp/identity cursors and bounded
+server-side filename/name search. The HMI loads 24 registry cards per page, uses lazy
+static thumbnails, and preserves chronological lane selection/scroll. G-code inspection
+shares one renderer with shaded deposition, clipped layer sections and buffered
+toolpath draw ranges. A range represents inferred geometry, never recorded execution
+position. STL inspection uses the original source surface with unverified source units.
+The inspector keeps Close outside its scrolling details. All viewer buffers, materials,
+instancing resources and contexts are released on close.

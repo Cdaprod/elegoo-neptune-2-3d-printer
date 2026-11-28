@@ -307,6 +307,8 @@ def inventory(
             "identifier": identity,
             "locations": sorted(set(paths)),
             "state": "candidate_requires_review",
+            "confidence": "unverified",
+            "warning": "Embedded IDs may be inherited from templates; not model identity",
         }
         for identity, paths in by_identifier.items()
         if len(set(paths)) > 1

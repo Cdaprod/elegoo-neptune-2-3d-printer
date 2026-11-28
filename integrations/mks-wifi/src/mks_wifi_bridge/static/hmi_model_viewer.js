@@ -33,7 +33,7 @@ export function mountViewer(host, model) {
   renderer.domElement.style.height = "100%";
   renderer.domElement.style.display = "block";
   renderer.domElement.style.touchAction = "none";
-  renderer.domElement.setAttribute("aria-label", "Interactive reconstructed G-code extrusion model");
+  renderer.domElement.setAttribute("aria-label", surface?"Interactive original STL surface":"Interactive reconstructed G-code extrusion model");
   host.replaceChildren(renderer.domElement);
   host.dataset.viewerPixelRatio = dpr.toFixed(2);
   const camera = new THREE.OrthographicCamera(-span,span,span,-span,0.1,span*25);
@@ -85,6 +85,21 @@ export function mountViewer(host, model) {
     mesh.instanceMatrix.needsUpdate=true;
     scene.add(mesh);
     meshes.push(mesh);
+  }
+
+  // One immutable line buffer, shared by all toolpath inspection ranges.
+  const pathPositions=new Float32Array(segments.length*6);
+  segments.forEach((s,i)=>{pathPositions.set([s[0]-center[0],s[2]-center[2],-(s[1]-center[1]),s[3]-center[0],s[5]-center[2],-(s[4]-center[1])],i*6);});
+  const pathGeometry=new THREE.BufferGeometry();pathGeometry.setAttribute('position',new THREE.BufferAttribute(pathPositions,3));
+  const paths=new THREE.LineSegments(pathGeometry,new THREE.LineBasicMaterial({color:0x6cdbed}));paths.visible=false;scene.add(paths);
+  const section=new THREE.Plane(new THREE.Vector3(0,-1,0),0);
+  function setPresentation(mode='shaded',fraction=1){
+    if(surface)mode='shaded';fraction=Math.max(0,Math.min(1,Number(fraction)||0));
+    const toolpath=mode==='toolpath';for(const mesh of meshes)mesh.visible=!toolpath;
+    paths.visible=toolpath;pathGeometry.setDrawRange(0,Math.max(0,Math.round(segments.length*fraction))*2);
+    section.constant=lo[2]-center[2]+(hi[2]-lo[2])*fraction;
+    renderer.clippingPlanes=mode==='layers'?[section]:[];
+    host.dataset.viewerPresentation=mode;host.dataset.viewerRange=String(fraction);invalidate();
   }
 
   let resolveReady,rejectReady;
@@ -151,7 +166,7 @@ export function mountViewer(host, model) {
   setView("iso");
   resize();
   return {
-    ready,setView,
+    ready,setView,setPresentation,
     dispose() {
       if(disposed)return;
       disposed=true;resolveReady(false);
@@ -166,13 +181,14 @@ export function mountViewer(host, model) {
       for(const geometry of new Set([cylinder,...meshes.map(mesh=>mesh.geometry)]))geometry.dispose();
       grid.geometry.dispose();
       grid.material.dispose();
-      for(const mesh of meshes)mesh.material.dispose();
+      for(const mesh of meshes){mesh.material.dispose();if(mesh.isInstancedMesh)mesh.dispose();}
+      pathGeometry.dispose();paths.material.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
       delete host.dataset.viewerPixelRatio;
       delete host.dataset.viewerFrames;
-      delete host.dataset.viewerStatus;
+      delete host.dataset.viewerStatus;delete host.dataset.viewerPresentation;delete host.dataset.viewerRange;
     }
   };
 }

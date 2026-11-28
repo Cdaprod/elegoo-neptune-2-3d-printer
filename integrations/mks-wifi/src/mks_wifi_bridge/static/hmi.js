@@ -102,7 +102,7 @@
    inspectorEpoch++;
    inspectorRequest?.abort();inspectorRequest=null;
    if(inspectorViewer){inspectorViewer.dispose();inspectorViewer=null;}
-   $("model-viewer-host").replaceChildren();
+   $("model-viewer-host").replaceChildren();$("geometry-presentation").hidden=true;
    $("model-viewer-host").hidden=true;
    $("inspector-image").hidden=false;
    const dialog=$("model-inspector");
@@ -121,7 +121,7 @@
    const epoch=++inspectorEpoch;
    inspectorRequest=new AbortController();
    inspected={file,source};
-   text("inspector-title",file.display_name||file.filename||file.name);
+   text("inspector-title",file.display_name||file.filename||file.name);$("manage-model").hidden=!!file.engineering;
    text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
@@ -169,6 +169,7 @@
      const ready=await viewer.ready;
      if(epoch!==inspectorEpoch||!ready)return;
      preview.hidden=true;
+     $('geometry-presentation').hidden=!!file.engineering;$('geometry-mode').value='shaded';$('geometry-range').value='100';viewer.setPresentation('shaded',1);
      const stats=geometry.stats||{};
      const bounds=geometry.bounds||[[0,0,0],[0,0,0]];
      const dims=bounds[1].map((v,i)=>(v-bounds[0][i]).toFixed(1)).join(" × ");
@@ -225,7 +226,7 @@
    button.append(image,name,info);
    setPreviewImage(image,file,source);
    if(hasGeometry(file,source)){
-     const pill=document.createElement("span");pill.className="render-pill";pill.textContent="3D G-CODE";button.append(pill);
+     const pill=document.createElement("span");pill.className="render-pill";pill.textContent=file.engineering?"SOURCE STL":"3D G-CODE";button.append(pill);
    }
    const select=()=>{
      document.querySelectorAll(".model").forEach(el=>el.classList.remove("selected"));
@@ -295,6 +296,13 @@
  $('registry-manifest').onclick=async()=>{try{const data=await api('/api/model-registry/revisions/'+$('registry-revision').value+'/manifest');const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=data.revision.id+'.model.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){text('registry-detail',error.message);}};
  $('registry-manifest-import').onclick=()=>$('registry-manifest-file').click();
  $('registry-manifest-file').onchange=async()=>{const file=$('registry-manifest-file').files[0];if(!file)return;try{if(file.size>65536)throw Error('Manifest exceeds declaration limit');const result=await registryAction('import_manifest',{manifest:JSON.parse(await file.text()),approve:false});await populateRegistry({...inspected.file,model_id:result.model_id,revision_id:result.revision_id});text('registry-detail','Declarations imported as candidates; no authority approved or original file changed');}catch(error){text('registry-detail',error.message);}finally{$('registry-manifest-file').value='';}};
+ const registryPages={models:{before:null,previous:[]},unassigned:{before:null,previous:[]}};
+ const registryPager=document.createElement('span');registryPager.hidden=true;registryPager.style.cssText='display:none;gap:3px';
+ const registryPrevious=document.createElement('button'),registryNext=document.createElement('button');
+ for(const [button,label,text] of [[registryPrevious,'Previous registry page','←'],[registryNext,'Next registry page','→']]){button.textContent=text;button.setAttribute('aria-label',label);registryPager.append(button);}
+ $('model-count').after(registryPager);
+ let registrySearchTimer;
+ $('model-filter').addEventListener('input',()=>{if(!registryPages[$('storage-provider').value])return;clearTimeout(registrySearchTimer);registrySearchTimer=setTimeout(()=>{for(const page of Object.values(registryPages)){page.before=null;page.previous=[];}loadFiles();},200);});
  const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[],scroll:0} ]));
  async function renderArchiveLane(kind,lane){
   const page=archivePages[kind];
@@ -325,13 +333,17 @@
   await Promise.all(pending);
  }
  async function loadFiles(){
-  if(state.loading)return;state.loading=true;const host=$("models");const requestedProvider=$("storage-provider").value;
+  if(state.loading)return;state.loading=true;const host=$("models");const requestedProvider=$("storage-provider").value,requestedFilter=$("model-filter").value;
   try{
-   const collection=$('storage-provider').value;
+   const collection=$('storage-provider').value;registryPager.style.display=registryPages[collection]?'inline-flex':'none';$('archive-files').hidden=!!registryPages[collection];
    $('new-model').hidden=!['models','unassigned'].includes(collection);
    if(['models','unassigned'].includes(collection)){
     delete host.dataset.layout;host.replaceChildren();
-    const result=await api('/api/model-registry/'+(collection==='models'?'models':'artifacts?unassigned=true'));
+    const pagination=registryPages[collection];
+    const query=new URLSearchParams({limit:'24',q:requestedFilter});if(collection==='unassigned')query.set('unassigned','true');if(pagination.before)query.set('before',pagination.before);
+    const result=await api('/api/model-registry/'+(collection==='models'?'models':'artifacts')+'?'+query);
+    registryPrevious.disabled=!pagination.previous.length;registryNext.disabled=!result.next;
+    registryPrevious.onclick=()=>{pagination.before=pagination.previous.pop();loadFiles();};registryNext.onclick=()=>{pagination.previous.push(pagination.before);pagination.before=result.next;loadFiles();};
     for(const row of result.items){
      const file=collection==='models'?{...row.preview,model_id:row.id,display_name:row.name,filename:row.preview?.filename||row.name,sha256:row.preview?.sha256}:row;
      const stl=/\.stl$/i.test(file.filename||'');const gcode=/\.(gcode|gco|gc|g)$/i.test(file.filename||'')&&file.archived===1;
@@ -362,7 +374,7 @@
    text("model-count",host.childElementCount+" files · "+(listing.local_index?.status||listing.status||"unknown"));
    if(!host.childElementCount){const empty=document.createElement("div");empty.className="tile";empty.textContent=listing.local_index?.error||listing.error||"No indexed G-code available. Configure a read-only source volume or refresh the printer SD listing.";host.append(empty);}
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
-  finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value)loadFiles();}
+  finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value||(registryPages[requestedProvider]&&requestedFilter!==$("model-filter").value))loadFiles();}
  }
  $('associate-execution').onclick=async()=>{const sha=$('execution-artifact').value;const file=inspected?.file;if(!sha||!file||!confirm('Record your association with this exact archived G-code? This is operator supplied, not hardware-verified identity.'))return;try{await api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/identity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sha256:sha,transport:$('execution-transport').value})});openInspector({...file,sha256:sha,source_present:true,bytes_available:true,lifecycle:{...file.lifecycle,archive:'archived',identity:'operator_supplied'}},'archive');}catch(error){text('execution-record',error.message);}};
  $('add-observation').onclick=()=>$('observation-file').click();
@@ -376,6 +388,8 @@
   await api(endpoint+(file.baseline_id&&!file.started_at?'?baseline_id='+file.baseline_id:''),{method:'POST'});closeInspector();route('print-bay');
  }catch(error){text('inspector-status',error.message);}});
 
+ const updateGeometryPresentation=()=>inspectorViewer?.setPresentation($('geometry-mode').value,Number($('geometry-range').value)/100);
+ $('geometry-mode').addEventListener('change',updateGeometryPresentation);$('geometry-range').addEventListener('input',updateGeometryPresentation);
  let nativeTransfer=null;
  $("retrieve-sd").addEventListener("click",async()=>{
   if(!inspected||nativeTransfer)return;
