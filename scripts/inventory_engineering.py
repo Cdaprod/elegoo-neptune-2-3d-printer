@@ -7,6 +7,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import time
 import zipfile
 from pathlib import Path
@@ -139,6 +140,36 @@ def metadata(path, kind):
     return result
 
 
+def git_context(path, cache):
+    for parent in list(path.parents)[:16]:
+        if parent in cache:
+            return cache[parent]
+        if (parent / ".git").exists():
+            try:
+                process = subprocess.run(
+                    ["git", "-C", str(parent), "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False,
+                )
+                head = process.stdout.strip()
+                result = (
+                    {
+                        "root": str(parent),
+                        "head": head,
+                        "evidence": "repository_context_not_file_revision",
+                    }
+                    if re.fullmatch(r"[a-f0-9]{40,64}", head)
+                    else None
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                result = None
+            cache[parent] = result
+            return result
+    return None
+
+
 def inventory(
     roots, max_files=20000, max_dirs=30000, max_bytes=8 * 1024**3, seconds=180
 ):
@@ -148,6 +179,7 @@ def inventory(
     discovered = []
     consumed = 0
     directories = 0
+    git_cache = {}
     seen_paths = set()
     stopped = False
     discovered = [
@@ -245,6 +277,7 @@ def inventory(
                         item.update(metadata(path, kind))
                     else:
                         item["fingerprint_status"] = "budget_or_size_limit"
+                    item["git_context"] = git_context(path, git_cache)
                     files.append(item)
                 except (OSError, ValueError) as error:
                     errors.append({"path": str(path), "error": str(error)[:200]})
@@ -290,6 +323,11 @@ def inventory(
         "total_bytes": sum(item["size_bytes"] for item in files),
         "fingerprinted_bytes": consumed,
         "exact_duplicates": duplicates,
+        "fingerprinting_complete": all(item["sha256"] for item in files),
+        "unfingerprinted_bytes": sum(
+            item["size_bytes"] for item in files if not item["sha256"]
+        ),
+        "authority_policy": "All authorities unresolved unless explicitly declared and approved",
         "candidate_relationships": candidates,
         "errors": errors,
         "bounded_incomplete": stopped

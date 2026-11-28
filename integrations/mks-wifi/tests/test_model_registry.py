@@ -136,3 +136,85 @@ endsolid triangle
         SimpleNamespace(path=str(tmp_path / "typed-restore/ledger.sqlite"))
     )
     assert restored.verified(sha).read_bytes() == data
+
+
+def test_portable_manifest_import_keeps_identity_and_requires_explicit_approval(tmp_path):
+    archive = FabricationArchive(SimpleNamespace(path=str(tmp_path / "export.sqlite")))
+    registry = ModelRegistry(archive)
+    model = registry.create("Logical model")
+    revision = registry.revision(model["id"], "A")
+    source = tmp_path / "part.gcode"
+    source.write_bytes(b"G1 X10 E1")
+    sha = archive.ingest(source)
+    registry.representation(revision["id"], sha, "executable_gcode")
+    registry.authority(revision["id"], sha, "executable_gcode", approve=True)
+    manifest = registry.manifest(revision["id"])
+    (tmp_path / "target").mkdir()
+    target = FabricationArchive(SimpleNamespace(path=str(tmp_path / "target/import.sqlite")))
+    imported = ModelRegistry(target)
+    result = imported.import_manifest(manifest)
+    assert result["model_id"] == model["id"]
+    assert imported.manifest(revision["id"])["authorities"][0]["state"] == "candidate"
+    assert not list(target.root.glob("*.gcode"))
+    with pytest.raises(ValueError):
+        imported.import_manifest(manifest, approve=True)
+    target.ingest(source)
+    imported.import_manifest(manifest, approve=True)
+    assert imported.manifest(revision["id"])["authorities"][0]["state"] == "approved"
+
+
+def test_observation_attachment_is_durable_and_does_not_stage_or_assess(tmp_path):
+    from io import BytesIO
+
+    from mks_wifi_bridge.fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+
+    archive = FabricationArchive(MotionTimeline(tmp_path / "observation.sqlite"))
+    with archive.db() as db:
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            ("attempt", "part.gcode", "2000", "2001", "unknown", None, None, "printer_sd"),
+        )
+    sha = FabricationIngestion(archive).submit(
+        ArtifactSubmission(
+            "telemetry.json", "http", "observation:operator", artifact_kind="observation"
+        ),
+        BytesIO(b'{"source":"operator_supplied","note":"No outcome known"}'),
+    )
+    first = archive.attach_observation("attempt", sha, "telemetry")
+    assert archive.attach_observation("attempt", sha, "telemetry")["id"] == first["id"]
+    detail = archive.execution_detail("attempt")
+    assert detail["execution"]["state"] == "unknown"
+    assert len(detail["attachments"]) == 1 and detail["quality_assessments"] == []
+    assert archive.stages() == []
+
+
+def test_baseline_reprint_preserves_original_execution_and_exact_inputs(tmp_path):
+    from mks_wifi_bridge.motion_timeline import MotionTimeline
+
+    archive = FabricationArchive(MotionTimeline(tmp_path / "baseline.sqlite"))
+    registry = ModelRegistry(archive)
+    source = tmp_path / "part.gcode"
+    source.write_bytes(b"G1 X10 E1")
+    sha = archive.ingest(source)
+    model = registry.create("Part")
+    revision = registry.revision(model["id"], "A")
+    registry.representation(revision["id"], sha, "executable_gcode")
+    registry.authority(revision["id"], sha, "executable_gcode", approve=True)
+    baseline = registry.baseline(revision["id"])
+    with archive.db() as db:
+        db.execute(
+            "INSERT INTO print_sessions VALUES(?,?,?,?,?,?,?,?)",
+            ("old", "part.gcode", "2000", "2001", "failed", None, None, "printer_sd"),
+        )
+    archive.link_execution("old", sha, "operator_supplied", "native_sd")
+    archive.link_baseline("old", baseline["id"])
+    one, two = archive.stage_again("old"), archive.stage_again("old")
+    assert one["id"] != two["id"]
+    assert one["baseline_id"] == two["baseline_id"] == baseline["id"]
+    assert all(stage["baseline_id"] == baseline["id"] for stage in archive.stages())
+    assert archive.execution_detail("old")["execution"]["state"] == "failed"
+    source.write_bytes(b"G1 X11 E2")
+    other = archive.ingest(source)
+    with pytest.raises(ValueError, match="exact executable"):
+        archive.stage_artifact(other, baseline_id=baseline["id"])

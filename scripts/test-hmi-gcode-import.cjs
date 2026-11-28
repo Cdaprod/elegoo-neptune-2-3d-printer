@@ -24,7 +24,7 @@ const assert=require('node:assert/strict');
   });
   await page.goto('http://127.0.0.1:8000/hmi');
   await page.locator('nav [data-go=models]').click();
-  await page.waitForFunction(()=>document.getElementById('sd-import-status')?.textContent?.includes('Ready'));
+  await page.waitForFunction(()=>document.getElementById('sd-import-status')?.textContent?.includes('Import available'));
   const file=Buffer.from('G90\nG1 X10 E1\n');
   await page.locator('#import-gcode-files').setInputFiles([{name:'Bracket.gcode',mimeType:'application/octet-stream',buffer:file}]);
   await page.waitForFunction(()=>document.getElementById('sd-import-status')?.textContent?.includes('Imported 1'));

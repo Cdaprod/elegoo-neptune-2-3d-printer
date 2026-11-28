@@ -1,72 +1,96 @@
-# Persistent fabrication lifecycle — implementation checkpoint
+# Persistent, model-centric fabrication lifecycle
 
-Schema version 1 adds content-addressed `fabrication_artifacts`, provenance-bearing
-`artifact_locations` and independent `artifact_stages` to the existing timeline
-SQLite database. `print_sessions` remains the observed execution ledger; artifacts
-are associated through `gcode_files.sha256`, never guessed from matching filenames.
-The existing manufacturing project/revision/worker system remains unchanged.
+The existing timeline SQLite database is the authoritative ledger. Additive,
+idempotent migrations extend its sessions and manufacturing integration rather
+than introducing a competing archive. A logical model has a UUID independent of
+its name, directories, repositories, representations and revision labels.
 
 ```mermaid
 erDiagram
-    ManufacturingProject ||--o{ ModelRevision : versions
-    ModelRevision ||--o{ FabricationArtifact : slices
+    Model ||--o{ ModelRevision : evolves
+    ModelRevision ||--o{ ModelRepresentation : represents
+    FabricationArtifact ||--o{ ModelRepresentation : supplies
+    ModelRevision ||--o{ AuthorityDeclaration : governs
+    ModelRevision ||--o{ ComponentRevision : references
+    ModelRevision ||--o{ FabricationBaseline : approves
     FabricationArtifact ||--o{ ArtifactLocation : discovered_at
-    FabricationArtifact ||--o{ PrintExecution : manufactured_as
+    FabricationArtifact ||--o{ PrintExecution : executed_as
     PrintExecution ||--o{ ExecutionEvent : observes
     PrintExecution ||--o{ QualityAssessment : assessed_by_operator
 ```
 
-This diagram describes the intended complete domain. The current migration covers
-artifacts, locations and staging alongside existing sessions, telemetry and events;
-model-revision/quality-assessment consolidation is still pending. A staging receipt
-is not an execution and must not be represented as a completed print.
+A representation links exact artifact bytes to an explicitly declared logical
+revision. Projects/repositories are optional many-valued contexts. Filenames,
+mtime, sizes and geometry similarity do not establish identity or authority.
+Grouping, representation detachment, branching revisions, scoped authority
+retirement, component references and portable manifests are operator decisions.
+Imports default to candidate authority; explicit approval is separate from
+archival hydration. Baselines freeze approved exact artifact and component inputs;
+reprint staging carries the baseline without changing historical executions.
 
-## Storage contract
+## Storage and lifecycle contracts
 
-Original bounded G-code is streamed to a temporary file, SHA-256 addressed, fsynced
-and atomically published beside the existing persistent timeline database under
-`fabrication-archive/`. Original bytes are never preview-cache eviction candidates.
-Reconciliation is idempotent. Identical names with different bytes remain separate.
-Deleting an upload does not remove its archived bytes. The API verifies integrity
-before derivative generation and repeat staging. Derivatives reuse the existing
-versioned filament approximation pipeline; they are not physical measurements.
-No fixture records are automatically created. Archives retain the production
-volume's existing credentials and deployment architecture.
+Many adapters submit through `FabricationIngestion.submit(ArtifactSubmission, stream)`.
+SHA-256 addresses immutable originals beside the persistent timeline database in
+`fabrication-archive/`. Publication is atomic and no-clobber; preexisting originals
+must pass integrity checks. G-code originals use `.gcode`, other typed originals
+`.blob`. Provenance retains each source independently. Geometry/thumbnail caches
+are disposable derivatives; original bytes and execution history are not evicted.
 
-Authenticated endpoints: `GET /api/fabrication/history|unprinted` use bounded,
-stable `(timestamp,identity)` keyset pages; `POST /api/fabrication/reconcile`
-archives current local indexed bytes. Artifact geometry/thumbnail endpoints reuse
-one interactive HMI renderer. `POST /api/fabrication/executions/{id}/stage`
-creates a fresh staging identity for verified bytes without issuing printer commands.
-The UI exposes these collections in the existing horizontal gallery and retains
-explicit unavailable indicators for metadata-only history.
+Discovery, archive integrity, preview, delivery, execution and physical quality
+are separate dimensions. Metadata-only engineering inventory and SD listings
+remain useful without bytes. No filename/size match promotes them to archived.
+Executed artifact identity requires verified content evidence or an explicitly
+labelled operator declaration. Missing outcomes remain unknown. Repeating an
+artifact creates a new stage and later a distinct execution; ingestion never
+stages or executes. Observations (photos, timelapses, JSON telemetry) attach typed
+archived bytes without declaring machine success or acceptable physical quality.
 
-## Remaining integration gates — not yet production-complete
+Implemented adapters include local scans, browser/HTTP intake, mounted removable
+media, LilBitDrop's completed directory, and separately negotiated verified native
+SD transfers. HTTP submission can declare OrcaSlicer provenance without requiring
+OctoPrint. Native SD delivery/retrieval is capability-dependent and is not inferred
+from factory M20/M23/M27 responses. Existing native SD printing remains supported;
+its unknown-byte executions remain in history.
 
-- Manufacturing source-model ingestion; local files now ingest automatically in bounded
-  four-file passes, and verified native-SD transfers archive before completion.
-- Durable execution-to-artifact links independent of timeline cache eviction, removal
-  of legacy session retention, OctoPrint event reconciliation and explicit events.
-- Independently scrollable simultaneous chronological lanes, pagination controls,
-  persistent selection, Print Bay compatibility validation and staging receipt delivery.
-- Source-model revisions, operator assessments, media attachments and complete replay.
-- Shared geometry presentation modes and asynchronous derivative work queue.
-- Transaction-consistent backup/restore tooling and regression validation.
-- Full browser/ARM64/OctoPrint CI and target-resolution rendered archive screenshots.
+## Geometry, gallery and model reconciliation
 
-Do not merge this checkpoint as the complete lifecycle feature. Existing legacy
-session retention has now been removed. Execution-to-SHA links survive geometry
-cache eviction; previously deleted history cannot be reconstructed without external records.
+The native 1280×400 HMI uses independent chronological print-history and unprinted
+lanes, plus compact SD discovery. Keyset pages bound DOM/image resources. Cached
+geometry-derived thumbnails dominate cards; the selected inspector owns one live
+Three.js renderer. Selection and lane scroll survive inspection/navigation. The
+printer twin remains in Overview or the explicitly activated cinematic experience.
 
-For an offline backup, stop the application normally, copy the existing timeline
-SQLite database and its adjacent fabrication-archive directory together, then
-restart. Restore both into the same persistent data volume with original ownership.
-Do not copy only SQLite while omitting original artifact bytes. Online backup and
-restore verification remain an explicit delivery gate.
+Models and unassigned-file views expose actual registered artifacts, source
+locations, branching revisions, authority candidates/conflicts, component references,
+manifest import/export and explicitly confirmed hydration. Original STL surfaces
+use checksum-verified registered sources and cached PNG derivatives; original CAD
+units remain unverified. G-code uses the existing deposited-filament reconstruction,
+not an exact physical surface. FCStd/STEP/OBJ/3MF/Blender/CAD Python can be inventoried
+and archived by type; unsupported previews remain unavailable. Discovery never
+executes CAD scripts. Heavy CAD extraction is intended for the MacBook.
 
-No physical print, heating, motion, upload or firmware operation is part of these
-software tests. Physical SD retrieval and Pi frame-rate validation remain separately
-commissioned capabilities.
+`inventory_engineering.py` performs bounded read-only discovery, excludes dependency,
+cache and credential paths, does not follow symlinks, skips cloud-only content and
+records incomplete fingerprinting separately from directory traversal. Importing
+its report registers metadata/provenance only: no automatic model grouping,
+original-byte hydration or authority approval. Private inventories are not committed.
+
+## Validation and physical boundaries
+
+Backend regressions exercise deduplication, interruption, custody, backup/restore,
+execution history, baseline staging, observations and model declarations. Browser
+fixtures explicitly identify simulation and use reconstructed fixture G-code.
+Real source-STL previews are inspected separately. CI validates the final head's
+backend, browser/touch, ARM64 packaging and bundled OctoPrint integration.
+
+Actual Pi read-only commissioning confirms an operational OctoPrint USB connection
+at 115200 baud with its current 220×220×250 mm lower-left rectangular profile.
+OctoPrint remains the exclusive serial owner. The deployed main predates PR #40;
+receiver installation and production deployment require separate approval. Native
+motherboard SD byte retrieval and physical printer compatibility are not proven
+by software fixtures. No physical execution or firmware modification is part of
+these checks; Pi rendering performance still requires target commissioning.
 
 ## Motherboard SD backup policy
 
@@ -102,17 +126,13 @@ The HTTP endpoint requires existing write authentication and origin protections;
 it works without OctoPrint and performs no delivery or execution. HMI legacy
 uploads archive through the same service before their existing local delivery.
 
-Removable-media bulk hydration still needs adapter/UI integration with the existing
-SD importer. OrcaSlicer direct submission, network storage protocols and non-G-code formats
-remain future adapters. LilBitDrop discovery infrastructure is installed and operator-verified on the Pi;
-the receiving-side completed-file transfer lifecycle remains unverified. Reuse that established service rather than rebuilding its transport.
-The receiving directory/completion contract must be identified before wiring the
-adapter, so partially received files are never treated as complete artifacts.
-Native Apple AirDrop compatibility is not inferred from this handoff. The contract currently
-accepts execution_gcode only; unsupported artifact kinds fail explicitly. CAD,
-slicer projects, photos and derivatives must gain typed validation before being
-accepted, rather than masquerading as G-code. Source URIs are provenance labels,
-not URLs fetched by the ingestion service.
+Mounted-media hydration is implemented by the existing importer’s `--archive`
+mode. The loopback authenticated LilBitDrop receiver publishes completed files for
+the same canonical adapter; its installation remains an operator deployment step.
+Generic network protocols and a dedicated slicer plugin remain optional future
+adapters. Typed intake supports G-code, CAD sources/models, slicer projects and
+observation media; unsupported types fail explicitly. Source URIs are provenance,
+never server-side fetch instructions. Native Apple AirDrop is not assumed.
 
 ## LilBitDrop completed-directory adapter
 
@@ -126,7 +146,7 @@ Status, pending counts, current file and bounded errors are exposed through
 `GET /api/fabrication/ingestion/status` and HMI Settings.
 
 Receiver contract: receive into `/srv/neptune/incoming/partial/`, close and fsync the
-completed file, then atomically rename into `/srv/neptune/incoming/completed/` on
+completed file, then atomically create without replacing an existing destination in `/srv/neptune/incoming/completed/` on
 the same filesystem. Never write into an already published completed file.
 Settling and mutation checks are defense in depth, not proof of completion for a
 receiver that violates this contract. Observatory never deletes incoming files.

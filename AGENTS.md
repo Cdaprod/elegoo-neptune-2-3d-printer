@@ -8,7 +8,7 @@
 - Keep authentication, Operator Mode, per-action confirmation, runtime state checks, motion/thermal bounds, extrusion interlocks, serialized transport, and disarmed-on-restart behavior.
 - Never automatically retry an ambiguous physical command. Never send printer commands, upload G-code, move axes, heat, extrude, enable/release motors, alter settings, or start/pause/cancel prints unless the current user request explicitly authorizes that specific physical action.
 - Do not request operator input for ordinary engineering decisions. Continue independent software work when hardware behavior is unknown.
-- Use mocks and simulated responses for software tests. Do not access CAD models or CAD repositories in this infrastructure workstream.
+- Use mocks and simulated responses for software tests. Treat CAD authoring as upstream by default. Explicitly authorized read-only engineering inventory and preview inspection are in scope; never execute discovered scripts or infer authority from names or locations.
 
 ## Product delivery
 
@@ -23,3 +23,6 @@
 - Use deterministic software fixtures rather than physical printer actions. Keep fixtures outside production archives. Inspect representative saved/rendered results; avoid redundant screenshots and reports.
 - Extend the existing timeline/manufacturing persistence. Artifact bytes, model revisions and individual print attempts are distinct identities. Deduplicate bytes by SHA-256; never infer identity from a filename or infer success from missing evidence.
 - Historical artifacts and executions are durable records, not disposable preview caches. Preserve them across source removal, upgrades and reprints. Reprinting must retain the original execution unchanged and pass existing operator safety gates.
+
+- Keep the registry model-centric. Logical models, branching revisions, immutable artifacts, locations, scoped authorities, baselines and executions remain separate. Inventory may register uncertain observations without hydrating originals or approving relationships.
+- Use `make commission-pi` for routine target inspection; retain strict SSH host verification and cached read-only APIs. Deployment and physical actions require their own authorization.

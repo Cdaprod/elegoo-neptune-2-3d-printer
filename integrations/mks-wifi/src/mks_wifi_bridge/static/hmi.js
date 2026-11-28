@@ -125,10 +125,14 @@
    text('lifecycle-details',file.lifecycle?Object.entries(file.lifecycle).filter(([key,value])=>typeof value==='string').map(([key,value])=>key.replaceAll('_',' ')+': '+value.replaceAll('_',' ')).join(' · '):'Discovery and byte availability do not establish print outcome.');
    text("inspector-details","G-code deposited filament · geometry approximation, not a CAD solid.");
    text("inspector-status",hasGeometry(file,source)?"Loading 3D extrusion…":source==="native_cache"?(file.geometry_error||"Verified bytes · no supported deposited-filament geometry"):"No local G-code geometry available; showing cached slicer preview.");
-   $('execution-quality').hidden=!(file.archive&&file.started_at);
+   $('execution-quality').hidden=!(file.archive&&(file.started_at||file.archive_collection==='history'));
    text('execution-record','');
-   if(file.archive&&file.started_at)api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/detail',{signal:inspectorRequest.signal}).then(record=>{
+   $('execution-identity').hidden=!(file.archive_collection==='history'&&!file.sha256);
+   if(!$('execution-identity').hidden)api('/api/fabrication/library/executables').then(result=>{if(epoch!==inspectorEpoch)return;$('execution-artifact').replaceChildren(Object.assign(document.createElement('option'),{value:'',textContent:'Select archived original G-code'}),...result.items.map(item=>Object.assign(document.createElement('option'),{value:item.sha256,textContent:item.filename+' · '+item.sha256.slice(0,10)})));}).catch(error=>text('execution-record',error.message));
+
+   if(file.archive&&(file.started_at||file.archive_collection==='history'))api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/detail',{signal:inspectorRequest.signal}).then(record=>{
     if(epoch!==inspectorEpoch)return;
+    $('observation-list').replaceChildren(...(record.attachments||[]).map(item=>{const link=document.createElement('a');link.href='/api/fabrication/artifacts/'+item.sha256+'/observation';link.textContent=item.kind+' · '+(item.filename||item.sha256.slice(0,12));link.style.display='block';return link;}));
     const latest=record.quality_assessments?.[0];$('quality-result').value=latest?.result||'unassessed';$('quality-notes').value=latest?.notes||'';
     text('execution-record','Observed events: '+(record.events||[]).slice(-8).map(event=>event.observed_at+' '+(event.payload?.state||event.event_type)).join(' · '));
    }).catch(error=>{if(epoch===inspectorEpoch&&error.name!=='AbortError')text('execution-record','Execution detail unavailable: '+error.message);});
@@ -216,6 +220,8 @@
      (Number.isFinite(file.size_bytes??file.size)?" · "+Number(file.size_bytes??file.size).toLocaleString()+" B":"")+
      (file.source_present===false?" · cached/offline":"");
    if(file.archive_collection)info.textContent=file.archive_collection==='history'?(file.state||'Unknown'):file.archive_collection==='discovered'?'Metadata only':file.bytes_available?'Archived':'Source only';
+   if(file.model_id)info.textContent='Revision '+(file.label||'unresolved')+' · '+(file.approved?'Scoped authority approved':'Authority unresolved');
+   else if(file.artifact_kind)info.textContent=file.artifact_kind.replaceAll('_',' ')+' · '+(file.bytes_available?'Archived':'Not archived');
    button.append(image,name,info);
    setPreviewImage(image,file,source);
    if(hasGeometry(file,source)){
@@ -242,7 +248,8 @@
   if(models.length)text('model-count',shown+' of '+models.length+' files');
  }
  window.addEventListener('hmi:filter-models',filterModels);
- $('storage-provider').addEventListener('change',()=>{filterModels();loadFiles();});
+ $('storage-provider').addEventListener('change',()=>{localStorage.setItem('neptune.gallery.provider',$('storage-provider').value);filterModels();loadFiles();});
+ const savedProvider=localStorage.getItem('neptune.gallery.provider');if([...$('storage-provider').options].some(option=>option.value===savedProvider))$('storage-provider').value=savedProvider;
  async function registryAction(operation,data={}){return api('/api/model-registry/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation,...data})});}
  let registryEpoch=0;
  async function populateRegistry(file){
@@ -280,10 +287,15 @@
   await loadRegistryRevisions(inspected.file);
  }
  for(const [id,value] of [['registry-attach',null],['registry-candidate',false],['registry-approve',true]])$(id).addEventListener('click',()=>representCurrent(value).catch(error=>text('registry-detail',error.message)));
+ $('registry-detach').onclick=async()=>{if(!inspected?.file?.sha256)return;try{await registryAction('representation',{revision_id:$('registry-revision').value,sha:inspected.file.sha256,role:$('registry-role').value,active:false});await loadRegistryRevisions(inspected.file);}catch(error){text('registry-detail',error.message);}};
+ $('registry-hydrate').onclick=async()=>{const file=inspected?.file;if(!file?.sha256||!confirm('Archive a verified copy of this exact source? The original is unchanged; no staging or printing.'))return;try{await api('/api/model-registry/artifacts/'+file.sha256+'/hydrate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation:'ARCHIVE '+file.sha256})});text('registry-detail','Original bytes archived and verified. Source unchanged.');}catch(error){text('registry-detail',error.message);}};
+ $('registry-component').onclick=async()=>{const component=prompt('Exact component revision ID (from its model revision):');if(!component)return;const label=prompt('Component role or label:');if(!label)return;try{await registryAction('component',{assembly:$('registry-revision').value,component,label});await loadRegistryRevisions(inspected.file);}catch(error){text('registry-detail',error.message);}};
  $('registry-revision-new').onclick=async()=>{const label=prompt('New branch revision label:');if(!label)return;try{await registryAction('create_revision',{model_id:$('registry-model').value,label,parents:[$('registry-revision').value]});await loadRegistryRevisions(inspected.file);}catch(error){text('registry-detail',error.message);}};
- $('registry-baseline').onclick=async()=>{if(!confirm('Approve an immutable baseline of the selected revision and exact authority/component references?'))return;try{const result=await registryAction('approve_baseline',{revision_id:$('registry-revision').value});text('registry-detail','Approved baseline '+result.id);}catch(error){text('registry-detail',error.message);}};
+ $('registry-baseline').onclick=async()=>{if(!confirm('Approve an immutable baseline of the selected revision and exact authority/component references?'))return;try{const result=await registryAction('approve_baseline',{revision_id:$('registry-revision').value});if(inspected?.file)inspected.file.baseline_id=result.id;text('registry-detail','Approved baseline '+result.id);}catch(error){text('registry-detail',error.message);}};
  $('registry-manifest').onclick=async()=>{try{const data=await api('/api/model-registry/revisions/'+$('registry-revision').value+'/manifest');const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=data.revision.id+'.model.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){text('registry-detail',error.message);}};
- const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[]} ]));
+ $('registry-manifest-import').onclick=()=>$('registry-manifest-file').click();
+ $('registry-manifest-file').onchange=async()=>{const file=$('registry-manifest-file').files[0];if(!file)return;try{if(file.size>65536)throw Error('Manifest exceeds declaration limit');const result=await registryAction('import_manifest',{manifest:JSON.parse(await file.text()),approve:false});await populateRegistry({...inspected.file,model_id:result.model_id,revision_id:result.revision_id});text('registry-detail','Declarations imported as candidates; no authority approved or original file changed');}catch(error){text('registry-detail',error.message);}finally{$('registry-manifest-file').value='';}};
+ const archivePages=Object.fromEntries(['history','unprinted','discovered'].map(kind=>[kind,{before:null,previous:[],scroll:0} ]));
  async function renderArchiveLane(kind,lane){
   const page=archivePages[kind];
   lane.querySelectorAll(".archive-pages button").forEach(button=>button.disabled=true);
@@ -296,19 +308,21 @@
   if(!response.items.length)track.textContent=kind==='history'?'No observed executions yet. Outcomes are never invented.':kind==='unprinted'?'No unprinted archived artifacts yet.':'No printer SD observations yet.';
   const [previous,next]=lane.querySelectorAll('.archive-pages button');
   previous.disabled=!page.previous.length;next.disabled=!response.next;
-  previous.onclick=async()=>{page.before=page.previous.pop();await renderArchiveLane(kind,lane);};
-  next.onclick=async()=>{page.previous.push(page.before);page.before=response.next;await renderArchiveLane(kind,lane);};
+  track.scrollLeft=page.scroll||0;
+  previous.onclick=async()=>{page.scroll=0;page.before=page.previous.pop();await renderArchiveLane(kind,lane);};
+  next.onclick=async()=>{page.scroll=0;page.previous.push(page.before);page.before=response.next;await renderArchiveLane(kind,lane);};
  }
  async function renderChronology(host){
-  host.dataset.layout='chronology';host.replaceChildren();
+  host.dataset.layout='chronology';host.replaceChildren();const pending=[];
   for(const [kind,title] of [['history','Print history'],['unprinted','Unprinted'],['discovered','SD discovery']]){
    const lane=document.createElement('section');lane.className='archive-lane';lane.dataset.collection=kind;
    const heading=document.createElement('h3');heading.textContent=title;
-   const track=document.createElement('div');track.className='archive-track';track.setAttribute('aria-label',title+' chronological previews');
+   const track=document.createElement('div');track.className='archive-track';track.setAttribute('aria-label',title+' chronological previews');track.addEventListener('scroll',()=>{archivePages[kind].scroll=track.scrollLeft;},{passive:true});
    const pages=document.createElement('div');pages.className='archive-pages';
    for(const [label,symbol] of [['Previous page','←'],['Next page','→']]){const button=document.createElement('button');button.textContent=symbol;button.setAttribute('aria-label',title+' '+label);pages.append(button);}
-   lane.append(heading,track,pages);host.append(lane);await renderArchiveLane(kind,lane);
+   lane.append(heading,track,pages);host.append(lane);pending.push(renderArchiveLane(kind,lane));
   }
+  await Promise.all(pending);
  }
  async function loadFiles(){
   if(state.loading)return;state.loading=true;const host=$("models");const requestedProvider=$("storage-provider").value;
@@ -317,7 +331,7 @@
    $('new-model').hidden=!['models','unassigned'].includes(collection);
    if(['models','unassigned'].includes(collection)){
     delete host.dataset.layout;host.replaceChildren();
-    const result=await api('/api/model-registry/'+(collection==='models'?'models':'artifacts'));
+    const result=await api('/api/model-registry/'+(collection==='models'?'models':'artifacts?unassigned=true'));
     for(const row of result.items){
      const file=collection==='models'?{...row.preview,model_id:row.id,display_name:row.name,filename:row.preview?.filename||row.name,sha256:row.preview?.sha256}:row;
      const stl=/\.stl$/i.test(file.filename||'');const gcode=/\.(gcode|gco|gc|g)$/i.test(file.filename||'')&&file.archived===1;
@@ -350,11 +364,16 @@
   }catch(e){if(e.message!=="Authentication required"){host.replaceChildren();const error=document.createElement("div");error.className="tile";error.textContent="File listing unavailable: "+e.message;host.append(error);text("model-count","Unavailable");}}
   finally{state.loading=false;filterModels();if(requestedProvider!==$("storage-provider").value)loadFiles();}
  }
- $('save-quality').addEventListener('click',async()=>{if(!inspected?.file?.started_at)return;try{const result=await api('/api/fabrication/executions/'+encodeURIComponent(inspected.file.id)+'/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:$('quality-result').value,notes:$('quality-notes').value})});text('execution-record','Physical quality '+result.result+' · operator supplied; machine outcome unchanged');}catch(error){text('execution-record',error.message);}});
+ $('associate-execution').onclick=async()=>{const sha=$('execution-artifact').value;const file=inspected?.file;if(!sha||!file||!confirm('Record your association with this exact archived G-code? This is operator supplied, not hardware-verified identity.'))return;try{await api('/api/fabrication/executions/'+encodeURIComponent(file.id)+'/identity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sha256:sha,transport:$('execution-transport').value})});openInspector({...file,sha256:sha,source_present:true,bytes_available:true,lifecycle:{...file.lifecycle,archive:'archived',identity:'operator_supplied'}},'archive');}catch(error){text('execution-record',error.message);}};
+ $('add-observation').onclick=()=>$('observation-file').click();
+ $('observation-file').onchange=async()=>{const file=$('observation-file').files[0];if(!file||!inspected?.file?.id)return;const execution=inspected.file;
+  try{if(file.size>50*1024*1024)throw Error('Observation exceeds 50 MiB');const uploaded=await api('/api/fabrication/ingest?artifact_kind=observation&filename='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file});const kind=/\.(mp4|webm)$/i.test(file.name)?'timelapse':/\.json$/i.test(file.name)?'telemetry':'photo';await api('/api/fabrication/executions/'+encodeURIComponent(execution.id)+'/attachments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sha256:uploaded.sha256,kind})});text('execution-record','Observation archived and attached; physical quality remains separately assessed');}catch(error){text('execution-record',error.message);}finally{$('observation-file').value='';}
+ };
+ $('save-quality').addEventListener('click',async()=>{if(!(inspected?.file?.started_at||inspected?.file?.archive_collection==='history'))return;try{const result=await api('/api/fabrication/executions/'+encodeURIComponent(inspected.file.id)+'/quality',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:$('quality-result').value,notes:$('quality-notes').value})});text('execution-record','Physical quality '+result.result+' · operator supplied; machine outcome unchanged');}catch(error){text('execution-record',error.message);}});
  $('archive-files').addEventListener('click',async()=>{try{const result=await api('/api/fabrication/reconcile',{method:'POST'});text('model-count',result.archived+' immutable artifacts preserved');}catch(error){text('model-count',error.message);}});
  $('print-again').addEventListener('click',async()=>{if(!inspected?.file?.archive)return;try{
-  const file=inspected.file;const endpoint=file.started_at?'/api/fabrication/executions/'+encodeURIComponent(file.id)+'/stage':'/api/fabrication/artifacts/'+file.sha256+'/stage';
-  await api(endpoint,{method:'POST'});closeInspector();route('print-bay');
+  const file=inspected.file;const endpoint=(file.started_at||file.archive_collection==='history')?'/api/fabrication/executions/'+encodeURIComponent(file.id)+'/stage':'/api/fabrication/artifacts/'+file.sha256+'/stage';
+  await api(endpoint+(file.baseline_id&&!file.started_at?'?baseline_id='+file.baseline_id:''),{method:'POST'});closeInspector();route('print-bay');
  }catch(error){text('inspector-status',error.message);}});
 
  let nativeTransfer=null;

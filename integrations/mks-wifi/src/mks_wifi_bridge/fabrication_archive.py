@@ -67,6 +67,14 @@ class FabricationArchive:
                 CREATE TABLE IF NOT EXISTS execution_events(
                     id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, observed_at TEXT NOT NULL,
                     event_type TEXT NOT NULL, payload TEXT NOT NULL, source TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS execution_baselines(
+                    execution_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS stage_baselines(
+                    stage_id TEXT PRIMARY KEY,baseline_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS execution_attachments(
+                    id TEXT PRIMARY KEY, execution_id TEXT NOT NULL,
+                    sha256 TEXT NOT NULL REFERENCES fabrication_artifacts(sha256),
+                    kind TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS quality_assessments(
                     id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, assessed_at TEXT NOT NULL,
                     result TEXT NOT NULL, notes TEXT NOT NULL, source TEXT NOT NULL);
@@ -237,6 +245,11 @@ class FabricationArchive:
             raise ValueError("Unknown execution transport")
         self.verified(sha)
         with self.db() as db:
+            kind = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if kind and kind[0] != "execution_gcode":
+                raise ValueError("Execution identity requires executable G-code")
             if not db.execute(
                 "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
             ).fetchone():
@@ -473,6 +486,60 @@ class FabricationArchive:
             )
         return {"id": identity, "result": result, "source": "operator_supplied"}
 
+    def link_baseline(self, execution_id, baseline_id):
+        with self.db() as db:
+            identity = db.execute(
+                "SELECT sha256 FROM execution_identity WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            baseline = db.execute(
+                "SELECT manifest FROM fabrication_baselines WHERE id=?", (baseline_id,)
+            ).fetchone()
+            if identity is None or baseline is None:
+                raise ValueError(
+                    "An explicit executable identity and approved baseline are required"
+                )
+            specification = json.loads(baseline[0])
+            if not any(
+                item["role"] == "executable_gcode" and item["sha256"] == identity[0]
+                for item in specification["authorities"]
+            ):
+                raise ValueError("Baseline does not reference this exact executable artifact")
+            previous = db.execute(
+                "SELECT baseline_id FROM execution_baselines WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+            if previous and previous[0] != baseline_id:
+                raise ValueError("Historical baseline cannot be silently replaced")
+            db.execute(
+                "INSERT OR IGNORE INTO execution_baselines VALUES(?,?)", (execution_id, baseline_id)
+            )
+        return {"execution_id": execution_id, "baseline_id": baseline_id}
+
+    def attach_observation(self, execution_id, sha, kind):
+        if kind not in {"photo", "timelapse", "telemetry"}:
+            raise ValueError("Unsupported observation attachment")
+        self.verified(sha)
+        with self.db() as db:
+            artifact = db.execute(
+                "SELECT artifact_kind FROM artifact_custody WHERE sha256=?", (sha,)
+            ).fetchone()
+            if artifact is None or artifact[0] != "observation":
+                raise ValueError("An observation artifact is required")
+            if not db.execute(
+                "SELECT 1 FROM print_sessions WHERE id=?", (execution_id,)
+            ).fetchone():
+                raise ValueError("Unknown execution")
+            old = db.execute(
+                "SELECT id FROM execution_attachments WHERE execution_id=? AND sha256=? AND kind=?",
+                (execution_id, sha, kind),
+            ).fetchone()
+            identity = old[0] if old else uuid.uuid4().hex
+            if not old:
+                db.execute(
+                    "INSERT INTO execution_attachments VALUES(?,?,?,?,?)",
+                    (identity, execution_id, sha, kind, now()),
+                )
+        return {"id": identity, "sha256": sha, "kind": kind, "quality_unchanged": True}
+
     def execution_detail(self, execution_id):
         with self.db() as db:
             row = db.execute(
@@ -498,12 +565,22 @@ class FabricationArchive:
                     (execution_id,),
                 )
             ]
+            attachments = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT e.*,a.filename FROM execution_attachments e "
+                    "JOIN fabrication_artifacts a ON a.sha256=e.sha256 "
+                    "WHERE e.execution_id=? ORDER BY e.created_at LIMIT 100",
+                    (execution_id,),
+                )
+            ]
         for event in events:
             event["payload"] = json.loads(event["payload"])
         return {
             "execution": dict(row),
             "events": events,
             "quality_assessments": quality,
+            "attachments": attachments,
             "replay": "Recorded telemetry is separate from inferred G-code movement",
             "telemetry_url": "/api/timeline/sessions/" + execution_id,
         }
@@ -513,12 +590,14 @@ class FabricationArchive:
             return [
                 dict(row)
                 for row in db.execute(
-                    "SELECT s.*,a.filename FROM artifact_stages s JOIN fabrication_artifacts a "
-                    "ON s.sha256=a.sha256 ORDER BY s.created_at DESC,s.id DESC LIMIT 100"
+                    "SELECT s.*,a.filename,b.baseline_id FROM artifact_stages s "
+                    "JOIN fabrication_artifacts a "
+                    "ON s.sha256=a.sha256 LEFT JOIN stage_baselines b ON b.stage_id=s.id "
+                    "ORDER BY s.created_at DESC,s.id DESC LIMIT 100"
                 )
             ]
 
-    def stage_artifact(self, sha, source_execution_id=None):
+    def stage_artifact(self, sha, source_execution_id=None, baseline_id=None):
         self.verified(sha)
         with self.db() as db:
             kind = db.execute(
@@ -526,6 +605,16 @@ class FabricationArchive:
             ).fetchone()
             if kind and kind[0] != "execution_gcode":
                 raise ValueError("Only executable G-code may enter print staging")
+        if baseline_id:
+            with self.db() as db:
+                baseline = db.execute(
+                    "SELECT manifest FROM fabrication_baselines WHERE id=?", (baseline_id,)
+                ).fetchone()
+            if baseline is None or not any(
+                item["role"] == "executable_gcode" and item["sha256"] == sha
+                for item in json.loads(baseline[0])["authorities"]
+            ):
+                raise ValueError("Baseline does not approve this exact executable")
         identity = uuid.uuid4().hex
         with self.db() as db:
             db.execute(
@@ -538,9 +627,12 @@ class FabricationArchive:
                     "staged_requires_compatibility_confirmation",
                 ),
             )
+            if baseline_id:
+                db.execute("INSERT INTO stage_baselines VALUES(?,?)", (identity, baseline_id))
         return {
             "id": identity,
             "sha256": sha,
+            "baseline_id": baseline_id,
             "status": "staged_requires_compatibility_confirmation",
             "physical_execution": False,
         }
@@ -555,4 +647,7 @@ class FabricationArchive:
             if row is None or row[0] is None:
                 raise ValueError("This execution has no verified artifact association")
             sha = row[0]
-        return self.stage_artifact(sha, execution_id)
+            baseline = db.execute(
+                "SELECT baseline_id FROM execution_baselines WHERE execution_id=?", (execution_id,)
+            ).fetchone()
+        return self.stage_artifact(sha, execution_id, baseline[0] if baseline else None)

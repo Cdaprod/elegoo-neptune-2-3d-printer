@@ -1389,6 +1389,15 @@ def create_app(
     async def archive_derivative(sha: str, derivative: str):
         try:
             path = await asyncio.to_thread(fabrication_archive.verified, sha)
+            if derivative == "observation":
+                from fastapi.responses import FileResponse
+
+                return FileResponse(
+                    path,
+                    media_type="application/octet-stream",
+                    filename=sha + ".bin",
+                    headers={"X-Content-Type-Options": "nosniff"},
+                )
             if derivative == "geometry":
                 geometry = await asyncio.to_thread(fabrication_archive.previews.geometry, path.name)
                 fabrication_archive.mark_derivative(sha, "geometry", "generated")
@@ -1433,6 +1442,88 @@ def create_app(
         except (ValueError, TypeError) as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/identity",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def operator_execution_identity(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Association exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"sha256", "transport"}:
+                raise ValueError("Explicit artifact and transport association required")
+            await asyncio.to_thread(
+                fabrication_archive.link_execution,
+                execution_id,
+                data["sha256"],
+                "operator_supplied",
+                data["transport"],
+            )
+            return {
+                "sha256": data["sha256"],
+                "identity_evidence": "operator_supplied",
+                "transport": data["transport"],
+            }
+        except (ValueError, OSError, TypeError) as error:
+            raise HTTPException(422, str(error)) from error
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/baseline",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def operator_execution_baseline(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Baseline reference exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"baseline_id"}:
+                raise ValueError("Expected approved baseline reference")
+            return await asyncio.to_thread(
+                fabrication_archive.link_baseline, execution_id, data["baseline_id"]
+            )
+        except (ValueError, OSError, TypeError, sqlite3.Error) as error:
+            raise HTTPException(
+                422, "Baseline association unavailable or does not match exact executable"
+            ) from error
+
+    @app.post(
+        "/api/fabrication/executions/{execution_id}/attachments",
+        dependencies=[Depends(require_control_token)],
+    )
+    async def archive_attach_observation(execution_id: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Observation reference exceeds limit")
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != {"sha256", "kind"}:
+                raise ValueError("Expected an observation artifact reference")
+            return await asyncio.to_thread(
+                fabrication_archive.attach_observation, execution_id, data["sha256"], data["kind"]
+            )
+        except (ValueError, OSError, TypeError) as error:
+            raise HTTPException(422, str(error)) from error
+
+    @app.get("/api/fabrication/library/executables", dependencies=[Depends(require_auth)])
+    def archived_executables():
+        with fabrication_archive.db() as db:
+            rows = db.execute(
+                "SELECT a.sha256,a.filename FROM fabrication_artifacts a "
+                "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 "
+                "WHERE c.sha256 IS NULL OR (c.archived=1 AND c.artifact_kind='execution_gcode') "
+                "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 1000"
+            ).fetchall()
+        return {"items": [dict(row) for row in rows]}
+
     @app.get("/api/fabrication/staging/queue", dependencies=[Depends(require_auth)])
     async def archive_stages():
         return {
@@ -1444,11 +1535,15 @@ def create_app(
     @app.post(
         "/api/fabrication/artifacts/{sha}/stage", dependencies=[Depends(require_control_token)]
     )
-    async def archive_stage_artifact(sha: str, transport: str = "octoprint_usb"):
+    async def archive_stage_artifact(
+        sha: str, transport: str = "octoprint_usb", baseline_id: str | None = None
+    ):
         if transport != "octoprint_usb":
             raise HTTPException(423, "Native SD writing/delivery is not verified; no file sent")
         try:
-            return await asyncio.to_thread(fabrication_archive.stage_artifact, sha)
+            return await asyncio.to_thread(
+                fabrication_archive.stage_artifact, sha, None, baseline_id
+            )
         except (OSError, ValueError) as exc:
             raise HTTPException(409, str(exc)) from exc
 

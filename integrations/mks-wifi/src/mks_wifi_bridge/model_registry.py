@@ -224,6 +224,130 @@ class ModelRegistry:
                 result[key] = [dict(row) for row in db.execute(sql, (revision_id,))]
         return result
 
+    def import_manifest(self, manifest, approve=False):
+        """Portable declarations, atomically imported. Approval is a separate explicit choice."""
+        if (
+            manifest.get("schema_version") != 1
+            or manifest.get("kind") != "ModelManifest"
+            or type(approve) is not bool
+        ):
+            raise ValueError("Unsupported model manifest")
+        model = manifest["model"]
+        revision = manifest["revision"]
+        model_id = uuid.UUID(model["id"]).hex
+        revision_id = uuid.UUID(revision["id"]).hex
+        name = self.text(model["name"])
+        label = self.text(revision["label"])
+        if uuid.UUID(revision["model_id"]).hex != model_id:
+            raise ValueError("Revision/model identity mismatch")
+        with self.archive.db() as db:
+            existing = db.execute("SELECT name FROM models WHERE id=?", (model_id,)).fetchone()
+            if existing and existing[0] != name:
+                raise ValueError("Existing model name conflicts; reconcile explicitly")
+            db.execute("INSERT OR IGNORE INTO models VALUES(?,?,?)", (model_id, name, now()))
+            existing = db.execute(
+                "SELECT model_id,label FROM model_revisions WHERE id=?", (revision_id,)
+            ).fetchone()
+            if existing and tuple(existing) != (model_id, label):
+                raise ValueError("Existing revision declaration conflicts")
+            db.execute(
+                "INSERT OR IGNORE INTO model_revisions VALUES(?,?,?,?)",
+                (revision_id, model_id, label, now()),
+            )
+            for parent in manifest.get("parents", []):
+                parent_id = uuid.UUID(parent["parent_id"]).hex
+                row = db.execute(
+                    "SELECT model_id FROM model_revisions WHERE id=?", (parent_id,)
+                ).fetchone()
+                if row is None or row[0] != model_id or parent_id == revision_id:
+                    raise ValueError("Unresolved or invalid revision parent")
+                cycle = db.execute(
+                    "WITH RECURSIVE ancestors(id) AS (SELECT parent_id FROM "
+                    "revision_parents WHERE revision_id=? UNION SELECT p.parent_id "
+                    "FROM revision_parents p JOIN ancestors a ON p.revision_id=a.id) "
+                    "SELECT 1 FROM ancestors WHERE id=?",
+                    (parent_id, revision_id),
+                ).fetchone()
+                if cycle:
+                    raise ValueError("Revision cycle rejected")
+                db.execute(
+                    "INSERT OR IGNORE INTO revision_parents VALUES(?,?)", (revision_id, parent_id)
+                )
+            for representation in manifest.get("representations", []):
+                sha = self.digest(representation["sha256"])
+                role = representation["role"]
+                if role not in ROLES or representation.get("active", 1) not in (0, 1, False, True):
+                    raise ValueError("Invalid representation")
+                db.execute(
+                    "INSERT OR IGNORE INTO model_representations VALUES(?,?,?,?)",
+                    (revision_id, sha, role, int(representation.get("active", 1))),
+                )
+            approved_roles = set()
+            for authority in manifest.get("authorities", []):
+                sha = self.digest(authority["sha256"])
+                role = authority["role"]
+                state = authority["state"]
+                if role not in ROLES or state not in {"candidate", "approved", "superseded"}:
+                    raise ValueError("Invalid scoped authority")
+                if state == "approved":
+                    if not approve:
+                        state = "candidate"
+                    elif role in approved_roles:
+                        raise ValueError("Competing approved authorities")
+                    else:
+                        approved_roles.add(role)
+                        if not db.execute(
+                            "SELECT 1 FROM fabrication_artifacts WHERE sha256=?", (sha,)
+                        ).fetchone():
+                            raise ValueError("Fingerprint the referenced authority artifact first")
+                        db.execute(
+                            "UPDATE model_authority SET state='superseded' WHERE revision_id=? "
+                            "AND role=? AND state='approved'",
+                            (revision_id, role),
+                        )
+                representation = db.execute(
+                    "SELECT active FROM model_representations "
+                    "WHERE revision_id=? AND sha256=? AND role=?",
+                    (revision_id, sha, role),
+                ).fetchone()
+                if representation is None or (state == "approved" and not representation[0]):
+                    raise ValueError("Authority has no eligible representation")
+                identity = uuid.UUID(authority["id"]).hex
+                old = db.execute(
+                    "SELECT revision_id,role,sha256 FROM model_authority WHERE id=?", (identity,)
+                ).fetchone()
+                if old and tuple(old) != (revision_id, role, sha):
+                    raise ValueError("Authority identity conflicts")
+                db.execute(
+                    "INSERT OR IGNORE INTO model_authority VALUES(?,?,?,?,?,?)",
+                    (identity, revision_id, role, sha, state, now()),
+                )
+                if approve and state == "approved":
+                    db.execute(
+                        "UPDATE model_authority SET state='approved' WHERE id=?", (identity,)
+                    )
+            for component in manifest.get("components", []):
+                component_id = uuid.UUID(component["component_revision_id"]).hex
+                cycle = db.execute(
+                    "WITH RECURSIVE children(id) AS (SELECT component_revision_id FROM "
+                    "model_components WHERE assembly_revision_id=? UNION SELECT "
+                    "c.component_revision_id FROM model_components c JOIN children x "
+                    "ON c.assembly_revision_id=x.id) SELECT 1 FROM children WHERE id=?",
+                    (component_id, revision_id),
+                ).fetchone()
+                if component_id == revision_id or cycle:
+                    raise ValueError("Component cycle rejected")
+                db.execute(
+                    "INSERT OR IGNORE INTO model_components VALUES(?,?,?)",
+                    (revision_id, component_id, self.text(component["label"])),
+                )
+            self.audit(
+                db,
+                "import_manifest",
+                {"model_id": model_id, "revision_id": revision_id, "approval_requested": approve},
+            )
+        return {"model_id": model_id, "revision_id": revision_id, "approved": approve}
+
     def baseline(self, revision_id):
         manifest = self.manifest(revision_id)
         approved = [row for row in manifest["authorities"] if row["state"] == "approved"]
@@ -235,11 +359,27 @@ class ModelRegistry:
                     "SELECT 1 FROM fabrication_artifacts WHERE sha256=?", (row["sha256"],)
                 ).fetchone():
                     raise ValueError("Baseline authority has no fingerprinted artifact declaration")
+        component_inputs = []
+        pending = list(manifest["components"])
+        seen = set()
+        while pending:
+            component = pending.pop()
+            identity = component["component_revision_id"]
+            if identity in seen:
+                continue
+            seen.add(identity)
+            child = self.manifest(identity)
+            authorities = [row for row in child["authorities"] if row["state"] == "approved"]
+            if not authorities:
+                raise ValueError("Resolve component authority before approving baseline")
+            component_inputs.append({"revision_id": identity, "authorities": authorities})
+            pending.extend(child["components"])
         payload = {
             "schema_version": 1,
             "model_revision_id": revision_id,
             "authorities": approved,
             "components": manifest["components"],
+            "component_inputs": sorted(component_inputs, key=lambda item: item["revision_id"]),
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         identity = hashlib.sha256(encoded.encode()).hexdigest()
@@ -334,14 +474,20 @@ class ModelRegistry:
             self.audit(db, "inventory_metadata", {"observations": count, "hydrated": False})
         return {"observations": count, "hydrated": False, "models_created": 0}
 
-    def artifact_candidates(self):
+    def artifact_candidates(self, unassigned=False):
         with self.archive.db() as db:
             rows = [
                 dict(row)
                 for row in db.execute(
                     "SELECT a.*,c.archived,c.artifact_kind FROM fabrication_artifacts a "
                     "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 "
-                    "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 200"
+                    + (
+                        "WHERE NOT EXISTS(SELECT 1 FROM model_representations r "
+                        "WHERE r.sha256=a.sha256 AND r.active=1) "
+                        if unassigned
+                        else ""
+                    )
+                    + "ORDER BY a.ingested_at DESC,a.sha256 DESC LIMIT 200"
                 )
             ]
             for row in rows:
@@ -354,6 +500,59 @@ class ModelRegistry:
                 ]
                 row["metadata"] = json.loads(row["metadata"])
         return rows
+
+    def artifact_metadata(self, sha):
+        self.digest(sha)
+        with self.archive.db() as db:
+            row = db.execute(
+                "SELECT a.*,c.archived,c.artifact_kind FROM fabrication_artifacts a "
+                "LEFT JOIN artifact_custody c ON c.sha256=a.sha256 WHERE a.sha256=?",
+                (sha,),
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown artifact")
+            result = dict(row)
+            result["metadata"] = json.loads(result["metadata"])
+            result["locations"] = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT provider,path,observed_at FROM artifact_locations WHERE sha256=?",
+                    (sha,),
+                )
+            ]
+        return result
+
+    def hydrate(self, sha):
+        from pathlib import Path
+
+        from .fabrication_ingestion import ArtifactSubmission, FabricationIngestion
+
+        artifact = self.artifact_metadata(sha)
+        aliases = {
+            "freecad": "design_freecad",
+            "freecad_backup": "design_freecad",
+            "stl": "manufacturing_geometry",
+            "step": "manufacturing_geometry",
+            "obj": "manufacturing_geometry",
+            "blender": "design_blender",
+        }
+        kind = aliases.get(artifact["artifact_kind"], artifact["artifact_kind"])
+        for location in artifact["locations"]:
+            if location["provider"] != "engineering_inventory":
+                continue
+            path = Path(location["path"])
+            if not path.is_file() or path.is_symlink():
+                continue
+            submission = ArtifactSubmission(
+                path.name,
+                "engineering_inventory",
+                str(path),
+                artifact_kind=kind,
+                expected_sha256=sha,
+            )
+            actual = FabricationIngestion(self.archive).submit_path(path, submission)
+            return {"sha256": actual, "archived": True, "source_modified": False}
+        raise ValueError("Registered source unavailable; no hydration performed")
 
     def retire_authority(self, identity):
         with self.archive.db() as db:
@@ -399,6 +598,27 @@ def install(app, read_auth, write_auth, archive):
     registry = ModelRegistry(archive)
     preview_slots = asyncio.Semaphore(2)
 
+    @app.get("/api/model-registry/artifacts/{sha}/metadata", dependencies=[Depends(read_auth)])
+    def metadata(sha: str):
+        try:
+            return registry.artifact_metadata(sha)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from error
+
+    @app.post("/api/model-registry/artifacts/{sha}/hydrate", dependencies=[Depends(write_auth)])
+    async def hydrate(sha: str, request: Request):
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Confirmation exceeds limit")
+        try:
+            if json.loads(raw) != {"confirmation": "ARCHIVE " + sha}:
+                raise ValueError("Explicit archival approval required")
+            return await asyncio.to_thread(registry.hydrate, sha)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            raise HTTPException(422, str(error)) from error
+
     @app.get("/api/model-registry/artifacts/{sha}/geometry", dependencies=[Depends(read_auth)])
     async def geometry(sha: str):
         from .engineering_preview import EngineeringPreview
@@ -429,8 +649,8 @@ def install(app, read_auth, write_auth, archive):
             raise HTTPException(404, str(error)) from error
 
     @app.get("/api/model-registry/artifacts", dependencies=[Depends(read_auth)])
-    def artifacts():
-        return {"schema_version": 1, "items": registry.artifact_candidates()}
+    def artifacts(unassigned: bool = False):
+        return {"schema_version": 1, "items": registry.artifact_candidates(unassigned)}
 
     @app.get("/api/model-registry/models", dependencies=[Depends(read_auth)])
     def models():
@@ -470,6 +690,7 @@ def install(app, read_auth, write_auth, archive):
                 "component": registry.component,
                 "approve_baseline": registry.baseline,
                 "retire_authority": registry.retire_authority,
+                "import_manifest": registry.import_manifest,
             }
             if operation not in operations:
                 raise ValueError("Unknown registry operation")

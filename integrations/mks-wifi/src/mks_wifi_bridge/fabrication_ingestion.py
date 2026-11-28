@@ -25,7 +25,7 @@ class ArtifactSubmission:
             "slicer_project": {".3mf"},
             "cad_source": {".py"},
             "design_blender": {".blend"},
-            "observation": {".png", ".jpg", ".jpeg", ".webm", ".mp4"},
+            "observation": {".png", ".jpg", ".jpeg", ".webm", ".mp4", ".json"},
         }
         if self.schema_version != 1 or self.artifact_kind not in allowed:
             raise ValueError("Unsupported submission schema or artifact type")

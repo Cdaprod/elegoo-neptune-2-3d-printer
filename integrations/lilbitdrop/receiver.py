@@ -17,9 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 MAX_BYTES = 50 * 1024 * 1024
-NAME = re.compile(
-    r"[A-Za-z0-9][A-Za-z0-9_. -]{0,160}\.(?:gcode|gco|gc|g)", re.IGNORECASE
-)
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,160}\.(?:gcode|gco|gc|g)", re.IGNORECASE)
 
 
 class Receiver(ThreadingHTTPServer):
@@ -34,9 +32,7 @@ class Receiver(ThreadingHTTPServer):
         for directory in (self.partial, self.completed):
             directory.mkdir(parents=True, exist_ok=True, mode=0o750)
         if self.partial.stat().st_dev != self.completed.stat().st_dev:
-            raise ValueError(
-                "Partial and completed directories must share a filesystem"
-            )
+            raise ValueError("Partial and completed directories must share a filesystem")
         self.token = token
         self.read_timeout = 15
         self.transfer_timeout = 300
@@ -81,9 +77,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def authorized(self):
         header = self.headers.get("Authorization", "")
-        return hmac.compare_digest(
-            header.encode(), ("Bearer " + self.server.token).encode()
-        )
+        return hmac.compare_digest(header.encode(), ("Bearer " + self.server.token).encode())
 
     def do_GET(self):
         if not self.authorized():
@@ -162,9 +156,7 @@ class Handler(BaseHTTPRequestHandler):
                 )  # Atomic create-if-absent; never replaces readers' inode.
             except FileExistsError:
                 try:
-                    existing = os.open(
-                        target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-                    )
+                    existing = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                     with os.fdopen(existing, "rb") as source:
                         before = os.fstat(source.fileno())
                         valid = (
@@ -181,8 +173,7 @@ class Handler(BaseHTTPRequestHandler):
                         valid
                         and (before.st_ino, before.st_mtime_ns, before.st_size)
                         == (after.st_ino, after.st_mtime_ns, after.st_size)
-                        and (current.st_dev, current.st_ino)
-                        == (after.st_dev, after.st_ino)
+                        and (current.st_dev, current.st_ino) == (after.st_dev, after.st_ino)
                     )
                 except OSError:
                     valid = False

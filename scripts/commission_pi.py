@@ -64,6 +64,14 @@ for endpoint in ('/api/factory-usb','/api/printer/sdcard','/api/fabrication/inge
             ('provider','state','pending','ingested')} for a in data['adapters']]
     except urllib.error.HTTPError as error:results[endpoint]={'http_status':error.code}
     except Exception:results[endpoint]={'inspection':'unavailable'}
+try:
+    base=os.environ.get('OCTOPRINT_BASE_URL','')
+    headers={'X-Api-Key':os.environ.get('OCTOPRINT_API_KEY','')}
+    connection=json.load(urllib.request.urlopen(urllib.request.Request(base+'/api/connection',headers=headers),timeout=5))['current']
+    profiles=json.load(urllib.request.urlopen(urllib.request.Request(base+'/api/printerprofiles',headers=headers),timeout=5))['profiles']
+    results['octoprint']={'connection':{key:connection.get(key) for key in ('state','port','baudrate')},
+      'profiles':{key:{field:value.get(field) for field in ('current','volume')} for key,value in profiles.items()}}
+except Exception:results['octoprint']={'inspection':'unavailable'}
 print(json.dumps(results))
 """
 result=command(["docker","exec","neptune-observatory","python","-c",api_script])

@@ -91,9 +91,7 @@ def send(
             timeout=330,
         )
     if result.returncode:
-        raise ValueError(
-            "SSH handoff failed; verify host trust, receiver and private token file"
-        )
+        raise ValueError("SSH handoff failed; verify host trust, receiver and private token file")
     receipt = json.loads(result.stdout)
     if receipt.get("sha256") != digest or receipt.get("printing") is not False:
         raise ValueError("Invalid receive-only receipt")
@@ -111,11 +109,7 @@ def main():
     args = parser.parse_args()
     try:
         print(
-            json.dumps(
-                send(
-                    args.file, args.ssh_host, args.remote_token_file, args.receiver_port
-                )
-            )
+            json.dumps(send(args.file, args.ssh_host, args.remote_token_file, args.receiver_port))
         )
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"{error}\n")
